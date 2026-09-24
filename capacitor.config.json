@@ -1,0 +1,9 @@
+{
+  "appId": "com.zibvh.ben10city",
+  "appName": "Ben 10 City",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true
+  }
+}

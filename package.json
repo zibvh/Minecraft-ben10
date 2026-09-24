@@ -1,0 +1,16 @@
+{
+  "name": "ben10-city",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ben 10 voxel city game, packaged as an Android app with Capacitor",
+  "scripts": {
+    "build": "echo 'static site, nothing to build' && exit 0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
