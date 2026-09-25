@@ -220,6 +220,33 @@ const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const Audio_ = (function(){
   let ctx = null;
   function ac(){ if(!ctx){ try{ ctx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return ctx; }
+
+  // Real audio files: dropped into a "sounds/" folder next to index.html.
+  // Missing files fail silently (caught) so the game still runs without them.
+  const musicTracks = ['sounds/back1.mp3', 'sounds/back2.mp3'];
+  let musicEls = [], curTrack = -1, musicVol = 0.35;
+  function initMusic(){
+    if(musicEls.length) return;
+    musicEls = musicTracks.map(src=>{
+      const a = new Audio(src); a.preload='auto'; a.volume=musicVol;
+      a.addEventListener('error', ()=>{}, true);
+      return a;
+    });
+  }
+  function playNextTrack(){
+    if(!musicEls.length) return;
+    curTrack = (curTrack+1) % musicEls.length;
+    const el = musicEls[curTrack];
+    el.currentTime = 0;
+    el.play().catch(()=>{});
+    el.onended = playNextTrack;
+  }
+  function stopMusic(){ musicEls.forEach(a=>{ try{ a.pause(); }catch(e){} }); }
+
+  const mutateSfx = new Audio('sounds/mutate.mp3');
+  mutateSfx.preload = 'auto'; mutateSfx.volume = 0.7;
+  mutateSfx.addEventListener('error', ()=>{}, true);
+  function playMutate(){ try{ mutateSfx.currentTime = 0; mutateSfx.play().catch(()=>{}); }catch(e){} }
   function beep(freq, dur, type, vol, glideTo){
     const a = ac(); if(!a) return;
     const o = a.createOscillator(); const g = a.createGain();
@@ -246,10 +273,16 @@ const Audio_ = (function(){
     place(){ beep(200,0.08,'square',0.1,260); },
     attack(){ beep(150,0.1,'sawtooth',0.15,90); },
     hit(){ noise(0.08,0.2); },
-    transform(){ beep(220,0.35,'sine',0.18,880); setTimeout(()=>beep(880,0.2,'sine',0.15,440),120); },
+    transform(){ beep(220,0.35,'sine',0.18,880); setTimeout(()=>beep(880,0.2,'sine',0.15,440),120); playMutate(); },
     special(){ beep(400,0.3,'sawtooth',0.18,700); },
     death(){ beep(400,0.6,'sawtooth',0.2,60); },
-    resume(){ const a=ac(); if(a && a.state==='suspended') a.resume(); }
+    resume(){
+      const a=ac(); if(a && a.state==='suspended') a.resume();
+      initMusic();
+      if(curTrack===-1) playNextTrack();
+    },
+    setMusicVolume(v){ musicVol=v; musicEls.forEach(a=>a.volume=v); },
+    stopMusic, playNextTrack
   };
 })();
 
@@ -508,12 +541,14 @@ function buildCharacter(kind){
     case 'xlr8':      palette = {skin:0x1c3fbf, torso:0x0c2270, accent:0x8fd6ff}; scaleY=0.95; break;
     case 'diamondhead': palette = {skin:0x35c9c0, torso:0x1e8f88, accent:0xdfffff}; break;
     case 'echo_echo': palette = {skin:0xf1f4f7, torso:0xdde3e9, accent:0x1a1a1a}; scaleY=0.85; break;
+    case 'kolossus': palette = {skin:0x8a7a6a, torso:0x5c4f43, accent:0xff9a3c}; scaleY=2.4; break;
+    case 'sporeback': palette = {skin:0x5a8f3a, torso:0x3d6626, accent:0xc9e86a}; scaleY=1.5; break;
     default: palette = {skin:0xe0a878, torso:0x2c7a3d, accent:0x111111}; kind='ben';
   }
   // Per-kind body proportions: bulk vs slender build.
-  const torsoWidth = kind==='four_arms' ? 1.5 : 0.9;
-  const torsoDepth = kind==='four_arms' ? 0.75 : 0.5;
-  const legWidth   = kind==='four_arms' ? 0.2  : 0.3;
+  const torsoWidth = kind==='four_arms' ? 1.5 : kind==='kolossus' ? 1.9 : kind==='sporeback' ? 1.7 : 0.9;
+  const torsoDepth = kind==='four_arms' ? 0.75 : kind==='kolossus' ? 1.0 : kind==='sporeback' ? 0.9 : 0.5;
+  const legWidth   = kind==='four_arms' ? 0.2  : kind==='kolossus' ? 0.55 : kind==='sporeback' ? 0.5 : 0.3;
 
   // Vertical layout, built bottom-up from the group root (which sits at ground/feet level):
   const legH = 0.9, torsoH = 1.1, headH = 0.7;
@@ -526,7 +561,17 @@ function buildCharacter(kind){
   head.position.y = headCenterY;
   if(kind==='echo_echo'){ const vz=box(0.5,0.14,0.06,0x111111); vz.position.set(0,headCenterY+0.05,-0.36); g.add(vz); }
   if(kind==='diamondhead'){ head.geometry = new THREE.OctahedronGeometry(0.55); }
+  if(kind==='kolossus'){ head.geometry = new THREE.BoxGeometry(0.85,0.75,0.85); [-0.3,0.3].forEach(x=>{ const horn=new THREE.Mesh(new THREE.ConeGeometry(0.14,0.4,5),new THREE.MeshLambertMaterial({color:palette.accent})); horn.position.set(x,headCenterY+0.5,0.1); horn.castShadow=true; g.add(horn); }); }
+  if(kind==='sporeback'){ head.geometry = new THREE.BoxGeometry(0.75,0.55,0.9); [-0.34,0.34].forEach(x=>{ const spike=new THREE.Mesh(new THREE.ConeGeometry(0.1,0.3,4),new THREE.MeshLambertMaterial({color:palette.accent})); spike.position.set(x,headCenterY+0.35,-0.1); spike.castShadow=true; g.add(spike); }); }
   g.add(head); parts.head = head;
+  if(kind==='kolossus'||kind==='sporeback'){
+    const plateCount = 3, plateColor = palette.accent;
+    for(let i=0;i<plateCount;i++){
+      const py = torsoCenterY + (i-1)*0.32*scaleY;
+      const plate = new THREE.Mesh(new THREE.ConeGeometry(0.16,0.3,4), new THREE.MeshLambertMaterial({color:plateColor}));
+      plate.rotation.x = Math.PI/2; plate.position.set(0, py, -torsoDepth/2-0.05); plate.castShadow=true; g.add(plate);
+    }
+  }
 
   const torso = box(torsoWidth,torsoH,torsoDepth, palette.torso);
   torso.position.y = torsoCenterY;
@@ -607,7 +652,12 @@ const ACT={
  slow:{label:'SLOW TIME',cost:30,cd:9,run:()=>{player.slowT=6;statusText('TIME SLOWED');}},
  fire:{label:'FIREBALL',hold:v=>{ if(v){ player.flameHeld=true; flameTime=0; } else if(player.flameHeld){ player.flameHeld=false; if(flameTime<.22&&player.energy>=15){ player.energy-=15; spawnProjectile(player,0xff5a1e,28,22,false,'fire'); } } },cost:0,cd:0},
  fly:{label:()=>player.flying?'LAND':'FLY',cost:0,cd:0.3,run:()=>doJump()},
- burn:{label:'BURN',cost:25,cd:6,run:()=>{player.boostT=2.5;statusText('AFTERBURNER');}}
+ burn:{label:'BURN',cost:25,cd:6,run:()=>{player.boostT=2.5;statusText('AFTERBURNER');}},
+ titanslam:{label:'TITAN SLAM',cost:40,cd:6,run:()=>{shockwaveAt(player.pos,7,55,true);shakeCamera(0.5);shatterNear(player.pos,7);}},
+ boulder:{label:'HURL BOULDER',cost:20,cd:1.6,run:()=>spawnProjectile({pos:player.pos,yaw:player.yaw,pitch:player.pitch*.5},0x8a7a6a,35,20,true,'crystal')},
+ stomp:{label:'STOMP',cost:0,cd:0.7,run:()=>{shockwaveAt(player.pos,3,18,false);}},
+ grow:{label:()=>player.form.id==='sporeback'&&player.grown?'SHRINK':'GROW',cost:30,cd:1,run:()=>toggleGrowth()},
+ spore:{label:'SPORE BURST',cost:25,cd:3,run:()=>spawnProjectile({pos:player.pos,yaw:player.yaw,pitch:player.pitch*.5},0xc9e86a,20,26,false,'fire')}
 };
 const ALIENS = [
   { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:6.6,
@@ -628,6 +678,14 @@ const ALIENS = [
       run(ctx){ spawnProjectile(ctx.player, 0x35e0d6, 30, 24, true); } } },
   { id:'echo_echo', name:'ECHO ECHO', actions:[ACT.scream,ACT.split,ACT.reps,ACT.doom], maxHealth:90, maxEnergy:100, speed:5.4, jump:6.4,
     atkDamage:9, atkRange:1.8, atkCooldown:0.3, special:null },
+  { id:'kolossus', name:'KOLOSSUS', actions:[ACT.boulder,ACT.titanslam], maxHealth:260, maxEnergy:90, speed:2.2, jump:4.8,
+    atkDamage:34, atkRange:3.0, atkCooldown:0.9, modelScale:1.6,
+    special:{ name:'TITAN SLAM', cost:40, cooldown:6,
+      run(ctx){ shockwaveAt(ctx.player.pos, 7, 55, true); shakeCamera(0.5); shatterNear(ctx.player.pos, 7); } } },
+  { id:'sporeback', name:'SPOREBACK', actions:[ACT.stomp,ACT.spore,ACT.grow], maxHealth:150, maxEnergy:110, speed:3.6, jump:5.8, modelScale:1.15,
+    atkDamage:20, atkRange:2.2, atkCooldown:0.55,
+    special:{ name:'GROW', cost:30, cooldown:1,
+      run(ctx){ toggleGrowth(); } } },
 ];
 const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jump:6.0,
   atkDamage:8, atkRange:1.6, atkCooldown:0.45, special:null };
@@ -663,6 +721,7 @@ function setForm(formDef, kind){
   scene.add(player.model);
   player.health = formDef.maxHealth;
   player.energy = formDef.maxEnergy;
+  player.grown = false;
   clearSquad(); player.superHeld=false; player.flameHeld=false; player.sprayHeld=false; doomHeld=false; if(carried) dropProp(); player.shieldT=0; if(shield){ scene.remove(shield); shield=null; } player.slowT=0; player.boostT=0; player.dashT=0; player.swimming=false; for(const k in actCd) delete actCd[k]; buildActions();
   player.specialTimer = 0;
   document.getElementById('alien-name').textContent = formDef.name;
@@ -767,6 +826,17 @@ function updateProjectiles(dt){
    SPECIAL EFFECTS
 ========================================================================= */
 let camShake = 0;
+function toggleGrowth(){
+  if(player.form.id!=='sporeback') return;
+  player.grown = !player.grown;
+  if(player.grown){
+    player.health = Math.min(player.health*1.8, player.form.maxHealth*1.8);
+    statusText('GROWTH SURGE'); shakeCamera(0.35);
+  } else {
+    player.health = Math.min(player.health, player.form.maxHealth);
+    statusText('SHRINKING BACK');
+  }
+}
 function shakeCamera(amt){ camShake = amt; }
 function shockwaveAt(center, radius, damage, knock){
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.2,0.4,24), new THREE.MeshBasicMaterial({color:0xffffff, side:THREE.DoubleSide, transparent:true, opacity:0.8}));
@@ -1645,7 +1715,8 @@ function updatePlayer(dt){
   // face movement direction (model rotates toward camera-relative move dir, else camera yaw)
   const facing = moving ? Math.atan2(-moveX,-moveZ) : player.yaw;
   player.model.rotation.y = THREE.MathUtils.lerp(player.model.rotation.y, facing, 0.25);
-  player.model.position.set(player.pos.x, player.pos.y-1+0.9*PS, player.pos.z); player.model.scale.setScalar(PS);
+  const formScale = PS * (player.form.modelScale||1) * (player.grown?1.6:1);
+  player.model.position.set(player.pos.x, player.pos.y-1+0.9*formScale, player.pos.z); player.model.scale.setScalar(formScale);
 
   // procedural walk animation
   const parts = player.model.userData.parts;
