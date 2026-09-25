@@ -331,6 +331,11 @@ addEventListener('resize', ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
+// Declared here (ahead of the terrain/chunk system) because chunk generation spawns
+// parked cars via makeBoulder(), which needs DEB and props to already exist.
+const props=[], fx=[], actCd={}; let carried=null, timeScale=1, tornado=null, actEls=[];
+const DEB=new THREE.BoxGeometry(1,1,1);
+
 /* =========================================================================
    WORLD / VOXEL TERRAIN  —  CHUNK STREAMING
    The world is logically WORLD x WORLD columns, but nothing is generated
@@ -1034,8 +1039,6 @@ function flashDamage(){
    ATTACK (melee) + BLOCK BREAK/PLACE (shared crosshair raycast)
 ========================================================================= */
 /* PROPS / ACTIONS / FX */
-const props=[], fx=[], actCd={}; let carried=null, timeScale=1, tornado=null, actEls=[];
-const DEB=new THREE.BoxGeometry(1,1,1);
 function lookDir(){ return new THREE.Vector3(Math.cos(player.pitch)*-Math.sin(player.yaw),Math.sin(player.pitch),Math.cos(player.pitch)*-Math.cos(player.yaw)); }
 function debris(pos,color,size,vel,life,grav){
   const mesh=new THREE.Mesh(DEB,new THREE.MeshBasicMaterial({color,transparent:true}));
