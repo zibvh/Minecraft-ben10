@@ -332,114 +332,109 @@ addEventListener('resize', ()=>{
 });
 
 /* =========================================================================
-   WORLD / VOXEL TERRAIN
+   WORLD / VOXEL TERRAIN  —  CHUNK STREAMING
+   The world is logically WORLD x WORLD columns, but nothing is generated
+   or held in memory until the player gets near it. Chunks are CHUNK x CHUNK
+   columns each; only chunks within LOAD_RADIUS of the player are live.
+   Every public function used elsewhere in the file (groundTopAt, blockedAt,
+   isSolid, addBlockAt, removeBlockAt) keeps its exact old signature so nothing
+   downstream (movement, enemies, props, block editing) needs to change.
 ========================================================================= */
-const WORLD = 128;                 // columns per side
+const WORLD = 4096;                // logical world extent (columns per side) — effectively unbounded for play purposes
 const HALF = WORLD/2;
 const WATER_LEVEL = 0;
 const BLOCK_TYPES = ['grass','dirt','stone','sand','wood','leaves','asphalt','concrete'];
 const BLOCK_COLOR = { grass:0x5fae3c, dirt:0x6b4a2d, stone:0x8a8a8a, sand:0xdfd0a0, wood:0x6b4a2d, leaves:0x2e8b3d, asphalt:0x3a3a40, concrete:0xb4b4ac };
-const PLACE_HEADROOM = 400;       // extra instances reserved for player-placed blocks per type
 
-function noise2(x,z){
-  return Math.sin(x*0.15)*1.6 + Math.cos(z*0.18)*1.6 + Math.sin((x+z)*0.07)*2.2 + Math.cos((x-z)*0.09)*1.2;
-}
+const CHUNK = 16;                  // columns per chunk side — matches the old city-cell grid exactly
+const LOAD_RADIUS = 3;             // chunks around the player kept live (3 => 7x7 chunk area, 112 units across)
+const UNLOAD_RADIUS = 4;           // hysteresis: unload only past this, so edge-crossing doesn't thrash
+
+// Deterministic per-chunk RNG so a chunk regenerates identically every time it streams back in.
+function chunkSeed(cx,cz){ let h = (cx*374761393 + cz*668265263) ^ (cx*2246822519); h = (h ^ (h>>>15)) * 2246822519; h = (h ^ (h>>>13)) >>> 0; return h; }
+function seededRng(seed){ let s = seed>>>0; return function(){ s ^= s<<13; s ^= s>>>17; s ^= s<<5; s>>>=0; return (s>>>0) / 4294967296; }; }
+
 function surfaceHeight(x,z){ return 1; }
 function zoneType(x,z){ const a=((x%16)+16)%16, b=((z%16)+16)%16; if(a<4||b<4) return 'asphalt'; if(a===4||a===15||b===4||b===15) return 'concrete'; return 'grass'; }
 
-// block registry: key "x,y,z" -> {type, mesh, instanceId, active}
+// block registry: key "x,y,z" -> {type, chunkKey, idx, active}
 const blocks = new Map();
 const keyOf = (x,y,z)=> x+','+y+','+z;
+const colKey = (x,z)=> x+','+z;
+const columnHeight = {}; // top solid y per column, for quick ground lookup (persists across unload/reload)
 
-const meshes = {};
-const usedCount = {};
-BLOCK_TYPES.forEach(t=>{
-  const mat = new THREE.MeshLambertMaterial({ color: BLOCK_COLOR[t], transparent:false });
-  const cap = WORLD*WORLD*2 + 3000;
-  const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), mat, cap);
-  m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false;
-  scene.add(m); meshes[t]=m; usedCount[t]=0;
-});
-const freeSlots = { grass:[], dirt:[], stone:[], sand:[], wood:[], leaves:[], asphalt:[], concrete:[] };
+const chunkKeyOf = (cx,cz)=> cx+','+cz;
+const chunks = new Map(); // chunkKey -> chunk record
+let curChunkX = 0, curChunkZ = 0;
 
 const dummy = new THREE.Object3D();
-function setInstance(type, x, y, z){
-  const mesh = meshes[type];
-  let idx;
-  if(freeSlots[type].length){ idx = freeSlots[type].pop(); }
-  else { idx = usedCount[type]++; mesh.count = Math.max(mesh.count, usedCount[type]); }
-  dummy.position.set(x,y,z); dummy.scale.set(1,1,1); dummy.updateMatrix();
-  mesh.setMatrixAt(idx, dummy.matrix);
-  mesh.instanceMatrix.needsUpdate = true;
-  blocks.set(keyOf(x,y,z), {type, idx, active:true});
-  return idx;
+
+function newChunkMeshes(){
+  const meshes = {};
+  BLOCK_TYPES.forEach(t=>{
+    const mat = new THREE.MeshLambertMaterial({ color: BLOCK_COLOR[t] });
+    const cap = CHUNK*CHUNK*3 + 200; // headroom for player-placed blocks within this chunk
+    const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), mat, cap);
+    m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false;
+    scene.add(m); meshes[t] = m;
+  });
+  return meshes;
 }
-function removeBlockAt(x,y,z){
-  const k = keyOf(x,y,z); const b = blocks.get(k);
-  if(!b || !b.active) return null;
-  const mesh = meshes[b.type];
-  dummy.position.set(0,-9999,0); dummy.scale.set(0,0,0); dummy.updateMatrix();
-  mesh.setMatrixAt(b.idx, dummy.matrix); mesh.instanceMatrix.needsUpdate = true;
-  b.active = false; freeSlots[b.type].push(b.idx);
-  columnHeight[colKey(x,z)] = recomputeColumnTop(x,z);
-  return b.type;
-}
-function addBlockAt(type, x, y, z){
-  const k = keyOf(x,y,z);
-  if(blocks.has(k) && blocks.get(k).active) return false;
-  setInstance(type, x, y, z);
-  columnHeight[colKey(x,z)] = Math.max(columnHeight[colKey(x,z)]||-99, y);
-  return true;
-}
+
 function isSolid(x,y,z){ const b = blocks.get(keyOf(x,y,z)); return !!(b && b.active); }
-
-const colKey = (x,z)=> x+','+z;
-const columnHeight = {}; // top solid y per column, for quick ground lookup
-
 function recomputeColumnTop(x,z){
   let top = -99;
   for(let y=-14;y<=20;y++){ if(isSolid(x,y,z)) top = Math.max(top,y); }
   return top;
 }
 
-// Generate terrain
-for(let gx=-HALF; gx<HALF; gx++){
-  for(let gz=-HALF; gz<HALF; gz++){
-    const h = surfaceHeight(gx,gz);
-    let topType = zoneType(gx,gz);
-    
-    // small carved pits ("caves") — rare shallow depressions
-    const pit = false;
-    const colTop = pit ? h-2 : h;
-    for(let y = h-2; y <= colTop; y++){
-      let type;
-      if(y === colTop) type = topType;
-      else if(y >= colTop-1) type = (topType==='sand') ? 'sand' : 'dirt';
-      else type = 'stone';
-      addBlockAt(type, gx, y, gz);
-    }
+function setInstance(chunk, type, x, y, z){
+  const mesh = chunk.meshes[type];
+  let idx;
+  if(chunk.freeSlots[type].length){ idx = chunk.freeSlots[type].pop(); }
+  else { idx = chunk.usedCount[type]++; mesh.count = Math.max(mesh.count, chunk.usedCount[type]); }
+  dummy.position.set(x,y,z); dummy.scale.set(1,1,1); dummy.updateMatrix();
+  mesh.setMatrixAt(idx, dummy.matrix);
+  mesh.instanceMatrix.needsUpdate = true;
+  blocks.set(keyOf(x,y,z), {type, chunkKey:chunk.key, idx, active:true});
+  return idx;
+}
+function addBlockAt(type, x, y, z){
+  const k = keyOf(x,y,z);
+  if(blocks.has(k) && blocks.get(k).active) return false;
+  const chunk = chunkAtColumn(x,z);
+  if(!chunk) return false; // outside any currently-loaded chunk; ignore (shouldn't happen for player-driven edits)
+  setInstance(chunk, type, x, y, z);
+  columnHeight[colKey(x,z)] = Math.max(columnHeight[colKey(x,z)]===undefined?-99:columnHeight[colKey(x,z)], y);
+  return true;
+}
+function removeBlockAt(x,y,z){
+  const k = keyOf(x,y,z); const b = blocks.get(k);
+  if(!b || !b.active) return null;
+  const chunk = chunks.get(b.chunkKey);
+  if(chunk){
+    const mesh = chunk.meshes[b.type];
+    dummy.position.set(0,-9999,0); dummy.scale.set(0,0,0); dummy.updateMatrix();
+    mesh.setMatrixAt(b.idx, dummy.matrix); mesh.instanceMatrix.needsUpdate = true;
+    chunk.freeSlots[b.type].push(b.idx);
   }
+  b.active = false;
+  columnHeight[colKey(x,z)] = recomputeColumnTop(x,z);
+  return b.type;
 }
 
-// water plane
-const water = new THREE.Mesh(
-  new THREE.PlaneGeometry(WORLD+4, WORLD+4),
-  new THREE.MeshLambertMaterial({ color:0x2d6fae, transparent:true, opacity:0.65 })
-);
-water.rotation.x = -Math.PI/2; water.position.y = WATER_LEVEL + 0.4;
-water.visible=false; scene.add(water);
+function chunkCoordOf(x,z){ return [Math.floor((x+HALF)/CHUNK), Math.floor((z+HALF)/CHUNK)]; }
+function chunkAtColumn(x,z){ const [cx,cz]=chunkCoordOf(x,z); return chunks.get(chunkKeyOf(cx,cz)) || null; }
 
-// trees
-const trunkMat = new THREE.MeshLambertMaterial({color:0x6b4a2d});
-const leafMat = new THREE.MeshLambertMaterial({color:0x2e8b3d});
-const treeSpots = [];
-/* CITY */
+// ---- city props (buildings/roads/trees/cars), scoped per chunk ----
 const colliders=[], cityGroup=new THREE.Group(); scene.add(cityGroup);
 const UB=new THREE.BoxGeometry(1,1,1), GY=1.5;
 function blockedAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy<c.top-0.3) return true; } return false; }
-function cbox(cx,by,cz,w,h,d,mat,solid){
+function cbox(cx,by,cz,w,h,d,mat,solid,ownerList){
   const m=new THREE.Mesh(UB,mat); m.scale.set(w,h,d); m.position.set(cx,by+h/2,cz); m.castShadow=true; cityGroup.add(m);
-  if(solid) colliders.push({x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h}); return m;
+  ownerList.meshes.push(m);
+  if(solid){ const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h}; colliders.push(c); ownerList.colliders.push(c); }
+  return m;
 }
 function wallMat(base,win,cols,rows){
   const cv=document.createElement('canvas'); cv.width=cv.height=32; const g=cv.getContext('2d');
@@ -452,57 +447,156 @@ function signMat(txt,bg){
   g.fillStyle=bg; g.fillRect(0,0,128,32); g.fillStyle='#fff'; g.font='bold 22px sans-serif'; g.textAlign='center'; g.fillText(txt,64,24);
   return new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)});
 }
-const flat=c=>new THREE.MeshLambertMaterial({color:c}), rnd=n=>Math.floor(Math.random()*n);
+const flat=c=>new THREE.MeshLambertMaterial({color:c});
 const PAST=['#e8d5b0','#d9a8a0','#b7d3c2','#c9c3e0','#f0e2a0'];
-function treeAt(x,z){ treeSpots.push([x,z]); }
-function house(cx,cz){
-  cbox(cx,GY,cz,6,3.2,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true);
-  const r=new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4),flat(0x8a3b2a)); r.rotation.y=Math.PI/4; r.position.set(cx,GY+4.3,cz); r.castShadow=true; cityGroup.add(r);
-  cbox(cx,GY,cz+3.02,1.1,2,.1,flat(0x5a3a22),false); cbox(cx+2,GY+3.2,cz-1,.8,2,.8,flat(0x7a4a3a),false);
-  treeAt(cx-4,cz-4); treeAt(cx+4,cz-4);
+const CARCOL=[0xd63a3a,0x2f6fd6,0xe8c33a,0xf0f0f0,0x2a2a2e,0x3aa860];
+
+function house(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz,6,3.2,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true,ownerList);
+  const r=new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4),flat(0x8a3b2a)); r.rotation.y=Math.PI/4; r.position.set(cx,GY+4.3,cz); r.castShadow=true; cityGroup.add(r); ownerList.meshes.push(r);
+  cbox(cx,GY,cz+3.02,1.1,2,.1,flat(0x5a3a22),false,ownerList); cbox(cx+2,GY+3.2,cz-1,.8,2,.8,flat(0x7a4a3a),false,ownerList);
+  ownerList.treeSpots.push([cx-4,cz-4],[cx+4,cz-4]);
 }
-function shop(cx,cz){
-  cbox(cx,GY,cz,8,4,7,wallMat('#cfcfd6','#bfe6f5',4,1),true); cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),false);
-  cbox(cx,GY+2.6,cz+3.9,8,.5,1.4,flat([0xd85a4a,0x4a7bd8,0xd8b84a][rnd(3)]),false);
-  cbox(cx,GY+3.3,cz+3.6,5,.9,.2,signMat(['CAFE','MARKET','PIZZA','BOOKS'][rnd(4)],'#222'),false);
+function shop(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz,8,4,7,wallMat('#cfcfd6','#bfe6f5',4,1),true,ownerList); cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),false,ownerList);
+  cbox(cx,GY+2.6,cz+3.9,8,.5,1.4,flat([0xd85a4a,0x4a7bd8,0xd8b84a][rnd(3)]),false,ownerList);
+  cbox(cx,GY+3.3,cz+3.6,5,.9,.2,signMat(['CAFE','MARKET','PIZZA','BOOKS'][rnd(4)],'#222'),false,ownerList);
 }
-function apartment(cx,cz){ const h=6+rnd(3)*3; cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true); cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),false); }
-function tower(cx,cz){ const h=18+rnd(4)*5; cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true); cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),false); cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false); }
-function school(cx,cz){
-  cbox(cx,GY,cz-2.5,9.4,5.5,4,wallMat('#c9553a','#cfe8f5',6,2),true); cbox(cx,GY+5.5,cz-2.5,9.8,.5,4.4,flat(0x333333),false);
-  cbox(cx,GY+6,cz-2.5,2.6,3.5,2.6,wallMat('#c9553a','#ffe28a',1,1),false);
-  cbox(cx,GY+3.4,cz-.4,6,1,.3,signMat('SCHOOL','#1a4b8c'),false);
-  cbox(cx-3.5,GY,cz+3,.15,7,.15,flat(0xdddddd),false); cbox(cx-3.1,GY+6,cz+3,.9,.6,.05,flat(0xdd3333),false);
-  [-1,1].forEach(s=>cbox(cx+s*3.5,GY,cz+3.6,.2,2,2.5,flat(0xffffff),false));
+function apartment(cx,cz,rnd,ownerList){ const h=6+rnd(3)*3; cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList); cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),false,ownerList); }
+function tower(cx,cz,rnd,ownerList){ const h=18+rnd(4)*5; cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList); cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),false,ownerList); cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList); }
+function school(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz-2.5,9.4,5.5,4,wallMat('#c9553a','#cfe8f5',6,2),true,ownerList); cbox(cx,GY+5.5,cz-2.5,9.8,.5,4.4,flat(0x333333),false,ownerList);
+  cbox(cx,GY+6,cz-2.5,2.6,3.5,2.6,wallMat('#c9553a','#ffe28a',1,1),false,ownerList);
+  cbox(cx,GY+3.4,cz-.4,6,1,.3,signMat('SCHOOL','#1a4b8c'),false,ownerList);
+  cbox(cx-3.5,GY,cz+3,.15,7,.15,flat(0xdddddd),false,ownerList); cbox(cx-3.1,GY+6,cz+3,.9,.6,.05,flat(0xdd3333),false,ownerList);
+  [-1,1].forEach(s=>cbox(cx+s*3.5,GY,cz+3.6,.2,2,2.5,flat(0xffffff),false,ownerList));
 }
-function park(cx,cz){
-  cbox(cx,GY,cz,3,.4,3,flat(0x4aa8e0),false); cbox(cx,GY+.4,cz,.6,1.2,.6,flat(0xbbbbbb),false); cbox(cx,GY,cz+4.3,2.2,.5,.6,flat(0x6b4a2d),false);
-  for(let i=0;i<8;i++){ const a=i*.785+.3; treeAt(cx+Math.cos(a)*4,cz+Math.sin(a)*4); }
+function park(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz,3,.4,3,flat(0x4aa8e0),false,ownerList); cbox(cx,GY+.4,cz,.6,1.2,.6,flat(0xbbbbbb),false,ownerList); cbox(cx,GY,cz+4.3,2.2,.5,.6,flat(0x6b4a2d),false,ownerList);
+  for(let i=0;i<8;i++){ const a=i*.785+.3; ownerList.treeSpots.push([cx+Math.cos(a)*4,cz+Math.sin(a)*4]); }
 }
 const KINDS=[house,house,shop,apartment,tower,park,house,shop];
-for(let i=0;i<8;i++)for(let j=0;j<8;j++){
-  const cx=-64+16*i+9.5, cz=-64+16*j+9.5;
-  (i===5&&j===5?school:i===4&&j===4?park:KINDS[(i*3+j*5+i*j)%8])(cx,cz);
-}
-{ const mk=new THREE.InstancedMesh(UB,new THREE.MeshBasicMaterial({color:0xf2e6a0}),600); let n=0;
-  for(let k=0;k<8;k++)for(let s=-62;s<64;s+=4){
-    dummy.scale.set(.25,.05,1.6); dummy.position.set(-62.5+16*k,GY+.02,s); dummy.updateMatrix(); mk.setMatrixAt(n++,dummy.matrix);
-    dummy.scale.set(1.6,.05,.25); dummy.position.set(s,GY+.02,-62.5+16*k); dummy.updateMatrix(); mk.setMatrixAt(n++,dummy.matrix);
+
+const trunkMat = new THREE.MeshLambertMaterial({color:0x6b4a2d});
+const leafMat = new THREE.MeshLambertMaterial({color:0x2e8b3d});
+
+// Generates one chunk's terrain + city cell + trees + roadlines + cars. Deterministic from (cx,cz).
+function generateChunk(cx, cz){
+  const key = chunkKeyOf(cx,cz);
+  const meshes = newChunkMeshes();
+  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[] } };
+  BLOCK_TYPES.forEach(t=>{ chunk.freeSlots[t]=[]; chunk.usedCount[t]=0; });
+  chunks.set(key, chunk);
+
+  const x0 = cx*CHUNK - HALF, z0 = cz*CHUNK - HALF; // world-space column origin of this chunk
+
+  // terrain voxels
+  for(let lx=0; lx<CHUNK; lx++){
+    for(let lz=0; lz<CHUNK; lz++){
+      const gx = x0+lx, gz = z0+lz;
+      const h = surfaceHeight(gx,gz);
+      const topType = zoneType(gx,gz);
+      for(let y = h-2; y <= h; y++){
+        let type;
+        if(y === h) type = topType;
+        else if(y >= h-1) type = (topType==='sand') ? 'sand' : 'dirt';
+        else type = 'stone';
+        addBlockAt(type, gx, y, gz);
+      }
+    }
   }
-  mk.count=n; mk.frustumCulled=false; scene.add(mk); }
-const trunkI=new THREE.InstancedMesh(new THREE.BoxGeometry(0.6,2.2,0.6),trunkMat,Math.max(1,treeSpots.length)), leafI=new THREE.InstancedMesh(new THREE.BoxGeometry(2.2,2.2,2.2),leafMat,Math.max(1,treeSpots.length));
-treeSpots.forEach((s,n)=>{
-  dummy.scale.set(1,1,1); dummy.position.set(s[0],GY+1.1,s[1]); dummy.updateMatrix(); trunkI.setMatrixAt(n,dummy.matrix);
-  dummy.position.y=GY+2.9; dummy.updateMatrix(); leafI.setMatrixAt(n,dummy.matrix);
-});
-trunkI.count=leafI.count=treeSpots.length; [trunkI,leafI].forEach(m=>{m.frustumCulled=false;m.castShadow=true;scene.add(m);});
+
+  // city cell: one building/park per chunk, deterministic by chunk coord (special-cases mirror the old fixed 8x8 map at the origin, then repeats the pattern outward so it tiles forever)
+  const rnd = seededRng(chunkSeed(cx,cz));
+  const rndInt = n => Math.floor(rnd()*n);
+  const centerCx = x0 + CHUNK/2 - 0.5, centerCz = z0 + CHUNK/2 - 0.5;
+  const kindPick = (cx===128&&cz===128) ? park : (cx===128&&cz===127) ? school : KINDS[(((cx%8)+8)%8*3 + ((cz%8)+8)%8*5 + cx*cz)%8];
+  kindPick(centerCx, centerCz, rndInt, chunk.props);
+
+  // road markings along this chunk's cell edges
+  const mkPts = [];
+  for(let s=-CHUNK/2+2; s<CHUNK/2-2; s+=4){
+    mkPts.push([x0+1, GY+.02, z0+CHUNK/2-0.5+ (s) ]);
+  }
+  if(mkPts.length){
+    const rm = new THREE.InstancedMesh(UB, new THREE.MeshBasicMaterial({color:0xf2e6a0}), mkPts.length*2);
+    let n=0;
+    mkPts.forEach(([mx,my,mz])=>{
+      dummy.scale.set(.25,.05,1.6); dummy.position.set(x0+0.5,my,mz); dummy.updateMatrix(); rm.setMatrixAt(n++,dummy.matrix);
+      dummy.scale.set(1.6,.05,.25); dummy.position.set(mz-z0+x0, my, z0+0.5); dummy.updateMatrix(); rm.setMatrixAt(n++,dummy.matrix);
+    });
+    rm.count=n; rm.frustumCulled=false; scene.add(rm); chunk.props.meshes.push(rm);
+  }
+
+  // trees for this chunk
+  const spots = chunk.props.treeSpots;
+  if(spots.length){
+    const trunkI = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6,2.2,0.6), trunkMat, spots.length);
+    const leafI = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2,2.2,2.2), leafMat, spots.length);
+    spots.forEach((s,n)=>{
+      dummy.scale.set(1,1,1); dummy.position.set(s[0],GY+1.1,s[1]); dummy.updateMatrix(); trunkI.setMatrixAt(n,dummy.matrix);
+      dummy.position.y=GY+2.9; dummy.updateMatrix(); leafI.setMatrixAt(n,dummy.matrix);
+    });
+    trunkI.count=leafI.count=spots.length; [trunkI,leafI].forEach(m=>{m.frustumCulled=false;m.castShadow=true;scene.add(m);});
+    chunk.props.meshes.push(trunkI, leafI);
+  }
+
+  // one parked car for this chunk cell, skipping the origin cell (player spawn stays clear)
+  if(!(cx===128&&cz===128) && rnd()<0.55){
+    const vert = rnd()<0.5, lane = rndInt(2)+1;
+    const carX = vert ? centerCx - CHUNK/2 + lane*3 : centerCx + (rnd()-0.5)*8;
+    const carZ = vert ? centerCz + (rnd()-0.5)*8 : centerCz - CHUNK/2 + lane*3;
+    const car = makeBoulder(carX, GY+.95, carZ, 1.9, CARCOL[rndInt(6)], true);
+    car.mesh.rotation.y = vert?0:Math.PI/2;
+    chunk.props.carRef = car; // tracked so it can be cleaned up on unload
+  }
+
+  return chunk;
+}
+
+function disposeChunk(chunk){
+  BLOCK_TYPES.forEach(t=>{ scene.remove(chunk.meshes[t]); chunk.meshes[t].geometry.dispose(); chunk.meshes[t].material.dispose(); });
+  chunk.props.meshes.forEach(m=>{ scene.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)) m.material.dispose(); });
+  chunk.props.colliders.forEach(c=>{ const i=colliders.indexOf(c); if(i>=0) colliders.splice(i,1); });
+  if(chunk.props.carRef){ const i=props.indexOf(chunk.props.carRef); if(i>=0) props.splice(i,1); }
+  // clear this chunk's block registry entries (terrain memory is freed; columnHeight persists so ground queries outside load radius still resolve sanely)
+  const x0 = chunk.cx*CHUNK - HALF, z0 = chunk.cz*CHUNK - HALF;
+  for(let lx=0; lx<CHUNK; lx++) for(let lz=0; lz<CHUNK; lz++){
+    for(let y=-14;y<=20;y++){ const k=keyOf(x0+lx,y,z0+lz); if(blocks.has(k)) blocks.delete(k); }
+  }
+  chunks.delete(chunk.key);
+}
+
+// Loads/unloads chunks around (px,pz). Cheap to call every frame — it only does
+// real work when the player has actually crossed into a new chunk.
+function updateChunkStreaming(px,pz){
+  const [ccx,ccz] = chunkCoordOf(px,pz);
+  if(ccx===curChunkX && ccz===curChunkZ && chunks.size>0) return;
+  curChunkX = ccx; curChunkZ = ccz;
+
+  for(let dx=-LOAD_RADIUS; dx<=LOAD_RADIUS; dx++){
+    for(let dz=-LOAD_RADIUS; dz<=LOAD_RADIUS; dz++){
+      const cx=ccx+dx, cz=ccz+dz;
+      if(!chunks.has(chunkKeyOf(cx,cz))) generateChunk(cx,cz);
+    }
+  }
+  for(const chunk of [...chunks.values()]){
+    if(Math.abs(chunk.cx-ccx) > UNLOAD_RADIUS || Math.abs(chunk.cz-ccz) > UNLOAD_RADIUS) disposeChunk(chunk);
+  }
+}
+
+// water plane — generously sized and re-centered on the player each streaming update so it always covers the loaded area
+const water = new THREE.Mesh(
+  new THREE.PlaneGeometry(CHUNK*(LOAD_RADIUS*2+3), CHUNK*(LOAD_RADIUS*2+3)),
+  new THREE.MeshLambertMaterial({ color:0x2d6fae, transparent:true, opacity:0.65 })
+);
+water.rotation.x = -Math.PI/2; water.position.y = WATER_LEVEL + 0.4;
+water.visible=false; scene.add(water);
 
 // Returns the Y of the walkable surface (top face of the highest solid block).
 function groundTopAt(x,z){
   const gx = Math.round(x), gz = Math.round(z);
-  const cgx = Math.max(-HALF, Math.min(HALF-1, gx));
-  const cgz = Math.max(-HALF, Math.min(HALF-1, gz));
-  const t = columnHeight[colKey(cgx,cgz)];
+  const t = columnHeight[colKey(gx,gz)];
   return Math.max(t===undefined ? -3 : t, -14) + 0.5;
 }
 
@@ -541,36 +635,37 @@ function buildCharacter(kind){
     case 'xlr8':      palette = {skin:0x1c3fbf, torso:0x0c2270, accent:0x8fd6ff}; scaleY=0.95; break;
     case 'diamondhead': palette = {skin:0x35c9c0, torso:0x1e8f88, accent:0xdfffff}; break;
     case 'echo_echo': palette = {skin:0xf1f4f7, torso:0xdde3e9, accent:0x1a1a1a}; scaleY=0.85; break;
-    case 'kolossus': palette = {skin:0x8a7a6a, torso:0x5c4f43, accent:0xff9a3c}; scaleY=2.4; break;
-    case 'sporeback': palette = {skin:0x5a8f3a, torso:0x3d6626, accent:0xc9e86a}; scaleY=1.5; break;
+    case 'cannonbolt': palette = {skin:0xd8862e, torso:0x8a4a12, accent:0xf2c14e}; scaleY=0.8; break;
     default: palette = {skin:0xe0a878, torso:0x2c7a3d, accent:0x111111}; kind='ben';
   }
   // Per-kind body proportions: bulk vs slender build.
-  const torsoWidth = kind==='four_arms' ? 1.5 : kind==='kolossus' ? 1.9 : kind==='sporeback' ? 1.7 : 0.9;
-  const torsoDepth = kind==='four_arms' ? 0.75 : kind==='kolossus' ? 1.0 : kind==='sporeback' ? 0.9 : 0.5;
-  const legWidth   = kind==='four_arms' ? 0.2  : kind==='kolossus' ? 0.55 : kind==='sporeback' ? 0.5 : 0.3;
+  const torsoWidth = kind==='four_arms' ? 1.35 : kind==='cannonbolt' ? 1.4 : 0.68;
+  const torsoDepth = kind==='four_arms' ? 0.68 : kind==='cannonbolt' ? 1.25 : 0.38;
+  const legWidth   = kind==='four_arms' ? 0.2  : kind==='cannonbolt' ? 0.4 : 0.24;
 
   // Vertical layout, built bottom-up from the group root (which sits at ground/feet level):
-  const legH = 0.9, torsoH = 1.1, headH = 0.7;
+  const legH = 1.0, torsoH = 1.15, headH = 0.55;
   const hipY = legH * scaleY;                 // top of legs / bottom of torso
   const torsoCenterY = hipY + (torsoH/2) * scaleY;
   const shoulderY = hipY + torsoH * 0.82 * scaleY;
   const headCenterY = hipY + (torsoH + headH/2) * scaleY;
 
-  const head = box(0.7,0.7,0.7, kind==='diamondhead'?palette.accent:palette.skin);
+  const head = box(0.52,0.55,0.52, kind==='diamondhead'?palette.accent:palette.skin);
   head.position.y = headCenterY;
   if(kind==='echo_echo'){ const vz=box(0.5,0.14,0.06,0x111111); vz.position.set(0,headCenterY+0.05,-0.36); g.add(vz); }
-  if(kind==='diamondhead'){ head.geometry = new THREE.OctahedronGeometry(0.55); }
-  if(kind==='kolossus'){ head.geometry = new THREE.BoxGeometry(0.85,0.75,0.85); [-0.3,0.3].forEach(x=>{ const horn=new THREE.Mesh(new THREE.ConeGeometry(0.14,0.4,5),new THREE.MeshLambertMaterial({color:palette.accent})); horn.position.set(x,headCenterY+0.5,0.1); horn.castShadow=true; g.add(horn); }); }
-  if(kind==='sporeback'){ head.geometry = new THREE.BoxGeometry(0.75,0.55,0.9); [-0.34,0.34].forEach(x=>{ const spike=new THREE.Mesh(new THREE.ConeGeometry(0.1,0.3,4),new THREE.MeshLambertMaterial({color:palette.accent})); spike.position.set(x,headCenterY+0.35,-0.1); spike.castShadow=true; g.add(spike); }); }
+  if(kind==='diamondhead'){ head.geometry = new THREE.OctahedronGeometry(0.42); }
+  if(kind==='cannonbolt'){ head.geometry = new THREE.SphereGeometry(0.38,10,8); }
   g.add(head); parts.head = head;
-  if(kind==='kolossus'||kind==='sporeback'){
-    const plateCount = 3, plateColor = palette.accent;
-    for(let i=0;i<plateCount;i++){
-      const py = torsoCenterY + (i-1)*0.32*scaleY;
-      const plate = new THREE.Mesh(new THREE.ConeGeometry(0.16,0.3,4), new THREE.MeshLambertMaterial({color:plateColor}));
-      plate.rotation.x = Math.PI/2; plate.position.set(0, py, -torsoDepth/2-0.05); plate.castShadow=true; g.add(plate);
+  if(kind==='cannonbolt'){
+    // Segmented shell plates across the back — these are what the "ball" silhouette reads as when curled.
+    const shell = new THREE.Group();
+    const rows = 4;
+    for(let i=0;i<rows;i++){
+      const py = torsoCenterY + (i-1.2)*0.28;
+      const plate = new THREE.Mesh(new THREE.SphereGeometry(0.62-i*0.02,10,6,0,Math.PI*2,0,Math.PI/2), new THREE.MeshLambertMaterial({color:palette.accent}));
+      plate.position.set(0, py, 0); plate.castShadow = true; shell.add(plate);
     }
+    g.add(shell); parts.shell = shell;
   }
 
   const torso = box(torsoWidth,torsoH,torsoDepth, palette.torso);
@@ -578,8 +673,8 @@ function buildCharacter(kind){
   g.add(torso); parts.torso = torso;
   if(kind==='echo_echo'){ [-0.27,0.27].forEach(x=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.08,10),new THREE.MeshLambertMaterial({color:0x111111})); c.rotation.x=Math.PI/2; c.position.set(x,torsoCenterY+0.12,-torsoDepth/2-0.03); g.add(c); }); }
 
-  const armGeo = kind==='four_arms' ? [0.3,0.95,0.3] : [0.24,0.85,0.24];
-  const armSpacing = kind==='four_arms' ? torsoWidth/2 + 0.18 : 0.62;
+  const armGeo = kind==='four_arms' ? [0.3,0.95,0.3] : [0.19,0.85,0.19];
+  const armSpacing = kind==='four_arms' ? torsoWidth/2 + 0.18 : 0.46;
   function makeArm(x, extra){
     const arm = box(armGeo[0],armGeo[1],armGeo[2], extra? palette.accent : palette.skin);
     arm.geometry.translate(0,-armGeo[1]/2,0);   // pivot at shoulder (top of arm)
@@ -653,46 +748,38 @@ const ACT={
  fire:{label:'FIREBALL',hold:v=>{ if(v){ player.flameHeld=true; flameTime=0; } else if(player.flameHeld){ player.flameHeld=false; if(flameTime<.22&&player.energy>=15){ player.energy-=15; spawnProjectile(player,0xff5a1e,28,22,false,'fire'); } } },cost:0,cd:0},
  fly:{label:()=>player.flying?'LAND':'FLY',cost:0,cd:0.3,run:()=>doJump()},
  burn:{label:'BURN',cost:25,cd:6,run:()=>{player.boostT=2.5;statusText('AFTERBURNER');}},
- titanslam:{label:'TITAN SLAM',cost:40,cd:6,run:()=>{shockwaveAt(player.pos,7,55,true);shakeCamera(0.5);shatterNear(player.pos,7);}},
- boulder:{label:'HURL BOULDER',cost:20,cd:1.6,run:()=>spawnProjectile({pos:player.pos,yaw:player.yaw,pitch:player.pitch*.5},0x8a7a6a,35,20,true,'crystal')},
- stomp:{label:'STOMP',cost:0,cd:0.7,run:()=>{shockwaveAt(player.pos,3,18,false);}},
- grow:{label:()=>player.form.id==='sporeback'&&player.grown?'SHRINK':'GROW',cost:30,cd:1,run:()=>toggleGrowth()},
- spore:{label:'SPORE BURST',cost:25,cd:3,run:()=>spawnProjectile({pos:player.pos,yaw:player.yaw,pitch:player.pitch*.5},0xc9e86a,20,26,false,'fire')}
+ roll:{label:()=>player.rolling?'UNROLL':'ROLL',hold:v=>{player.rollHeld=v;},cost:0,cd:0}
 };
 const ALIENS = [
   { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:6.6,
-    atkDamage:22, atkRange:2.4, atkCooldown:0.7,
+    atkDamage:22, atkRange:2.4, atkCooldown:0.7, modelScale:1.18,
     special:{ name:'GROUND SLAM', cost:35, cooldown:5,
       run(ctx){ shockwaveAt(ctx.player.pos, 4.5, 40, true); shakeCamera(0.3); } } },
   { id:'heatblast', name:'HEATBLAST', actions:[ACT.fire,ACT.fly,ACT.burn], maxHealth:100, maxEnergy:120, speed:3.0, jump:5.6, flies:true, flySpeed:22,
-    atkDamage:14, atkRange:1.8, atkCooldown:0.5,
+    atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.0,
     special:{ name:'FIREBALL', cost:20, cooldown:1.2,
       run(ctx){ spawnProjectile(ctx.player, 0xff5a1e, 26, 18, false); } } },
   { id:'xlr8', name:'XLR8', actions:[ACT.dash,ACT.tornado,ACT.slow], maxHealth:90, maxEnergy:110, speed:7.4, jump:6.0,
-    atkDamage:10, atkRange:1.6, atkCooldown:0.28,
+    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:0.98,
     special:{ name:'SPEED BURST', cost:8, cooldown:0.1, duration:4, speedMult:1.9, drainPerSec:8,
       run(ctx){ ctx.player.speedBurstT = 4; } } },
   { id:'diamondhead', name:'DIAMONDHEAD', flies:true, flySpeed:9, actions:[ACT.spray,ACT.shard,ACT.shield,ACT.wall,ACT.lev], maxHealth:130, maxEnergy:100, speed:2.9, jump:5.4,
-    atkDamage:18, atkRange:2.0, atkCooldown:0.6,
+    atkDamage:18, atkRange:2.0, atkCooldown:0.6, modelScale:1.02,
     special:{ name:'CRYSTAL SHARD', cost:22, cooldown:1.4,
       run(ctx){ spawnProjectile(ctx.player, 0x35e0d6, 30, 24, true); } } },
   { id:'echo_echo', name:'ECHO ECHO', actions:[ACT.scream,ACT.split,ACT.reps,ACT.doom], maxHealth:90, maxEnergy:100, speed:5.4, jump:6.4,
-    atkDamage:9, atkRange:1.8, atkCooldown:0.3, special:null },
-  { id:'kolossus', name:'KOLOSSUS', actions:[ACT.boulder,ACT.titanslam], maxHealth:260, maxEnergy:90, speed:2.2, jump:4.8,
-    atkDamage:34, atkRange:3.0, atkCooldown:0.9, modelScale:1.6,
-    special:{ name:'TITAN SLAM', cost:40, cooldown:6,
-      run(ctx){ shockwaveAt(ctx.player.pos, 7, 55, true); shakeCamera(0.5); shatterNear(ctx.player.pos, 7); } } },
-  { id:'sporeback', name:'SPOREBACK', actions:[ACT.stomp,ACT.spore,ACT.grow], maxHealth:150, maxEnergy:110, speed:3.6, jump:5.8, modelScale:1.15,
-    atkDamage:20, atkRange:2.2, atkCooldown:0.55,
-    special:{ name:'GROW', cost:30, cooldown:1,
-      run(ctx){ toggleGrowth(); } } },
+    atkDamage:9, atkRange:1.8, atkCooldown:0.3, modelScale:0.92, special:null },
+  { id:'cannonbolt', name:'CANNONBOLT', actions:[ACT.roll], maxHealth:140, maxEnergy:110, speed:3.6, jump:5.4,
+    atkDamage:24, atkRange:1.6, atkCooldown:0.5, modelScale:1.0,
+    special:null },
 ];
-const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jump:6.0,
+const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jump:6.0, modelScale:1.0,
   atkDamage:8, atkRange:1.6, atkCooldown:0.45, special:null };
 
 /* =========================================================================
    PLAYER
 ========================================================================= */
+updateChunkStreaming(0.5, 0.5); // load starting chunks before we ask groundTopAt for spawn height
 const player = {
   pos: new THREE.Vector3(0.5, groundTopAt(0.5,0.5)+1, 0.5),
   vel: new THREE.Vector3(),
@@ -721,8 +808,7 @@ function setForm(formDef, kind){
   scene.add(player.model);
   player.health = formDef.maxHealth;
   player.energy = formDef.maxEnergy;
-  player.grown = false;
-  clearSquad(); player.superHeld=false; player.flameHeld=false; player.sprayHeld=false; doomHeld=false; if(carried) dropProp(); player.shieldT=0; if(shield){ scene.remove(shield); shield=null; } player.slowT=0; player.boostT=0; player.dashT=0; player.swimming=false; for(const k in actCd) delete actCd[k]; buildActions();
+  clearSquad(); player.superHeld=false; player.flameHeld=false; player.sprayHeld=false; doomHeld=false; if(carried) dropProp(); player.shieldT=0; if(shield){ scene.remove(shield); shield=null; } player.slowT=0; player.boostT=0; player.dashT=0; player.swimming=false; player.rollHeld=false; player.rolling=false; player.rollT=0; player.rollSpin=0; player.model.rotation.x=0; for(const k in actCd) delete actCd[k]; buildActions();
   player.specialTimer = 0;
   document.getElementById('alien-name').textContent = formDef.name;
   const portWrap = document.getElementById('alien-portrait');
@@ -826,17 +912,6 @@ function updateProjectiles(dt){
    SPECIAL EFFECTS
 ========================================================================= */
 let camShake = 0;
-function toggleGrowth(){
-  if(player.form.id!=='sporeback') return;
-  player.grown = !player.grown;
-  if(player.grown){
-    player.health = Math.min(player.health*1.8, player.form.maxHealth*1.8);
-    statusText('GROWTH SURGE'); shakeCamera(0.35);
-  } else {
-    player.health = Math.min(player.health, player.form.maxHealth);
-    statusText('SHRINKING BACK');
-  }
-}
 function shakeCamera(amt){ camShake = amt; }
 function shockwaveAt(center, radius, damage, knock){
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.2,0.4,24), new THREE.MeshBasicMaterial({color:0xffffff, side:THREE.DoubleSide, transparent:true, opacity:0.8}));
@@ -908,8 +983,8 @@ function damageEnemy(en, dmg, dirAway){
     en.alive = false;
     scene.remove(en.mesh);
     setTimeout(()=>{
-      const x = Math.round((Math.random()-0.5)*(WORLD-8));
-      const z = Math.round((Math.random()-0.5)*(WORLD-8));
+      const x = Math.round(player.pos.x + (Math.random()-0.5)*40);
+      const z = Math.round(player.pos.z + (Math.random()-0.5)*40);
       Object.assign(en, makeEnemy(en.type,x,z));
     }, 8000);
   }
@@ -989,13 +1064,7 @@ function makeBoulder(x,y,z,s,color,car){
   g.scale.setScalar(s); g.rotation.y=Math.random()*3; g.position.set(x,y,z); scene.add(g);
   const p={mesh:g,s,vel:new THREE.Vector3(),state:'rest',color,car}; props.push(p); return p;
 }
-const CARCOL=[0xd63a3a,0x2f6fd6,0xe8c33a,0xf0f0f0,0x2a2a2e,0x3aa860];
-for(let i=0;i<44;i++){
-  const k=rnd(8), lane=rnd(2)+1, along=Math.round((Math.random()-.5)*(WORLD-6)), vert=Math.random()<.5;
-  const x=vert?-64+16*k+lane:along, z=vert?along:-64+16*k+lane;
-  if(Math.abs(x)<4&&Math.abs(z)<4) continue;
-  const c=makeBoulder(x,GY+.95,z,1.9,CARCOL[i%6],true); c.mesh.rotation.y=vert?0:Math.PI/2;
-}
+// (parked cars are now generated per-chunk in generateChunk(), see chunk.props.carRef)
 function shatter(p,blast){
   const m=p.mesh.position.clone(); scene.remove(p.mesh); Audio_.breakBlock();
   for(let i=0;i<8;i++) debris(m,p.color,.35*p.s*(.5+Math.random()*.6),new THREE.Vector3((Math.random()-.5)*8,Math.random()*7,(Math.random()-.5)*8),2.5,true);
@@ -1636,9 +1705,13 @@ function updatePlayer(dt){
   player.specialTimer = Math.max(0, player.specialTimer - dt);
   player.invuln = Math.max(0, player.invuln - dt);
   player.attacking = Math.max(0, player.attacking - dt);
-  if(player.atkHeld) meleeAttack();
+  if(player.atkHeld && !(player.rolling && player.form.id==='cannonbolt')) meleeAttack();
   if(player.superHeld && player.form.id==='xlr8' && player.energy>0){ player.energy=Math.max(0,player.energy-16*dt); player.superT=Math.min(1,(player.superT||0)+dt*1.1); if(player.energy<=0) player.superHeld=false; }
   else { player.superHeld=false; player.superT=Math.max(0,(player.superT||0)-dt*3); }
+
+  // Cannonbolt: hold ROLL to curl into a ball and build up speed; release to unroll back to normal.
+  if(player.rollHeld && player.form.id==='cannonbolt'){ player.rolling=true; player.rollT=Math.min(1,(player.rollT||0)+dt*1.4); }
+  else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*2.2); }
 
   // energy regen (paused briefly right after casting)
   if(player.specialTimer <= player.form.special?.cooldown - 0.15 || !player.form.special){
@@ -1655,11 +1728,12 @@ function updatePlayer(dt){
   let mx = moveInput.x, my = moveInput.y;
   const mag = Math.hypot(mx,my); if(mag>1){ mx/=mag; my/=mag; }
   const speedMult = player.speedBurstT>0 ? (player.form.special.speedMult||1) : 1;
-  const speed = player.form.speed * speedMult * (player.dashT>0?4.5:1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superT||0)*6);
+  const speed = player.form.speed * speedMult * (player.dashT>0?4.5:1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superT||0)*6) * (1+(player.rollT||0)*5);
   let moveX = forward.x*my + right.x*mx;
   let moveZ = forward.z*my + right.z*mx;
   if(player.dashT>0){ moveX=player.dashDir.x; moveZ=player.dashDir.z; player.dashT-=dt; }
   else if(player.superHeld && Math.hypot(moveX,moveZ)<0.05){ moveX=forward.x; moveZ=forward.z; }
+  else if(player.rolling && Math.hypot(moveX,moveZ)<0.05){ moveX=forward.x; moveZ=forward.z; }
   const moving = Math.hypot(moveX,moveZ) > 0.05;
 
   if(player.alive){
@@ -1686,6 +1760,20 @@ function updatePlayer(dt){
     const dx=player.pos.x-p.mesh.position.x, dz=player.pos.z-p.mesh.position.z, d=Math.hypot(dx,dz), r=p.s*.6+.4;
     if(d<r&&d>.001&&player.pos.y-1<p.mesh.position.y+p.s*.5-.1){ player.pos.x+=dx/d*(r-d); player.pos.z+=dz/d*(r-d); }
   });
+
+  // Cannonbolt ram: while curled and moving fast, colliding with an enemy deals damage scaled by roll speed.
+  if(player.rolling && (player.rollT||0) > 0.25 && player.alive){
+    player.ramCd = Math.max(0, (player.ramCd||0) - dt);
+    if(player.ramCd <= 0) enemies.forEach(en=>{
+      if(!en.alive) return;
+      const dx=en.mesh.position.x-player.pos.x, dz=en.mesh.position.z-player.pos.z, d=Math.hypot(dx,dz);
+      if(d < 1.6){
+        const dmg = player.form.atkDamage * (1 + player.rollT*1.5);
+        damageEnemy(en, dmg, new THREE.Vector3(dx,0,dz).normalize());
+        player.ramCd = 0.35;
+      }
+    });
+  }
   const groundY = groundTopAt(player.pos.x, player.pos.z);
 
   if(player.flying){
@@ -1715,11 +1803,22 @@ function updatePlayer(dt){
   // face movement direction (model rotates toward camera-relative move dir, else camera yaw)
   const facing = moving ? Math.atan2(-moveX,-moveZ) : player.yaw;
   player.model.rotation.y = THREE.MathUtils.lerp(player.model.rotation.y, facing, 0.25);
-  const formScale = PS * (player.form.modelScale||1) * (player.grown?1.6:1);
+  const formScale = PS * (player.form.modelScale||1);
   player.model.position.set(player.pos.x, player.pos.y-1+0.9*formScale, player.pos.z); player.model.scale.setScalar(formScale);
 
   // procedural walk animation
   const parts = player.model.userData.parts;
+  if(player.form.id==='cannonbolt'){
+    // Curl limbs inward and spin the whole body around the roll (pitch) axis, like tumbling forward as a ball.
+    const curl = player.rollT||0;
+    if(parts.leftLeg) parts.leftLeg.rotation.x = -curl*1.4;
+    if(parts.rightLeg) parts.rightLeg.rotation.x = curl*1.4;
+    if(parts.leftArm) parts.leftArm.rotation.x = curl*1.3;
+    if(parts.rightArm) parts.rightArm.rotation.x = -curl*1.3;
+    if(parts.head) parts.head.position.y = (parts.head.userData.baseY ?? (parts.head.userData.baseY=parts.head.position.y)) - curl*0.15;
+    if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
+    else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
+  } else {
   if(moving && player.onGround){
     player.walkT += dt*8*speedMult;
     Math.floor(player.walkT*2)%20===0 && null; // (keep hook point, footsteps handled below by timer)
@@ -1742,6 +1841,7 @@ function updatePlayer(dt){
   // footstep sound throttling
   player._stepT = (player._stepT||0) + dt;
   if(moving && player.onGround && player._stepT > 0.32){ Audio_.footstep(); player._stepT=0; }
+  }
 
   // fell into water / void safety
   if(player.pos.y < -40){ player.health = 0; }
@@ -1793,6 +1893,8 @@ function loop(){
   timeScale += ((player.slowT>0?0.3:1)-timeScale)*Math.min(1,dt*6);
   document.getElementById('slow-overlay').style.opacity = timeScale<0.9?1:0;
   const wdt = dt*timeScale;
+  updateChunkStreaming(player.pos.x, player.pos.z);
+  water.position.x = player.pos.x; water.position.z = player.pos.z;
   updateDayNight(wdt);
   updatePlayer(dt);
   updateEnemies(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
