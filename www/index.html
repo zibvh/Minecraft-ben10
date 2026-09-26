@@ -90,7 +90,7 @@
   #joystick-stick{position:absolute;width:50px;height:50px;border-radius:50%;background:rgba(57,255,138,0.35);
     border:2px solid rgba(57,255,138,0.6);left:50%;top:50%;transform:translate(-50%,-50%);}
 
-  #cam-zone{position:absolute;right:0;top:0;bottom:130px;left:42%;pointer-events:auto;}
+
 
   #action-buttons{position:absolute;right:max(16px,env(safe-area-inset-right,16px));
     bottom:max(16px,env(safe-area-inset-bottom,16px));width:180px;height:150px;pointer-events:none;}
@@ -187,7 +187,6 @@
 
   <div id="hotbar"></div>
   <div id="joystick-zone"><div id="joystick-base"></div><div id="joystick-stick"></div></div>
-  <div id="cam-zone"></div>
 
   <div id="action-buttons">
     <div class="abtn" id="btn-special"><svg viewBox="0 0 24 24"><path d="M13 2 L4 14 h6 l-1 8 9-12h-6z"/></svg></div>
@@ -374,16 +373,26 @@ let curChunkX = 0, curChunkZ = 0;
 
 const dummy = new THREE.Object3D();
 
+// Shared materials (one per block type, reused by every chunk) — avoids recreating a Material object on every chunk generation.
+const blockMaterials = {};
+BLOCK_TYPES.forEach(t=>{ blockMaterials[t] = new THREE.MeshLambertMaterial({ color: BLOCK_COLOR[t] }); });
+const sharedBoxGeo = new THREE.BoxGeometry(1,1,1);
+
 function newChunkMeshes(){
-  const meshes = {};
-  BLOCK_TYPES.forEach(t=>{
-    const mat = new THREE.MeshLambertMaterial({ color: BLOCK_COLOR[t] });
+  // Lazy: no InstancedMesh is actually created until a block of that type is placed in this chunk
+  // (getOrCreate below). Most chunks only ever need 2-3 of the 8 block types as terrain, so this
+  // avoids 5-6 unnecessary GPU buffer allocations per chunk — the main cost behind the movement stutter.
+  return {};
+}
+function getOrCreateMesh(chunk, type){
+  let m = chunk.meshes[type];
+  if(!m){
     const cap = CHUNK*CHUNK*3 + 200; // headroom for player-placed blocks within this chunk
-    const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), mat, cap);
+    m = new THREE.InstancedMesh(sharedBoxGeo, blockMaterials[type], cap);
     m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false;
-    scene.add(m); meshes[t] = m;
-  });
-  return meshes;
+    scene.add(m); chunk.meshes[type] = m; chunk.freeSlots[type] = []; chunk.usedCount[type] = 0;
+  }
+  return m;
 }
 
 function isSolid(x,y,z){ const b = blocks.get(keyOf(x,y,z)); return !!(b && b.active); }
@@ -394,7 +403,7 @@ function recomputeColumnTop(x,z){
 }
 
 function setInstance(chunk, type, x, y, z){
-  const mesh = chunk.meshes[type];
+  const mesh = getOrCreateMesh(chunk, type);
   let idx;
   if(chunk.freeSlots[type].length){ idx = chunk.freeSlots[type].pop(); }
   else { idx = chunk.usedCount[type]++; mesh.count = Math.max(mesh.count, chunk.usedCount[type]); }
@@ -491,7 +500,7 @@ function generateChunk(cx, cz){
   const key = chunkKeyOf(cx,cz);
   const meshes = newChunkMeshes();
   const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[] } };
-  BLOCK_TYPES.forEach(t=>{ chunk.freeSlots[t]=[]; chunk.usedCount[t]=0; });
+  // freeSlots/usedCount for each block type are created lazily in getOrCreateMesh, only when that chunk actually uses that type
   chunks.set(key, chunk);
 
   const x0 = cx*CHUNK - HALF, z0 = cz*CHUNK - HALF; // world-space column origin of this chunk
@@ -561,7 +570,9 @@ function generateChunk(cx, cz){
 }
 
 function disposeChunk(chunk){
-  BLOCK_TYPES.forEach(t=>{ scene.remove(chunk.meshes[t]); chunk.meshes[t].geometry.dispose(); chunk.meshes[t].material.dispose(); });
+  // Only remove the InstancedMesh from the scene — geometry and material are shared across
+  // every chunk now (see blockMaterials/sharedBoxGeo above), so they must never be disposed here.
+  Object.values(chunk.meshes).forEach(m=>{ scene.remove(m); });
   chunk.props.meshes.forEach(m=>{ scene.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)) m.material.dispose(); });
   chunk.props.colliders.forEach(c=>{ const i=colliders.indexOf(c); if(i>=0) colliders.splice(i,1); });
   if(chunk.props.carRef){ const i=props.indexOf(chunk.props.carRef); if(i>=0) props.splice(i,1); }
@@ -573,21 +584,59 @@ function disposeChunk(chunk){
   chunks.delete(chunk.key);
 }
 
-// Loads/unloads chunks around (px,pz). Cheap to call every frame — it only does
-// real work when the player has actually crossed into a new chunk.
+// Loads/unloads chunks around (px,pz). Cheap to call every frame — it only queues work when the
+// player has crossed into a new chunk, and actual generation is budgeted (a few chunks per frame)
+// so fast movement (XLR8, rolling Cannonbolt, flying Heatblast) never stalls a single frame by
+// generating many chunks at once. Missing chunks are queued nearest-first so the ground/buildings
+// immediately around the player are always the first to appear.
+const loadQueue = [];
+const queuedKeys = new Set();
+const CHUNKS_PER_FRAME = 2; // tune down further if a device still stutters; raise if chunks pop in too late to be seen
+
 function updateChunkStreaming(px,pz){
   const [ccx,ccz] = chunkCoordOf(px,pz);
-  if(ccx===curChunkX && ccz===curChunkZ && chunks.size>0) return;
-  curChunkX = ccx; curChunkZ = ccz;
+  if(ccx!==curChunkX || ccz!==curChunkZ || chunks.size===0){
+    curChunkX = ccx; curChunkZ = ccz;
 
-  for(let dx=-LOAD_RADIUS; dx<=LOAD_RADIUS; dx++){
-    for(let dz=-LOAD_RADIUS; dz<=LOAD_RADIUS; dz++){
-      const cx=ccx+dx, cz=ccz+dz;
-      if(!chunks.has(chunkKeyOf(cx,cz))) generateChunk(cx,cz);
+    // Queue any missing chunks in range, nearest-to-player first.
+    const missing = [];
+    for(let dx=-LOAD_RADIUS; dx<=LOAD_RADIUS; dx++){
+      for(let dz=-LOAD_RADIUS; dz<=LOAD_RADIUS; dz++){
+        const cx=ccx+dx, cz=ccz+dz, key=chunkKeyOf(cx,cz);
+        if(!chunks.has(key) && !queuedKeys.has(key)){ missing.push([cx,cz,dx*dx+dz*dz]); queuedKeys.add(key); }
+      }
+    }
+    missing.sort((a,b)=>a[2]-b[2]);
+    missing.forEach(([cx,cz])=>loadQueue.push([cx,cz]));
+
+    // Drop any still-queued-but-now-far-away entries so the queue doesn't grow unbounded if the
+    // player keeps moving before it drains (e.g. sprinting in a straight line).
+    for(let i=loadQueue.length-1;i>=0;i--){
+      const [cx,cz] = loadQueue[i];
+      if(Math.abs(cx-ccx) > UNLOAD_RADIUS || Math.abs(cz-ccz) > UNLOAD_RADIUS){ queuedKeys.delete(chunkKeyOf(cx,cz)); loadQueue.splice(i,1); }
+    }
+
+    for(const chunk of [...chunks.values()]){
+      if(Math.abs(chunk.cx-ccx) > UNLOAD_RADIUS || Math.abs(chunk.cz-ccz) > UNLOAD_RADIUS) disposeChunk(chunk);
     }
   }
-  for(const chunk of [...chunks.values()]){
-    if(Math.abs(chunk.cx-ccx) > UNLOAD_RADIUS || Math.abs(chunk.cz-ccz) > UNLOAD_RADIUS) disposeChunk(chunk);
+
+  // Drain a small, fixed number of queued chunks this frame.
+  for(let i=0;i<CHUNKS_PER_FRAME && loadQueue.length;i++){
+    const [cx,cz] = loadQueue.shift();
+    const key = chunkKeyOf(cx,cz);
+    queuedKeys.delete(key);
+    if(!chunks.has(key)) generateChunk(cx,cz);
+  }
+}
+// Used once at startup only: generates every currently-queued chunk immediately (a one-time loading
+// pause is fine before the player can even see or move), so the spawn area is fully solid on frame one.
+function drainChunkQueueFully(){
+  while(loadQueue.length){
+    const [cx,cz] = loadQueue.shift();
+    const key = chunkKeyOf(cx,cz);
+    queuedKeys.delete(key);
+    if(!chunks.has(key)) generateChunk(cx,cz);
   }
 }
 
@@ -663,15 +712,19 @@ function buildCharacter(kind){
   if(kind==='cannonbolt'){ head.geometry = new THREE.SphereGeometry(0.38,10,8); }
   g.add(head); parts.head = head;
   if(kind==='cannonbolt'){
-    // Segmented shell plates across the back — these are what the "ball" silhouette reads as when curled.
+    // Full enclosing shell: hidden (scale 0) while standing, grows to fully cover the body when curled.
+    // Segmented bands are purely cosmetic detail on the shell surface, not separate hittable geometry.
     const shell = new THREE.Group();
-    const rows = 4;
-    for(let i=0;i<rows;i++){
-      const py = torsoCenterY + (i-1.2)*0.28;
-      const plate = new THREE.Mesh(new THREE.SphereGeometry(0.62-i*0.02,10,6,0,Math.PI*2,0,Math.PI/2), new THREE.MeshLambertMaterial({color:palette.accent}));
-      plate.position.set(0, py, 0); plate.castShadow = true; shell.add(plate);
+    const shellCenterY = torsoCenterY - 0.05;
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.62,14,10), new THREE.MeshLambertMaterial({color:palette.skin}));
+    core.castShadow = true; shell.add(core);
+    for(let i=0;i<4;i++){
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.63,0.045,6,16), new THREE.MeshLambertMaterial({color:palette.accent}));
+      band.rotation.x = Math.PI/2; band.position.y = -0.35 + i*0.24; band.castShadow = true; shell.add(band);
     }
-    g.add(shell); parts.shell = shell;
+    shell.position.y = shellCenterY;
+    shell.scale.setScalar(0.001); // hidden until curled — see the roll animation, which scales this up
+    g.add(shell); parts.shell = shell; parts.shellBaseY = shellCenterY;
   }
 
   const torso = box(torsoWidth,torsoH,torsoDepth, palette.torso);
@@ -785,7 +838,8 @@ const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jum
 /* =========================================================================
    PLAYER
 ========================================================================= */
-updateChunkStreaming(0.5, 0.5); // load starting chunks before we ask groundTopAt for spawn height
+updateChunkStreaming(0.5, 0.5); // queue starting chunks
+drainChunkQueueFully();          // ...and load them all now, before we ask groundTopAt for spawn height
 const player = {
   pos: new THREE.Vector3(0.5, groundTopAt(0.5,0.5)+1, 0.5),
   vel: new THREE.Vector3(),
@@ -1608,24 +1662,36 @@ function joyEnd(e){
 joyZone.addEventListener('touchend', joyEnd,{passive:false});
 joyZone.addEventListener('touchcancel', joyEnd,{passive:false});
 
-// touch camera swipe zone
-const camZone = document.getElementById('cam-zone');
+// Full-screen camera look: any touch that starts on open game area (not the joystick, not an
+// action/menu button) rotates the camera by dragging, from anywhere on screen. The joystick keeps
+// its own dedicated small zone for movement; everything else is look.
+function isUiElement(el){
+  while(el && el !== document.body){
+    if(el.id==='joystick-zone' || el.tagName==='BUTTON') return true;
+    if(el.classList && (el.classList.contains('menu-btn') || el.classList.contains('act-btn'))) return true;
+    el = el.parentElement;
+  }
+  return false;
+}
 let camTouchId=null, lastCam={x:0,y:0};
-camZone.addEventListener('touchstart', e=>{
-  const t=e.changedTouches[0]; camTouchId=t.identifier; lastCam={x:t.clientX,y:t.clientY}; e.preventDefault();
-},{passive:false});
-camZone.addEventListener('touchmove', e=>{
+renderer.domElement.addEventListener('touchstart', e=>{
+  for(const t of e.changedTouches){
+    if(camTouchId!==null) continue; // one look touch at a time
+    if(isUiElement(t.target)) continue;
+    camTouchId = t.identifier; lastCam = {x:t.clientX, y:t.clientY};
+  }
+},{passive:true});
+renderer.domElement.addEventListener('touchmove', e=>{
   for(const t of e.changedTouches){
     if(t.identifier!==camTouchId) continue;
     const dx=t.clientX-lastCam.x, dy=t.clientY-lastCam.y; lastCam={x:t.clientX,y:t.clientY};
     player.yaw -= dx*0.0045;
     player.pitch = THREE.MathUtils.clamp(player.pitch - dy*0.0035, -1.3, 1.25);
-    e.preventDefault();
   }
-},{passive:false});
+},{passive:true});
 function camEnd(e){ for(const t of e.changedTouches) if(t.identifier===camTouchId) camTouchId=null; }
-camZone.addEventListener('touchend', camEnd,{passive:false});
-camZone.addEventListener('touchcancel', camEnd,{passive:false});
+renderer.domElement.addEventListener('touchend', camEnd,{passive:true});
+renderer.domElement.addEventListener('touchcancel', camEnd,{passive:true});
 
 // alien portrait swipe (separate small zone, overrides card's own touch)
 const portraitCard = document.getElementById('alien-card');
@@ -1813,13 +1879,12 @@ function updatePlayer(dt){
   // procedural walk animation
   const parts = player.model.userData.parts;
   if(player.form.id==='cannonbolt'){
-    // Curl limbs inward and spin the whole body around the roll (pitch) axis, like tumbling forward as a ball.
+    // Curled: shrink the visible body (head/arms/legs/torso) to nothing and grow the shell sphere to
+    // fully cover it, so the silhouette actually reads as a ball rather than a person with tucked limbs.
     const curl = player.rollT||0;
-    if(parts.leftLeg) parts.leftLeg.rotation.x = -curl*1.4;
-    if(parts.rightLeg) parts.rightLeg.rotation.x = curl*1.4;
-    if(parts.leftArm) parts.leftArm.rotation.x = curl*1.3;
-    if(parts.rightArm) parts.rightArm.rotation.x = -curl*1.3;
-    if(parts.head) parts.head.position.y = (parts.head.userData.baseY ?? (parts.head.userData.baseY=parts.head.position.y)) - curl*0.15;
+    const bodyScale = 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
+    [parts.leftLeg,parts.rightLeg,parts.leftArm,parts.rightArm,parts.head,parts.torso].forEach(p=>{ if(p) p.scale.setScalar(Math.max(0.001,bodyScale)); });
+    if(parts.shell){ parts.shell.scale.setScalar(Math.max(0.001, curl)); parts.shell.position.y = parts.shellBaseY; }
     if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
     else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
   } else {
