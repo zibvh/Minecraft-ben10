@@ -453,6 +453,7 @@ function signMat(txt,bg){
   return new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)});
 }
 const flat=c=>new THREE.MeshLambertMaterial({color:c});
+const rnd=n=>Math.floor(Math.random()*n); // global RNG helper used by NPCs/debris/gang spawn elsewhere in the file (distinct from generateChunk's local seeded rnd, which is deterministic per-chunk)
 const PAST=['#e8d5b0','#d9a8a0','#b7d3c2','#c9c3e0','#f0e2a0'];
 const CARCOL=[0xd63a3a,0x2f6fd6,0xe8c33a,0xf0f0f0,0x2a2a2e,0x3aa860];
 
