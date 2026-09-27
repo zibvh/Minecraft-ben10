@@ -271,6 +271,7 @@ const Audio_ = (function(){
     breakBlock(){ noise(0.12,0.18); },
     place(){ beep(200,0.08,'square',0.1,260); },
     attack(){ beep(150,0.1,'sawtooth',0.15,90); },
+    heavyHit(){ beep(90,0.22,'sawtooth',0.22,45); noise(0.1,0.15); },
     hit(){ noise(0.08,0.2); },
     transform(){ beep(220,0.35,'sine',0.18,880); setTimeout(()=>beep(880,0.2,'sine',0.15,440),120); playMutate(); },
     special(){ beep(400,0.3,'sawtooth',0.18,700); },
@@ -849,7 +850,11 @@ const player = {
   alienIndex: 0, // index into ALIENS for the swipe cycle
   health: BEN.maxHealth, energy: BEN.maxEnergy,
   atkTimer: 0, specialTimer: 0, speedBurstT: 0, invuln: 0,
-  walkT: 0, attacking: 0, alive: true, flying: false
+  walkT: 0, attacking: 0, alive: true, flying: false,
+  comboStep: 0,        // 0 = next hit is punch 1 (left), 1 = next hit is punch 2 (right), 2 = next hit is the heavy finisher
+  comboResetTimer: 0,  // counts down after each hit; if it reaches 0 before the next hit, the combo resets to step 0
+  punchAnimT: 0, punchAnimDur: 0.25, punchKind: 'left' // drives the current swing's animation shape
+
 };
 player.model = buildCharacter('ben');
 scene.add(player.model);
@@ -1019,7 +1024,8 @@ function makeEnemy(type, x, z){
   const en = {
     mesh: body, type, hp: isBrute?70:40, maxHp: isBrute?70:40,
     speed: isBrute?1.8:2.6, damage: isBrute?12:7, atkCd:0, alive:true,
-    state:'wander', target:new THREE.Vector3(x,0,z), wanderT:0, home:new THREE.Vector3(x,0,z)
+    state:'wander', target:new THREE.Vector3(x,0,z), wanderT:0, home:new THREE.Vector3(x,0,z),
+    staggerT:0, knockVel:new THREE.Vector3()
   };
   enemies.push(en);
   return en;
@@ -1031,14 +1037,20 @@ function makeEnemy(type, x, z){
 //   makeEnemy(Math.random()<0.5?'brute':'scout', x, z);
 // }
 
-function damageEnemy(en, dmg, dirAway){
+function damageEnemy(en, dmg, dirAway, opts){
   if(!en.alive) return;
-  if(en.npc){ npcHurt(en,dmg,dirAway); return; }
+  if(en.npc){ npcHurt(en,dmg,dirAway,opts); return; }
   en.hp -= dmg;
+  const heavy = opts && opts.heavy;
   en.mesh.material.emissive = new THREE.Color(0x550000);
-  setTimeout(()=>{ if(en.mesh.material) en.mesh.material.emissive = new THREE.Color(0x000000); }, 120);
-  if(dirAway){ en.mesh.position.addScaledVector(dirAway, 0.8); }
-  Audio_.hit();
+  setTimeout(()=>{ if(en.mesh.material) en.mesh.material.emissive = new THREE.Color(0x000000); }, heavy?200:120);
+  if(dirAway){
+    const knock = (opts && opts.knock!=null) ? opts.knock : 3;
+    en.knockVel = en.knockVel || new THREE.Vector3();
+    en.knockVel.set(dirAway.x*knock, 0, dirAway.z*knock);
+    en.staggerT = Math.max(en.staggerT||0, heavy ? 0.5 : 0.22);
+  }
+  if(heavy) Audio_.heavyHit(); else Audio_.hit();
   if(en.hp <= 0){
     en.alive = false;
     scene.remove(en.mesh);
@@ -1055,6 +1067,17 @@ function updateEnemies(dt){
     if(!en.alive||en.npc) return;
     if(en.ice) return;
     const p = en.mesh.position;
+
+    // Knockback: real velocity that decays over time, checked against collision so a hit can't shove an enemy through a wall.
+    if(en.knockVel && en.knockVel.lengthSq() > 0.0001){
+      const nx = p.x + en.knockVel.x*dt, nz = p.z + en.knockVel.z*dt;
+      if(!blockedAt(nx, p.z, p.y-0.5)) p.x = nx;
+      if(!blockedAt(p.x, nz, p.y-0.5)) p.z = nz;
+      en.knockVel.multiplyScalar(Math.max(0, 1 - dt*6)); // decays to ~0 over a few hundred ms
+    }
+    en.staggerT = Math.max(0, (en.staggerT||0) - dt);
+    if(en.staggerT > 0){ p.y = groundTopAt(p.x,p.z) + (en.type==='brute'?0.8:0.55); return; } // hit-reaction pause: skip normal AI this frame
+
     const tu=nearestTarget(p), tpos=tu.pos, distToPlayer=p.distanceTo(tpos);
     en.atkCd = Math.max(0, en.atkCd - dt);
 
@@ -1439,9 +1462,10 @@ function provoke(en){
     else if(o.state!=='fight'&&o.state!=='flee'){ o.state='flee'; o.fear=5; o.threat=player.pos; }
   });
 }
-function npcHurt(en,dmg,dir){
-  en.hp-=dmg; Audio_.hit(); en.flash=.12; en.parts.torso.material=flashMat;
-  if(dir&&dir.lengthSq()>0){ const q=en.mesh.position.clone().addScaledVector(dir,.7); if(!blockedAt(q.x,q.z,GY)){ en.mesh.position.x=q.x; en.mesh.position.z=q.z; } }
+function npcHurt(en,dmg,dir,opts){
+  const heavy = opts && opts.heavy;
+  en.hp-=dmg; heavy?Audio_.heavyHit():Audio_.hit(); en.flash=heavy?0.2:0.12; en.parts.torso.material=flashMat;
+  if(dir&&dir.lengthSq()>0){ const q=en.mesh.position.clone().addScaledVector(dir,heavy?1.1:.7); if(!blockedAt(q.x,q.z,GY)){ en.mesh.position.x=q.x; en.mesh.position.z=q.z; } }
   provoke(en);
   if(en.hp<=0){ en.alive=false; en.state='dead'; en.deadT=4; }
 }
@@ -1548,26 +1572,96 @@ const raycaster = new THREE.Raycaster();
 const centerNDC = new THREE.Vector2(0,0);
 let selectedBlockType = 'grass';
 
+// Per-alien melee flavor: called from meleeAttack at the moment a hit actually lands, so each
+// alien's punch can carry a distinct extra effect on top of the shared combo/damage/knockback system.
+// Nothing here replaces the combo logic itself — these are additive flourishes per form.
+function alienMeleeFx(formId, hitPos, heavy){
+  switch(formId){
+    case 'four_arms':
+      // Heavier build already gets more damage/knockback via the combo multipliers below;
+      // the finisher also gets a small ground-shock so it reads as genuinely powerful.
+      if(heavy) shockwaveAt(hitPos, 2.2, 0, false);
+      break;
+    case 'heatblast':
+      debris(hitPos.clone().add(new THREE.Vector3(0,0.3,0)), Math.random()<0.5?0xff7a1a:0xffd84a, 0.35, new THREE.Vector3((Math.random()-0.5)*2,1.5,(Math.random()-0.5)*2), 0.4, true);
+      break;
+    case 'diamondhead':
+      debris(hitPos.clone().add(new THREE.Vector3(0,0.2,0)), 0x9ffcff, 0.3, new THREE.Vector3((Math.random()-0.5)*3,2,(Math.random()-0.5)*3), 0.5, true);
+      break;
+    case 'cannonbolt':
+      if(heavy) shakeCamera(0.15);
+      break;
+    // xlr8, echo_echo: no extra VFX — their distinctiveness is speed/timing (see combo tuning below), not particles.
+  }
+}
+
+// Per-alien combo tuning layered on top of the base form stats already in ALIENS/BEN. Every alien still
+// uses the same shared 3-hit combo (left/right/heavy) and the same hit-detection/animation-timing system;
+// only the numbers and the punch-animation shape change per alien, so nothing about the underlying
+// combat system is duplicated per alien.
+const MELEE_TUNING = {
+  four_arms:   { comboMul:[1, 1, 2.0], knock:[0.6, 0.6, 7],   speed:0.85 }, // heavier, slower, big finisher
+  heatblast:   { comboMul:[1, 1, 1.6], knock:[0.6, 0.6, 4],   speed:1.0 },
+  xlr8:        { comboMul:[0.85, 0.85, 1.3], knock:[0.4, 0.4, 3], speed:1.7 }, // rapid strikes: faster combo, lighter finisher
+  diamondhead: { comboMul:[1, 1, 1.8], knock:[0.7, 0.7, 5], speed:0.95 }, // crystal-enhanced: extra knockback
+  echo_echo:   { comboMul:[0.8, 0.8, 1.2], knock:[0.4, 0.4, 3], speed:1.3 }, // small physical attack, sonic is the main kit
+  cannonbolt:  { comboMul:[1, 1, 1.7], knock:[0.6, 0.6, 6],   speed:1.0 },
+  ben:         { comboMul:[1, 1, 1.6], knock:[0.5, 0.5, 5], speed:1.0 },
+};
+
 function meleeAttack(){
   if(player.atkTimer > 0 || !player.alive) return;
-  player.atkTimer = player.form.atkCooldown;
-  player.attacking = 0.25; player.punchSide=!player.punchSide;
+  const tuning = MELEE_TUNING[player.form.id] || MELEE_TUNING.ben;
+
+  // Combo state: step 0 = left punch, 1 = right punch, 2 = heavy finisher, then wraps back to 0.
+  // If the player waited too long since the last hit, comboResetTimer will have already hit 0 (see
+  // updatePlayer), so comboStep resets to 0 there rather than here.
+  const step = player.comboStep;
+  const isHeavy = step === 2;
+  const punchKind = step===0 ? 'left' : step===1 ? 'right' : 'heavy';
+  const animDur = (isHeavy ? 0.34 : 0.22) / tuning.speed;
+
+  player.atkTimer = player.form.atkCooldown * (isHeavy ? 1.4 : 1) / tuning.speed;
+  player.attacking = animDur;
+  player.punchKind = punchKind;
+  player.punchAnimDur = animDur;
+  player.punchAnimT = animDur;
+  player.punchSide = step===1; // right arm on punch 2, left on punch 1 and the heavy (two-handed) finisher
+  player.comboResetTimer = 0.9; // waiting longer than this after a hit drops the combo back to punch 1
+  player.comboStep = (step + 1) % 3;
+
   Audio_.attack();
-  const forward = new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
-  let hitSomething = false;
-  enemies.forEach(en=>{
-    if(!en.alive) return;
-    const toEnemy = en.mesh.position.clone().sub(player.pos); toEnemy.y=0;
-    const dist = toEnemy.length();
-    if(dist < player.form.atkRange){
-      const angle = forward.angleTo(toEnemy.normalize());
-      if(angle < 1.0){
-        damageEnemy(en, player.form.atkDamage, toEnemy.normalize());
-        hitSomething = true;
+
+  // Hit detection fires at roughly the midpoint of the swing, not on button press, so the punch
+  // animation and the actual impact line up instead of enemies taking damage before the fist arrives.
+  const hitDelay = animDur * (isHeavy ? 0.45 : 0.4);
+  const originPos = player.pos.clone();
+  const yawAtSwing = player.yaw;
+  setTimeout(()=>{
+    if(!player.alive) return;
+    const forward = new THREE.Vector3(-Math.sin(yawAtSwing),0,-Math.cos(yawAtSwing));
+    const dmg = player.form.atkDamage * tuning.comboMul[step];
+    const knock = tuning.knock[step];
+    // Combo hits 2 and 3 get a small range buffer: a real combo flurry involves stepping into the
+    // target, and without this, a hit's own knockback can push the enemy just outside the range of
+    // the very next hit in the same combo, silently breaking combos on a stationary target.
+    const effectiveRange = player.form.atkRange + (step>0 ? 0.35 : 0);
+    let hitSomething = false;
+    enemies.forEach(en=>{
+      if(!en.alive) return;
+      const toEnemy = en.mesh.position.clone().sub(originPos); toEnemy.y=0;
+      const dist = toEnemy.length();
+      if(dist < effectiveRange){
+        const angle = forward.angleTo(toEnemy.normalize());
+        if(angle < 0.6){ // narrow frontal cone (~34 degrees each side) - enemies behind or well to the side are not hit
+          damageEnemy(en, dmg, toEnemy.normalize(), { heavy:isHeavy, knock });
+          alienMeleeFx(player.form.id, en.mesh.position.clone(), isHeavy);
+          hitSomething = true;
+        }
       }
-    }
-  });
-  if(!hitSomething && player.form.id==='four_arms') tryBreakBlock();
+    });
+    if(!hitSomething && player.form.id==='four_arms') tryBreakBlock();
+  }, hitDelay*1000);
 }
 
 function raycastBlocks(){
@@ -1771,6 +1865,9 @@ function flySpeedOf(p){ return (p.form.flySpeed||8) * 0.6; }
 function updatePlayer(dt){
   updateKeyboardMove();
   player.atkTimer = Math.max(0, player.atkTimer - dt);
+  player.comboResetTimer = Math.max(0, (player.comboResetTimer||0) - dt);
+  if(player.comboResetTimer <= 0) player.comboStep = 0; // waited too long since the last hit - combo drops back to punch 1
+  player.punchAnimT = Math.max(0, (player.punchAnimT||0) - dt);
   player.boostT = Math.max(0,(player.boostT||0)-dt); for(const k in actCd) actCd[k]=Math.max(0,actCd[k]-dt);
   player.specialTimer = Math.max(0, player.specialTimer - dt);
   player.invuln = Math.max(0, player.invuln - dt);
@@ -1901,10 +1998,24 @@ function updatePlayer(dt){
   if(parts.rightArm2) parts.rightArm2.rotation.x = swing*0.6;
   if(!player.onGround){ if(parts.leftLeg) parts.leftLeg.rotation.x = -0.3; if(parts.rightLeg) parts.rightLeg.rotation.x = 0.3; }
   if(player.attacking > 0){
-    const k=Math.sin(Math.min(1,player.attacking/0.25)*Math.PI), side=player.punchSide?['rightArm','rightArm2']:['leftArm','leftArm2'];
-    side.forEach(n=>{ if(parts[n]) parts[n].rotation.x=1.7*k; });
-    const o=player.attacking>0?(player.punchSide?-1:1)*0.35*k:0; player.model.userData.twist=o;
-  }
+    // progress goes 0 -> 1 -> 0 across the punch's own duration (not a fixed 0.25s), so faster
+    // alien combos (XLR8) and slower heavy hits (the finisher) each animate at their own correct speed.
+    const dur = player.punchAnimDur || 0.25;
+    const t = 1 - Math.max(0, Math.min(1, player.punchAnimT / dur));
+    const k = Math.sin(Math.min(1,t)*Math.PI);
+    if(player.punchKind === 'heavy'){
+      // Two-handed heavy finisher: both arms drive forward together, torso dips into the hit.
+      ['leftArm','rightArm','leftArm2','rightArm2'].forEach(n=>{ if(parts[n]) parts[n].rotation.x = 2.1*k; });
+      player.model.userData.twist = 0;
+      if(parts.torso) parts.torso.rotation.x = 0.25*k;
+    } else {
+      // Single alternating punch: one arm drives forward, torso twists into the punch.
+      const side = player.punchSide ? ['rightArm','rightArm2'] : ['leftArm','leftArm2'];
+      side.forEach(n=>{ if(parts[n]) parts[n].rotation.x = 1.7*k; });
+      player.model.userData.twist = (player.punchSide?-1:1)*0.35*k;
+      if(parts.torso) parts.torso.rotation.x = 0;
+    }
+  } else if(parts.torso){ parts.torso.rotation.x = 0; }
   poseExtras(parts, moving, dt);
 
   // footstep sound throttling
