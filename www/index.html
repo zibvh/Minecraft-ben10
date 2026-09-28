@@ -153,6 +153,27 @@
   .chip.mode::after{display:none;}
   .chip.mode.on{background:rgba(28,143,214,.5);border-color:#6fe3ff;box-shadow:0 0 10px rgba(70,200,255,.7);}
   @media (orientation:portrait){ #squad-panel{top:242px;} }
+
+  /* ---- STAGE 6: LOCK-ON ---- */
+  #lock-btn{position:absolute;left:max(20px,env(safe-area-inset-left,20px));bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 132px);
+    width:46px;height:46px;border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;
+    background:rgba(10,18,15,.6);border:2px solid rgba(255,90,90,.55);transition:transform .08s,background .12s,border-color .12s,opacity .12s;}
+  #lock-btn svg{width:58%;height:58%;stroke:#ffb0b0;fill:none;stroke-width:2.2;}
+  #lock-btn.on{background:rgba(255,60,60,.35);border-color:#ff6a6a;box-shadow:0 0 12px rgba(255,80,80,.7);}
+  #lock-btn.on svg{stroke:#fff;}
+  #lock-btn.active{transform:scale(.88);}
+  #lock-btn.disabled{opacity:.3;}
+  #lock-marker{position:fixed;left:0;top:0;width:56px;height:56px;margin:-28px 0 0 -28px;z-index:16;pointer-events:none;display:none;
+    will-change:transform;}
+  #lock-marker svg{width:100%;height:100%;overflow:visible;animation:lockspin 3.2s linear infinite;}
+  #lock-marker .brk{stroke:#ff4a4a;stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 4px rgba(255,60,60,.9));}
+  #lock-marker.pop svg{animation:lockpop .28s ease-out, lockspin 3.2s linear .28s infinite;}
+  #lock-marker.edge svg{opacity:.85;}
+  #lock-hp{position:absolute;left:50%;top:100%;width:46px;height:5px;margin:2px 0 0 -23px;background:rgba(0,0,0,.65);border:1px solid rgba(255,90,90,.6);}
+  #lock-hp i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#ff3a3a,#ffa04a);}
+  #lock-name{position:absolute;left:50%;top:100%;margin:9px 0 0 0;transform:translateX(-50%);font-size:9px;letter-spacing:1.2px;color:#ffd0d0;text-shadow:0 1px 2px #000;white-space:nowrap;font-weight:700;}
+  @keyframes lockspin{to{transform:rotate(360deg);}}
+  @keyframes lockpop{0%{transform:scale(2.4);opacity:0;}100%{transform:scale(1);opacity:1;}}
 </style>
 </head>
 <body>
@@ -185,6 +206,7 @@
   <div id="crosshair"></div>
   <div id="status-text"></div>
 
+  <div id="lock-btn" title="Lock target"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="1.2"/></svg></div>
   <div id="hotbar"></div>
   <div id="joystick-zone"><div id="joystick-base"></div><div id="joystick-stick"></div></div>
 
@@ -195,6 +217,7 @@
   </div>
 </div>
 
+<div id="lock-marker"><svg viewBox="-28 -28 56 56"><path class="brk" d="M-20-10V-20H-10M10-20H20V-10M20 10V20H10M-10 20H-20V10"/><circle class="brk" r="2.2" style="fill:#ff4a4a"/></svg><div id="lock-hp"><i></i></div><div id="lock-name"></div></div>
 <div id="flash-overlay"></div>
 <div id="slow-overlay"></div>
 <div id="damage-overlay"></div>
@@ -337,6 +360,11 @@ const props=[], fx=[], actCd={}; let carried=null, timeScale=1, tornado=null, ac
 const DEB=new THREE.BoxGeometry(1,1,1);
 
 /* =========================================================================
+   STAGE 7 — VERTICAL CITY
+   Rooftops, balconies, fire escapes and deterministic stair access are layered onto the existing
+   streamed city. The original chunk lifecycle remains authoritative; these surfaces are chunk-owned.
+========================================================================= */
+/* =========================================================================
    WORLD / VOXEL TERRAIN  —  CHUNK STREAMING
    The world is logically WORLD x WORLD columns, but nothing is generated
    or held in memory until the player gets near it. Chunks are CHUNK x CHUNK
@@ -444,12 +472,102 @@ function chunkAtColumn(x,z){ const [cx,cz]=chunkCoordOf(x,z); return chunks.get(
 // ---- city props (buildings/roads/trees/cars), scoped per chunk ----
 const colliders=[], cityGroup=new THREE.Group(); scene.add(cityGroup);
 const UB=new THREE.BoxGeometry(1,1,1), GY=1.5;
-function blockedAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy<c.top-0.3) return true; } return false; }
-function cbox(cx,by,cz,w,h,d,mat,solid,ownerList){
+// Stage 7: walkable vertical-city surfaces. These are kept separate from wall colliders so
+// rooftops can be real gameplay spaces without turning the whole building into a solid block.
+const walkSurfaces=[];
+function blockedAt(x,z,fy){
+  for(let i=colliders.length-1;i>=0;i--){
+    const c=colliders[i];
+    if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1){
+      // Once the player is at/above the roof access height, the roof itself is the walkable
+      // surface; the building's old volume collider must not prevent stepping onto it.
+      const accessY = c.roofAccessY===undefined ? c.top : c.roofAccessY;
+      if(fy < accessY-0.3) return true;
+    }
+  }
+  return false;
+}
+function cbox(cx,by,cz,w,h,d,mat,solid,ownerList,opts){
   const m=new THREE.Mesh(UB,mat); m.scale.set(w,h,d); m.position.set(cx,by+h/2,cz); m.castShadow=true; cityGroup.add(m);
   ownerList.meshes.push(m);
-  if(solid){ const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h}; colliders.push(c); ownerList.colliders.push(c); }
+  if(solid){
+    const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h,
+      roofAccessY:opts&&opts.roofAccessY!==undefined?opts.roofAccessY:by+h};
+    colliders.push(c); ownerList.colliders.push(c);
+  }
   return m;
+}
+function addWalkSurface(x0,x1,z0,z1,top,ownerList){
+  const s={x0,x1,z0,z1,top};
+  walkSurfaces.push(s);
+  ownerList.platforms.push(s);
+  return s;
+}
+function roofDeck(cx,cz,w,d,top,ownerList,style){
+  addWalkSurface(cx-w/2+0.12,cx+w/2-0.12,cz-d/2+0.12,cz+d/2-0.12,top,ownerList);
+  const deck=cbox(cx,top-0.08,cz,w,.16,d,flat(style||0x3d4248),false,ownerList);
+  deck.receiveShadow=true;
+  // Small rooftop service units make the roof a usable space rather than an empty box.
+  const unitMat=flat(0x555b62);
+  [[-w*.22,-d*.18],[w*.18,-d*.2],[w*.22,d*.18]].forEach(([ox,oz],i)=>{
+    cbox(cx+ox,top+.02,cz+oz,.9+.15*(i%2),.65,.65,unitMat,false,ownerList);
+  });
+}
+function rooftopProps(cx,cz,w,d,top,ownerList,rng,style){
+  roofDeck(cx,cz,w,d,top,ownerList,style);
+  // Low parapet sections leave an obvious entry/exit gap at the stair side.
+  const pm=flat(0x4b5056), gapZ=cz+d/2-.35;
+  cbox(cx-w/2+.08,top+.1,cz,.16,.7,d-.8,pm,false,ownerList);
+  cbox(cx+w/2-.08,top+.1,cz,.16,.7,d-.8,pm,false,ownerList);
+  cbox(cx,top+.1,cz-d/2+.08,w-.8,.7,.16,pm,false,ownerList);
+  // Balcony/roof vegetation or antenna variety.
+  if(rng()<0.5) cbox(cx+1.4,top+.45,cz-1.1,.55,.8,.55,flat(0x2f7d4a),false,ownerList);
+}
+function accessStairs(cx,cz,roofTop,ownerList,side){
+  const sx=cx + (side==='east' ? 4.9 : side==='west' ? -4.9 : 0);
+  const sz=cz + (side==='south' ? 4.9 : side==='north' ? -4.9 : 0);
+  const vertical = side==='east'||side==='west';
+  const dir = vertical ? (side==='east'?1:-1) : (side==='south'?1:-1);
+  const steps=Math.max(5,Math.min(12,Math.ceil((roofTop-(GY+.55))/0.72)));
+  const run=Math.min(5.2,Math.max(3.8,steps*.45));
+  const stepMat=flat(0x666b70);
+  // Stairs sit outside the building footprint. Each step is both visible geometry and a
+  // walkable surface, so normal movement code can climb them without special-case controls.
+  for(let i=0;i<steps;i++){
+    const t=(i+1)/steps, h=GY+.5+t*(roofTop-(GY+.5));
+    // Start at street level outside the building and finish at the building wall,
+    // so the final tread meets the roof deck instead of stopping beside it.
+    const along=(1-t)*run;
+    const x=vertical?sx+along*dir:cx;
+    const z=vertical?cz:sz+along*dir;
+    const w=vertical?1.8:.9, d=vertical?.9:1.8;
+    cbox(x,h-.16,z,w,.32,d,stepMat,false,ownerList);
+    addWalkSurface(x-w/2,x+w/2,z-d/2,z+d/2,h,ownerList);
+  }
+  // A simple handrail communicates the route visually.
+  const railMat=flat(0x777d82);
+  const railX=vertical?sx+dir*run/2:cx;
+  const railZ=vertical?cz:sz+dir*run/2;
+  cbox(railX, GY+.9, railZ, vertical? .12:1.4, 1.4, vertical?1.4:.12, railMat,false,ownerList);
+}
+function accessRamp(cx,cz,roofTop,ownerList){
+  const h=roofTop-(GY+.5), run=6.0, rampMat=flat(0x5a6067);
+  // Visual ramp alongside the stepped route. Collision still uses the light stair-tread
+  // surfaces above, avoiding expensive per-triangle physics on mobile.
+  const ramp=new THREE.Mesh(new THREE.BoxGeometry(1.9,.28,run),rampMat);
+  ramp.rotation.x=-Math.atan2(h,run); ramp.position.set(cx+4.9,(GY+.5)+h*.5,cz);
+  ramp.castShadow=true; cityGroup.add(ramp); ownerList.meshes.push(ramp);
+}
+function fireEscape(cx,cz,roofTop,ownerList){
+  const z=cz-4.15, fm=flat(0x3f464d);
+  const levels=Math.max(1,Math.floor((roofTop-GY)/4));
+  for(let i=0;i<levels;i++){
+    const y=GY+1.2+i*4;
+    cbox(cx+4.25,y,z,1.5,.18,2.2,fm,false,ownerList);
+    addWalkSurface(cx+3.5,cx+5.0,z-1.0,z+1.0,y+.1,ownerList);
+    cbox(cx+4.25,y,z-1.0,1.5,1.1,.08,fm,false,ownerList);
+  }
+  cbox(cx+4.25,GY,z, .12, roofTop-GY+1.0,.12,fm,false,ownerList);
 }
 function wallMat(base,win,cols,rows){
   const cv=document.createElement('canvas'); cv.width=cv.height=32; const g=cv.getContext('2d');
@@ -468,24 +586,58 @@ const PAST=['#e8d5b0','#d9a8a0','#b7d3c2','#c9c3e0','#f0e2a0'];
 const CARCOL=[0xd63a3a,0x2f6fd6,0xe8c33a,0xf0f0f0,0x2a2a2e,0x3aa860];
 
 function house(cx,cz,rnd,ownerList){
-  cbox(cx,GY,cz,6,3.2,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true,ownerList);
+  const h=3.2;
+  cbox(cx,GY,cz,6,h,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true,ownerList);
   const r=new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4),flat(0x8a3b2a)); r.rotation.y=Math.PI/4; r.position.set(cx,GY+4.3,cz); r.castShadow=true; cityGroup.add(r); ownerList.meshes.push(r);
   cbox(cx,GY,cz+3.02,1.1,2,.1,flat(0x5a3a22),false,ownerList); cbox(cx+2,GY+3.2,cz-1,.8,2,.8,flat(0x7a4a3a),false,ownerList);
+  // A low rear balcony gives low-rise structures a playable perch without pretending the pitched roof is flat.
+  const top=GY+h; cbox(cx-1.7,top,cz-3.35,3.0,.16,1.6,flat(0x6a4a34),false,ownerList);
+  addWalkSurface(cx-3.0,cx-.4,cz-4.0,cz-2.8,top+.08,ownerList);
+  cbox(cx-1.7,top+.1,cz-4.0,3,.9,.1,flat(0x555a5e),false,ownerList);
   ownerList.treeSpots.push([cx-4,cz-4],[cx+4,cz-4]);
 }
 function shop(cx,cz,rnd,ownerList){
-  cbox(cx,GY,cz,8,4,7,wallMat('#cfcfd6','#bfe6f5',4,1),true,ownerList); cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),false,ownerList);
+  const h=4, top=GY+h;
+  cbox(cx,GY,cz,8,h,7,wallMat('#cfcfd6','#bfe6f5',4,1),true,ownerList);
+  cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),false,ownerList);
   cbox(cx,GY+2.6,cz+3.9,8,.5,1.4,flat([0xd85a4a,0x4a7bd8,0xd8b84a][rnd(3)]),false,ownerList);
   cbox(cx,GY+3.3,cz+3.6,5,.9,.2,signMat(['CAFE','MARKET','PIZZA','BOOKS'][rnd(4)],'#222'),false,ownerList);
+  rooftopProps(cx,cz,8,7,top,ownerList,rnd,0x555560); accessStairs(cx,cz,top,ownerList,'south');
 }
-function apartment(cx,cz,rnd,ownerList){ const h=6+rnd(3)*3; cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList); cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),false,ownerList); }
-function tower(cx,cz,rnd,ownerList){ const h=18+rnd(4)*5; cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList); cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),false,ownerList); cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList); }
+function apartment(cx,cz,rnd,ownerList){
+  const h=6+rnd(3)*3, top=GY+h;
+  cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList);
+  cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),false,ownerList);
+  rooftopProps(cx,cz,7,7,top,ownerList,rnd,0x444444);
+  accessStairs(cx,cz,top,ownerList,'east'); fireEscape(cx,cz,top,ownerList);
+  // Balconies on alternating sides create intermediate fighting/landing points.
+  for(let i=0;i<Math.max(1,Math.floor(h/3));i++){
+    const y=GY+2.2+i*3;
+    cbox(cx-3.8,y,cz,1.5,.16,2.0,flat(0x5d4634),false,ownerList);
+    cbox(cx-4.45,y+.1,cz,0.1,.9,2.0,flat(0x555a5e),false,ownerList);
+    addWalkSurface(cx-4.55,cx-3.7,cz-1,cz+1,y+.08,ownerList);
+  }
+}
+function tower(cx,cz,rnd,ownerList){
+  const h=18+rnd(4)*5, top=GY+h;
+  cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList);
+  cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),false,ownerList);
+  cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList);
+  rooftopProps(cx,cz,8,8,top,ownerList,rnd,0x333a44); accessStairs(cx,cz,top,ownerList,'west'); fireEscape(cx,cz,top,ownerList);
+  // Deep balconies at two heights make towers useful traversal points for flying and jumping.
+  [Math.max(GY+5,top*.38), Math.max(GY+10,top*.68)].forEach((y,i)=>{
+    cbox(cx+(i?4.2:-4.2),y,cz,1.6,.18,3.0,flat(0x4a4f58),false,ownerList);
+    addWalkSurface(cx+(i?3.7:-5.0),cx+(i?5.0:-3.7),cz-1.5,cz+1.5,y+.09,ownerList);
+  });
+}
 function school(cx,cz,rnd,ownerList){
   cbox(cx,GY,cz-2.5,9.4,5.5,4,wallMat('#c9553a','#cfe8f5',6,2),true,ownerList); cbox(cx,GY+5.5,cz-2.5,9.8,.5,4.4,flat(0x333333),false,ownerList);
   cbox(cx,GY+6,cz-2.5,2.6,3.5,2.6,wallMat('#c9553a','#ffe28a',1,1),false,ownerList);
   cbox(cx,GY+3.4,cz-.4,6,1,.3,signMat('SCHOOL','#1a4b8c'),false,ownerList);
   cbox(cx-3.5,GY,cz+3,.15,7,.15,flat(0xdddddd),false,ownerList); cbox(cx-3.1,GY+6,cz+3,.9,.6,.05,flat(0xdd3333),false,ownerList);
   [-1,1].forEach(s=>cbox(cx+s*3.5,GY,cz+3.6,.2,2,2.5,flat(0xffffff),false,ownerList));
+  rooftopProps(cx,cz-2.5,9.4,4, GY+5.5, ownerList, rnd, 0x333333);
+  accessStairs(cx,cz-2.5,GY+5.5,ownerList,'east'); accessRamp(cx,cz-2.5,GY+5.5,ownerList);
 }
 function park(cx,cz,rnd,ownerList){
   cbox(cx,GY,cz,3,.4,3,flat(0x4aa8e0),false,ownerList); cbox(cx,GY+.4,cz,.6,1.2,.6,flat(0xbbbbbb),false,ownerList); cbox(cx,GY,cz+4.3,2.2,.5,.6,flat(0x6b4a2d),false,ownerList);
@@ -500,7 +652,7 @@ const leafMat = new THREE.MeshLambertMaterial({color:0x2e8b3d});
 function generateChunk(cx, cz){
   const key = chunkKeyOf(cx,cz);
   const meshes = newChunkMeshes();
-  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[] } };
+  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[], platforms:[] } };
   // freeSlots/usedCount for each block type are created lazily in getOrCreateMesh, only when that chunk actually uses that type
   chunks.set(key, chunk);
 
@@ -576,6 +728,7 @@ function disposeChunk(chunk){
   Object.values(chunk.meshes).forEach(m=>{ scene.remove(m); });
   chunk.props.meshes.forEach(m=>{ scene.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)) m.material.dispose(); });
   chunk.props.colliders.forEach(c=>{ const i=colliders.indexOf(c); if(i>=0) colliders.splice(i,1); });
+  chunk.props.platforms.forEach(s=>{ const i=walkSurfaces.indexOf(s); if(i>=0) walkSurfaces.splice(i,1); });
   if(chunk.props.carRef){ const i=props.indexOf(chunk.props.carRef); if(i>=0) props.splice(i,1); }
   // clear this chunk's block registry entries (terrain memory is freed; columnHeight persists so ground queries outside load radius still resolve sanely)
   const x0 = chunk.cx*CHUNK - HALF, z0 = chunk.cz*CHUNK - HALF;
@@ -706,7 +859,14 @@ water.visible=false; scene.add(water);
 function groundTopAt(x,z){
   const gx = Math.round(x), gz = Math.round(z);
   const t = columnHeight[colKey(gx,gz)];
-  return Math.max(t===undefined ? -3 : t, -14) + 0.5;
+  let best = Math.max(t===undefined ? -3 : t, -14) + 0.5;
+  // Walkable roofs, balconies and individual stair treads override the voxel ground when
+  // the player is inside their small footprint.
+  for(let i=walkSurfaces.length-1;i>=0;i--){
+    const s=walkSurfaces[i];
+    if(gx>=s.x0&&gx<=s.x1&&gz>=s.z0&&gz<=s.z1 && s.top>best) best=s.top;
+  }
+  return best;
 }
 
 /* =========================================================================
@@ -735,7 +895,18 @@ function updateDayNight(dt){
 function buildCharacter(kind){
   const g = new THREE.Group();
   const parts = {};
-  function box(w,h,d,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({color})); m.castShadow=true; return m; }
+  function mat(color){ return new THREE.MeshLambertMaterial({color}); }
+  function box(w,h,d,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color)); m.castShadow=true; return m; }
+  function joint(radius,color){ const m=new THREE.Mesh(new THREE.SphereGeometry(radius,8,6),mat(color)); m.castShadow=true; return m; }
+  function limb(side, upperW, upperH, lowerW, lowerH, color, jointColor, kindName){
+    const root=new THREE.Group();
+    const upper=box(upperW,upperH,upperW,color); upper.geometry.translate(0,-upperH/2,0); root.add(upper);
+    const elbow=joint(Math.max(.075,Math.min(upperW,.14)),jointColor); elbow.position.y=-upperH; root.add(elbow);
+    const lower=box(lowerW,lowerH,lowerW,color); lower.geometry.translate(0,-lowerH/2,0); lower.position.y=-upperH; root.add(lower);
+    const wrist=joint(Math.max(.06,Math.min(lowerW,.11)),jointColor); wrist.position.y=-(upperH+lowerH); root.add(wrist);
+    root.userData.life={upper,lower,elbow,wrist,baseX:0,side,kind:kindName};
+    return root;
+  }
 
   let scaleY = 1, palette;
   switch(kind){
@@ -747,78 +918,58 @@ function buildCharacter(kind){
     case 'cannonbolt': palette = {skin:0xd8862e, torso:0x8a4a12, accent:0xf2c14e}; scaleY=0.8; break;
     default: palette = {skin:0xe0a878, torso:0x2c7a3d, accent:0x111111}; kind='ben';
   }
-  // Per-kind body proportions: bulk vs slender build.
   const torsoWidth = kind==='four_arms' ? 1.35 : kind==='cannonbolt' ? 1.4 : 0.68;
   const torsoDepth = kind==='four_arms' ? 0.68 : kind==='cannonbolt' ? 1.25 : 0.38;
   const legWidth   = kind==='four_arms' ? 0.2  : kind==='cannonbolt' ? 0.4 : 0.24;
-
-  // Vertical layout, built bottom-up from the group root (which sits at ground/feet level):
   const legH = 1.0, torsoH = 1.15, headH = 0.55;
-  const hipY = legH * scaleY;                 // top of legs / bottom of torso
+  const hipY = legH * scaleY;
   const torsoCenterY = hipY + (torsoH/2) * scaleY;
   const shoulderY = hipY + torsoH * 0.82 * scaleY;
   const headCenterY = hipY + (torsoH + headH/2) * scaleY;
 
-  const head = box(0.52,0.55,0.52, kind==='diamondhead'?palette.accent:palette.skin);
-  head.position.y = headCenterY;
+  const pelvis=box(torsoWidth*.78,.16,torsoDepth*.82,palette.accent); pelvis.position.y=hipY+.02; g.add(pelvis); parts.pelvis=pelvis;
+  const hipL=joint(legWidth*.62,palette.accent), hipR=joint(legWidth*.62,palette.accent); hipL.position.set(-0.26,hipY,0); hipR.position.set(0.26,hipY,0); g.add(hipL,hipR); parts.hipL=hipL; parts.hipR=hipR;
+
+  const head = box(0.52,0.55,0.52, kind==='diamondhead'?palette.accent:palette.skin); head.position.y=headCenterY;
   if(kind==='echo_echo'){ const vz=box(0.5,0.14,0.06,0x111111); vz.position.set(0,headCenterY+0.05,-0.36); g.add(vz); }
   if(kind==='diamondhead'){ head.geometry = new THREE.OctahedronGeometry(0.42); }
   if(kind==='cannonbolt'){ head.geometry = new THREE.SphereGeometry(0.38,10,8); }
-  g.add(head); parts.head = head;
+  g.add(head); parts.head=head; parts.neck=joint(.16,palette.skin); parts.neck.position.set(0,headCenterY-headH/2-.02,0); g.add(parts.neck);
+
   if(kind==='cannonbolt'){
-    // Full enclosing shell: hidden (scale 0) while standing, grows to fully cover the body when curled.
-    // Segmented bands are purely cosmetic detail on the shell surface, not separate hittable geometry.
-    const shell = new THREE.Group();
-    const shellCenterY = torsoCenterY - 0.05;
-    const core = new THREE.Mesh(new THREE.SphereGeometry(0.62,14,10), new THREE.MeshLambertMaterial({color:palette.skin}));
-    core.castShadow = true; shell.add(core);
-    for(let i=0;i<4;i++){
-      const band = new THREE.Mesh(new THREE.TorusGeometry(0.63,0.045,6,16), new THREE.MeshLambertMaterial({color:palette.accent}));
-      band.rotation.x = Math.PI/2; band.position.y = -0.35 + i*0.24; band.castShadow = true; shell.add(band);
-    }
-    shell.position.y = shellCenterY;
-    shell.scale.setScalar(0.001); // hidden until curled — see the roll animation, which scales this up
-    g.add(shell); parts.shell = shell; parts.shellBaseY = shellCenterY;
+    const shell = new THREE.Group(); const shellCenterY=torsoCenterY-.05;
+    const core=new THREE.Mesh(new THREE.SphereGeometry(.62,14,10),mat(palette.skin)); core.castShadow=true; shell.add(core);
+    for(let i=0;i<4;i++){ const band=new THREE.Mesh(new THREE.TorusGeometry(.63,.045,6,16),mat(palette.accent)); band.rotation.x=Math.PI/2; band.position.y=-.35+i*.24; band.castShadow=true; shell.add(band); }
+    shell.position.y=shellCenterY; shell.scale.setScalar(.001); g.add(shell); parts.shell=shell; parts.shellBaseY=shellCenterY;
   }
 
-  const torso = box(torsoWidth,torsoH,torsoDepth, palette.torso);
-  torso.position.y = torsoCenterY;
-  g.add(torso); parts.torso = torso;
-  if(kind==='echo_echo'){ [-0.27,0.27].forEach(x=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.08,10),new THREE.MeshLambertMaterial({color:0x111111})); c.rotation.x=Math.PI/2; c.position.set(x,torsoCenterY+0.12,-torsoDepth/2-0.03); g.add(c); }); }
+  const torso=box(torsoWidth,torsoH,torsoDepth,palette.torso); torso.position.y=torsoCenterY; g.add(torso); parts.torso=torso;
+  if(kind==='echo_echo'){ [-.27,.27].forEach(x=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(.17,.17,.08,10),mat(0x111111)); c.rotation.x=Math.PI/2; c.position.set(x,torsoCenterY+.12,-torsoDepth/2-.03); g.add(c); }); }
 
-  const armGeo = kind==='four_arms' ? [0.3,0.95,0.3] : [0.19,0.85,0.19];
-  const armSpacing = kind==='four_arms' ? torsoWidth/2 + 0.18 : 0.46;
-  function makeArm(x, extra){
-    const arm = box(armGeo[0],armGeo[1],armGeo[2], extra? palette.accent : palette.skin);
-    arm.geometry.translate(0,-armGeo[1]/2,0);   // pivot at shoulder (top of arm)
-    arm.position.set(x, shoulderY, 0);
-    g.add(arm); return arm;
+  const armGeo=kind==='four_arms'?[.3,.95,.3]:[.19,.85,.19];
+  const armSpacing=kind==='four_arms'?torsoWidth/2+.18:.46;
+  function makeArm(x,extra,lowerBias=0){
+    const arm=limb(x<0?'left':'right',armGeo[0],armGeo[1]*.54,armGeo[0]*.92,armGeo[1]*.46,extra?palette.accent:palette.skin,palette.skin,kind);
+    arm.position.set(x,shoulderY+lowerBias,0); arm.userData.life.baseY=arm.position.y; g.add(arm); return arm;
   }
-  parts.leftArm = makeArm(-armSpacing);
-  parts.rightArm = makeArm(armSpacing);
+  parts.leftArm=makeArm(-armSpacing); parts.rightArm=makeArm(armSpacing);
+  parts.shoulderL=joint(armGeo[0]*.58,palette.skin); parts.shoulderR=joint(armGeo[0]*.58,palette.skin); parts.shoulderL.position.set(-armSpacing,shoulderY,0); parts.shoulderR.position.set(armSpacing,shoulderY,0); g.add(parts.shoulderL,parts.shoulderR);
   if(kind==='four_arms'){
-    // second, slightly lower pair of arms for the classic four-armed silhouette
-    parts.leftArm2 = makeArm(-armSpacing*0.68, true);
-    parts.rightArm2 = makeArm(armSpacing*0.68, true);
-    parts.leftArm2.position.y -= 0.25;
-    parts.rightArm2.position.y -= 0.25;
+    parts.leftArm2=makeArm(-armSpacing*.68,true,-.25); parts.rightArm2=makeArm(armSpacing*.68,true,-.25);
+    parts.shoulderL2=joint(armGeo[0]*.5,palette.skin); parts.shoulderR2=joint(armGeo[0]*.5,palette.skin); parts.shoulderL2.position.set(-armSpacing*.68,shoulderY-.25,0); parts.shoulderR2.position.set(armSpacing*.68,shoulderY-.25,0); g.add(parts.shoulderL2,parts.shoulderR2);
   }
 
   function makeLeg(x){
-    const leg = box(legWidth,legH,legWidth, palette.accent);
-    leg.geometry.translate(0,-legH/2,0);        // pivot at hip (top of leg); bottom reaches y=0 (feet)
-    leg.position.set(x, hipY, 0);
-    g.add(leg); return leg;
+    const leg=limb(x<0?'left':'right',legWidth,legH*.52,legWidth*.96,legH*.48,palette.accent,palette.accent,kind);
+    leg.position.set(x,hipY,0); leg.userData.life.baseY=hipY; g.add(leg); return leg;
   }
-  const legSpacing = kind==='four_arms' ? 0.18 : 0.26;
-  parts.leftLeg = makeLeg(-legSpacing);
-  parts.rightLeg = makeLeg(legSpacing);
+  const legSpacing=kind==='four_arms'?.18:.26; parts.leftLeg=makeLeg(-legSpacing); parts.rightLeg=makeLeg(legSpacing);
+  const footL=box(legWidth*1.35,.12,legWidth*1.7,palette.accent), footR=box(legWidth*1.35,.12,legWidth*1.7,palette.accent);
+  footL.position.set(-legSpacing,-.02,-.07); footR.position.set(legSpacing,-.02,-.07); g.add(footL,footR); parts.footL=footL; parts.footR=footR;
 
-  const o = new THREE.Group(); g.position.y = -0.9; o.add(g); o.rotation.order = 'YXZ';
-  o.userData.parts = parts; o.userData.kind = kind;
+  const o=new THREE.Group(); g.position.y=-.9; o.add(g); o.rotation.order='YXZ'; o.userData.parts=parts; o.userData.kind=kind; o.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28,breath:Math.random()*6.28};
   return o;
 }
-
 // tiny portrait renderer (renders each alien to a mini canvas for the HUD)
 function renderPortrait(kind){
   const size = 92;
@@ -1094,13 +1245,17 @@ const ENEMY_STATS = {
 };
 function makeEnemy(type, x, z){
   const stats = ENEMY_STATS[type] || ENEMY_STATS.normal;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(...stats.size), new THREE.MeshLambertMaterial({color:stats.color}));
-  body.castShadow = true;
-  const y = groundTopAt(x,z);
-  body.position.set(x, y + stats.yOff, z);
-  scene.add(body);
-  const en = {
-    mesh: body, type, hp: stats.hp, maxHp: stats.hp,
+  const root=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(...stats.size),new THREE.MeshLambertMaterial({color:stats.color})); body.castShadow=true; body.position.y=stats.yOff; root.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(Math.max(.22,stats.size[0]*.34),8,6),new THREE.MeshLambertMaterial({color:stats.color})); head.position.y=stats.yOff+stats.size[1]*.58; head.castShadow=true; root.add(head);
+  const shoulderL=new THREE.Mesh(new THREE.SphereGeometry(.12,7,5),new THREE.MeshLambertMaterial({color:stats.color})); shoulderL.position.set(-stats.size[0]*.58,stats.yOff+stats.size[1]*.32,0); root.add(shoulderL);
+  const shoulderR=shoulderL.clone(); shoulderR.position.x=-shoulderL.position.x; root.add(shoulderR);
+  const limb=(x)=>{ const g=new THREE.Group(); const up=new THREE.Mesh(new THREE.BoxGeometry(.16,stats.size[1]*.32,.16),new THREE.MeshLambertMaterial({color:stats.color})); up.geometry.translate(0,-stats.size[1]*.16,0); g.add(up); const e=new THREE.Mesh(new THREE.SphereGeometry(.09,7,5),new THREE.MeshLambertMaterial({color:stats.size[0]>1?.1:stats.color})); e.position.y=-stats.size[1]*.32; g.add(e); const lo=new THREE.Mesh(new THREE.BoxGeometry(.15,stats.size[1]*.28,.15),new THREE.MeshLambertMaterial({color:stats.color})); lo.geometry.translate(0,-stats.size[1]*.14,0); lo.position.y=-stats.size[1]*.32; g.add(lo); g.position.set(x,stats.yOff+stats.size[1]*.32,0); root.add(g); return g; };
+  const parts={torso:body,head,leftArm:limb(-stats.size[0]*.62),rightArm:limb(stats.size[0]*.62),leftLeg:limb(-stats.size[0]*.28),rightLeg:limb(stats.size[0]*.28)};
+  root.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28};
+  const y=groundTopAt(x,z); root.position.set(x,y,z); scene.add(root);
+  const en={
+    mesh: root, parts, type, hp: stats.hp, maxHp: stats.hp,
     speed: stats.speed, damage: stats.damage, atkCd:0, alive:true,
     state:'wander', target:new THREE.Vector3(x,0,z), wanderT:0, home:new THREE.Vector3(x,0,z),
     staggerT:0, knockVel:new THREE.Vector3(),
@@ -1155,6 +1310,7 @@ function damageEnemy(en, dmg, dirAway, opts){
   if(heavy) Audio_.heavyHit(); else Audio_.hit();
   if(en.hp <= 0){
     en.alive = false;
+    if(lock.en===en) setLock(null); // never let a lock survive onto a recycled enemy object
     scene.remove(en.mesh);
     setTimeout(()=>{
       const x = Math.round(player.pos.x + (Math.random()-0.5)*40);
@@ -1285,6 +1441,140 @@ function flashDamage(){
    ATTACK (melee) + BLOCK BREAK/PLACE (shared crosshair raycast)
 ========================================================================= */
 /* PROPS / ACTIONS / FX */
+
+/* =========================================================================
+   STAGE 6 — LOCK-ON (optional target lock; never mandatory)
+   One shared target reference. Everything that needs "where should I aim?" asks lockAim()/lockedTarget()
+   so melee, abilities, Sonic Doom and the XLR8 tackle all agree. Free camera swipes always win.
+========================================================================= */
+const LOCK_PICK_PX = 70;      // tap must land within this many screen px of a target's projected point
+const LOCK_MAX_DIST = 34;     // can only acquire targets this close
+const LOCK_BREAK_DIST = 44;   // auto-unlock beyond this (hysteresis > acquire distance)
+const lock = { en:null, assistHold:0, popT:0 };
+const _lv = new THREE.Vector3();
+function lockValid(en){
+  if(!en || !en.alive || en.state==='dead' || !en.mesh || !en.mesh.parent) return false;
+  if(enemies.indexOf(en)<0) return false;
+  return en.mesh.position.distanceTo(player.pos) <= LOCK_BREAK_DIST;
+}
+function lockedTarget(){ return lockValid(lock.en) ? lock.en : null; }
+function lockCenter(en, out){ // chest-height aim point of a target
+  out = out || new THREE.Vector3(); out.copy(en.mesh.position);
+  out.y += en.npc ? 0.2 : 0.1; return out;
+}
+function setLock(en){
+  if(lock.en===en) return;
+  lock.en = en||null; lock.assistHold = 0;
+  const mk=document.getElementById('lock-marker');
+  if(en){
+    lock.popT = 0.28; mk.classList.remove('pop'); void mk.offsetWidth; mk.classList.add('pop');
+    const nm = en.npc ? (en.gang ? en.gang.name+' GANG' : 'CIVILIAN') : (en.type||'enemy').toUpperCase();
+    document.getElementById('lock-name').textContent = nm;
+    statusText('TARGET LOCKED'); Audio_.hit();
+  } else { mk.style.display='none'; }
+  const b=document.getElementById('lock-btn'); if(b) b.classList.toggle('on', !!en);
+}
+function unlockTarget(msg){ if(lock.en){ setLock(null); if(msg) statusText(msg); } }
+// Screen-space pick: nearest projected target to the tap point. Forgiving on phones (fingers are big) and
+// independent of mesh type (NPCs are Groups, enemies are Boxes).
+function pickEnemyAtScreen(px, py){
+  const w=innerWidth, h=innerHeight; let best=null, bd=1e9;
+  for(let i=0;i<enemies.length;i++){
+    const en=enemies[i]; if(!en.alive||en.state==='dead'||!en.mesh.parent) continue;
+    const dist=en.mesh.position.distanceTo(player.pos); if(dist>LOCK_MAX_DIST) continue;
+    lockCenter(en,_lv).project(camera);
+    if(_lv.z>1||_lv.z<-1) continue; // behind camera / clipped
+    const sx=(_lv.x*0.5+0.5)*w, sy=(-_lv.y*0.5+0.5)*h;
+    const d=Math.hypot(sx-px, sy-py);
+    const reach = LOCK_PICK_PX * (1 + Math.max(0,(12-dist))*0.012); // slightly more forgiving up close
+    if(d<reach && d<bd){ bd=d; best=en; }
+  }
+  return best;
+}
+function tapLock(px,py){
+  const hit=pickEnemyAtScreen(px,py);
+  if(!hit) return false;
+  if(lock.en===hit) unlockTarget('TARGET RELEASED'); else setLock(hit);
+  return true;
+}
+// Button: lock nearest in front, or release if already locked.
+function lockButton(){
+  if(!player.alive) return;
+  if(lockedTarget()){ unlockTarget('TARGET RELEASED'); return; }
+  const f=flatFwd(player.yaw); let best=null, bs=1e9;
+  enemies.forEach(en=>{
+    if(!en.alive||en.state==='dead') return;
+    const v=en.mesh.position.clone().sub(player.pos); v.y=0; const d=v.length(); if(d>LOCK_MAX_DIST||d<0.01) return;
+    const ang=f.angleTo(v.normalize()); const score=d*(1+ang*1.2); // prefer close AND centred
+    if(ang<1.9 && score<bs){ bs=score; best=en; }
+  });
+  if(best) setLock(best); else statusText('NO TARGET');
+}
+// Direction helpers other systems use. Return null when nothing is locked so callers keep their old behaviour.
+function lockDirFrom(from){
+  const t=lockedTarget(); if(!t) return null;
+  const d=t.mesh.position.clone().sub(from); d.y=0; if(d.lengthSq()<0.0001) return null; return d.normalize();
+}
+// Face the locked target instantly (used at attack start). Only when it is roughly in front / close, so a
+// stray lock on something behind you doesn't spin you around mid-run.
+function faceLockedTarget(maxDist, maxAng){
+  const t=lockedTarget(); if(!t) return false;
+  const d=lockDirFrom(player.pos); if(!d) return false;
+  const dist=t.mesh.position.distanceTo(player.pos); if(dist>maxDist) return false;
+  const f=flatFwd(player.yaw); if(f.angleTo(d)>(maxAng||2.2)) return false;
+  player.yaw=Math.atan2(-d.x,-d.z); return true;
+}
+// Snap yaw AND pitch at the locked target (used when firing an ability so shots go where the lock is).
+function aimAtLock(){
+  const t=lockedTarget(); if(!t) return false;
+  const to=lockCenter(t,_lv).clone().sub(player.pos.clone().add(new THREE.Vector3(0,1.0,0)));
+  const flat=Math.hypot(to.x,to.z); if(flat<0.05) return false;
+  player.yaw=Math.atan2(-to.x,-to.z);
+  player.pitch=THREE.MathUtils.clamp(Math.atan2(to.y,flat),-0.9,0.9);
+  return true;
+}
+let lastUserLookT=0; // set by touch/mouse look so camera assist backs off while the player is steering
+function noteUserLook(){ lastUserLookT=performance.now(); }
+function updateLockOn(dt){
+  const t=lockedTarget();
+  if(lock.en && !t){ // died / too far / removed -> auto-unlock with feedback
+    const dead = !lock.en.alive || lock.en.state==='dead';
+    setLock(null); if(player.alive) statusText(dead?'TARGET DOWN':'TARGET LOST');
+  }
+  const btn=document.getElementById('lock-btn');
+  const mk=document.getElementById('lock-marker');
+  if(!t){ if(mk.style.display!=='none') mk.style.display='none'; return; }
+  // ---- camera assist: ease yaw/pitch toward the target; yields to the player's own swipe ----
+  const since=(performance.now()-lastUserLookT)/1000;
+  const yielding = camTouchId!==null || since<0.35;      // finger on the look area / just stopped swiping
+  if(player.alive && !yielding){
+    const to=lockCenter(t,_lv).clone().sub(player.pos.clone().add(new THREE.Vector3(0,1.1,0)));
+    const flat=Math.hypot(to.x,to.z);
+    const wantYaw=Math.atan2(-to.x,-to.z);
+    const wantPitch=THREE.MathUtils.clamp(Math.atan2(to.y,Math.max(flat,0.5)) - 0.08, -0.6, 0.7);
+    let dy=wantYaw-player.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+    const k=1-Math.exp(-dt*5.5);                          // frame-rate independent ease
+    // Don't whip around 180 degrees when a target is directly behind: slow the turn when the error is huge.
+    const cap = Math.abs(dy)>2.2 ? 0.5 : 1;
+    player.yaw += dy*k*cap;
+    player.pitch += (wantPitch-player.pitch)*k*0.6;
+  }
+  // ---- marker ----
+  lockCenter(t,_lv); _lv.y += (t.npc?0.35:0.45);
+  _lv.project(camera);
+  const w=innerWidth,h=innerHeight;
+  let sx=(_lv.x*0.5+0.5)*w, sy=(-_lv.y*0.5+0.5)*h;
+  const behind=_lv.z>1;
+  if(behind){ sx=w-sx; sy=h-sy; }
+  const m=48, edge = behind || sx<m||sx>w-m||sy<m||sy>h-m;
+  sx=Math.max(m,Math.min(w-m,sx)); sy=Math.max(m,Math.min(h-m,sy));
+  if(mk.style.display!=='block') mk.style.display='block';
+  mk.style.transform='translate('+sx.toFixed(1)+'px,'+sy.toFixed(1)+'px)';
+  mk.classList.toggle('edge',edge);
+  const hpEl=mk.querySelector('#lock-hp i'); const frac=Math.max(0,t.hp/(t.maxHp||t.hp||1));
+  const wv=(frac*100).toFixed(0)+'%'; if(hpEl.dataset.w!==wv){ hpEl.dataset.w=wv; hpEl.style.width=wv; }
+  if(btn) btn.classList.add('on');
+}
 function lookDir(){ return new THREE.Vector3(Math.cos(player.pitch)*-Math.sin(player.yaw),Math.sin(player.pitch),Math.cos(player.pitch)*-Math.cos(player.yaw)); }
 function debris(pos,color,size,vel,life,grav){
   const mesh=new THREE.Mesh(DEB,new THREE.MeshBasicMaterial({color,transparent:true}));
@@ -1533,8 +1823,15 @@ function activeDied(){
   scene.remove(player.model); squad.splice(squad.indexOf(a),1); a.active=false; loadUnit(others[0]); return true;
 }
 function clearSquad(){ squad.forEach(u=>{ if(!u.active) scene.remove(u.model); }); squad.length=0; panelOpen=false; renderSquad(); }
-function sonicDoom(){
+// Sonic Doom target: the locked enemy if there is one (any locked target, hostile or not: the player chose it),
+// otherwise the old behaviour of the nearest hostile within 30.
+function doomTargetPos(){
+  const lt=lockedTarget(); if(lt) return lt.mesh.position.clone();
   let tp=null, bd=30; enemies.forEach(en=>{ if(!en.alive||(en.npc&&!en.aggro)) return; const d=en.mesh.position.distanceTo(player.pos); if(d<bd){ bd=d; tp=en.mesh.position.clone(); } });
+  return tp;
+}
+function sonicDoom(){
+  let tp=doomTargetPos();
   if(!tp) tp=player.pos.clone().addScaledVector(flatFwd(player.yaw),16);
   let fired=0;
   squad.forEach((u,i)=>{
@@ -1637,7 +1934,7 @@ function updateStreams(dt){
   if(doomHeld){
     if(dn!=='echo_echo'||!squad.some(u=>u.energy>=6)){ doomHeld=false; return; }
     doomT-=dt; if(doomT>0) return; doomT=.3;
-    let tp=null, bd=30; enemies.forEach(en=>{ if(!en.alive||(en.npc&&!en.aggro)) return; const d=en.mesh.position.distanceTo(player.pos); if(d<bd){ bd=d; tp=en.mesh.position.clone(); } });
+    let tp=doomTargetPos();
     if(!tp) tp=player.pos.clone().addScaledVector(flatFwd(player.yaw),16);
     squad.forEach(u=>{
       if(u.energy<6) return; if(u.active) player.energy-=5.4; else u.energy-=5.4;
@@ -1670,12 +1967,14 @@ const SKINS=[0xf1c8a0,0xd9a577,0xa8744a,0x6e4a2e], SHIRTS=[0x3a6ea8,0xc25a8a,0x8
 const GANGS=[{name:'RED',col:0xb32222,home:[-30.5,17.5]},{name:'PURPLE',col:0x7a2fb3,home:[33.5,-14.5]},{name:'YELLOW',col:0xd8b81a,home:[1.5,-46.5]}].map(g=>({...g,size:4,members:[],respT:0}));
 function makeNpcModel(skin,shirt,pants,cap){
   const g=new THREE.Group(), parts={};
-  const mk=(geo,c,x,y,z)=>{ const m=new THREE.Mesh(geo,nm(c)); m.position.set(x,y,z); g.add(m); return m; };
-  parts.torso=mk(NG.torso,shirt,0,.95,0); parts.head=mk(NG.head,skin,0,1.45,0);
-  parts.leftLeg=mk(NG.leg,pants,-.13,.65,0); parts.rightLeg=mk(NG.leg,pants,.13,.65,0);
-  parts.leftArm=mk(NG.arm,shirt,-.37,1.22,0); parts.rightArm=mk(NG.arm,shirt,.37,1.22,0);
+  const mk=(geo,c,x,y,z)=>{ const m=new THREE.Mesh(geo,nm(c)); m.position.set(x,y,z); m.castShadow=true; g.add(m); return m; };
+  const j=(c,x,y,z)=>mk(new THREE.SphereGeometry(.09,7,5),c,x,y,z);
+  const limb=(x,y,color)=>{ const r=new THREE.Group(); const up=mk(new THREE.BoxGeometry(.16,.28,.16),color,0,0,0); up.geometry.translate(0,-.14,0); r.add(up); const e=new THREE.Mesh(new THREE.SphereGeometry(.08,7,5),nm(skin)); e.position.y=-.28; r.add(e); const lo=new THREE.Mesh(NG.arm,color===shirt?nm(shirt):nm(color)); lo.position.y=-.55; lo.geometry.translate(0,-.135,0); r.add(lo); r.userData.life={upper:up,lower:lo}; r.position.set(x,y,0); g.add(r); return r; };
+  parts.torso=mk(NG.torso,shirt,0,.95,0); parts.head=mk(NG.head,skin,0,1.45,0); parts.neck=j(skin,0,1.22,0);
+  parts.leftLeg=limb(-.13,.65,pants); parts.rightLeg=limb(.13,.65,pants);
+  parts.leftArm=limb(-.37,1.22,shirt); parts.rightArm=limb(.37,1.22,shirt);
   if(cap) mk(NG.cap,cap,0,1.68,0);
-  g.position.y=-.95; return {g,parts,shirt};
+  g.position.y=-.95; g.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28}; return {g,parts,shirt};
 }
 function spawnNpc(gang,x,z){
   const gy=groundTopAt(x,z), gg=!!gang;
@@ -1724,7 +2023,7 @@ function npcHurt(en,dmg,dir,opts){
     const q=en.mesh.position.clone().addScaledVector(dir,shove); if(!blockedAt(q.x,q.z,GY)){ en.mesh.position.x=q.x; en.mesh.position.z=q.z; }
   }
   provoke(en);
-  if(en.hp<=0){ en.alive=false; en.state='dead'; en.deadT=4; }
+  if(en.hp<=0){ en.alive=false; en.state='dead'; en.deadT=4; if(lock.en===en) setLock(null); }
 }
 function hurtTarget(tu,dmg){
   if(tu.unit) tu.unit.health-=dmg;
@@ -1779,16 +2078,19 @@ function updateNpcs(dt){
     }
     p.y=groundTopAt(p.x,p.z)+.95;
     let dy=en.yaw-en.mesh.rotation.y; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); en.mesh.rotation.y+=dy*Math.min(1,dt*10);
+    animateCharacterLife(en.mesh,en.parts,moving,dt,en.type==='speed'?'speed':'enemy',Math.max(.8,en.speed/2.5));
     en.walkT+=moving?dt*(speed>3?11:7):0; const sw=moving?Math.sin(en.walkT)*.6:0, P=en.parts;
     P.leftLeg.rotation.x=sw; P.rightLeg.rotation.x=-sw; P.leftArm.rotation.x=-sw*.8; P.rightArm.rotation.x=sw*.8;
     if(en.state==='flee'){ P.leftArm.rotation.x=P.rightArm.rotation.x=2.6; }
     if(aim) P.rightArm.rotation.x=1.55;
     if(en.atk>0) (en.punch?P.rightArm:P.leftArm).rotation.x=1.7*Math.sin(Math.min(1,en.atk/.25)*Math.PI);
+    animateCharacterLife(en.mesh, P, moving, dt, 'npc', Math.max(.8,speed/2.5));
   }
 }
 function useAction(a,k){
-  if(a.hold){ if(player.alive&&player.energy>4) a.hold(true); return; }
+  if(a.hold){ if(player.alive&&player.energy>4){ if(lockedTarget()) aimAtLock(); a.hold(true); } return; }
   if(!player.alive||(actCd[k]||0)>0||player.energy<a.cost) return;
+  if(lockedTarget()) aimAtLock(); // abilities fire toward the locked target
   player.energy-=a.cost; actCd[k]=a.cd; a.run();
 }
 function buildActions(){
@@ -1800,6 +2102,32 @@ function buildActions(){
     if(a.hold){ const up=e=>{ a.hold(false); e.preventDefault(); }; ['touchend','touchcancel'].forEach(n=>b.addEventListener(n,up,{passive:false})); ['mouseup','mouseleave'].forEach(n=>b.addEventListener(n,up)); }
   });
 }
+function animateCharacterLife(model,parts,moving,dt,style='humanoid',speedFactor=1){
+  if(!model||!parts) return;
+  const L=model.userData.life||(model.userData.life={t:0,phase:0,breath:0});
+  L.t+=dt*(moving?8*speedFactor:1.8);
+  L.breath+=dt*(moving?2.5:1.2);
+  const gait=Math.sin(L.t), gait2=Math.sin(L.t*2), idle=Math.sin(L.breath+L.phase);
+  const lerp=(obj,key,target,k)=>{ if(obj) obj.rotation[key]+= (target-obj.rotation[key])*Math.min(1,dt*k); };
+  const arms=['leftArm','rightArm','leftArm2','rightArm2'];
+  const legs=['leftLeg','rightLeg'];
+  if(style==='cannonbolt') return;
+  if(moving){
+    if(parts.leftLeg){ parts.leftLeg.userData.life.lower.rotation.x += (-gait*.16-parts.leftLeg.userData.life.lower.rotation.x)*Math.min(1,dt*8); }
+    if(parts.rightLeg){ parts.rightLeg.userData.life.lower.rotation.x += (gait*.16-parts.rightLeg.userData.life.lower.rotation.x)*Math.min(1,dt*8); }
+    arms.forEach((n,i)=>{ const a=parts[n]; if(!a?.userData?.life) return; const sign=(i%2?1:-1); a.userData.life.lower.rotation.x += (sign*Math.max(0,gait)*.22-a.userData.life.lower.rotation.x)*Math.min(1,dt*7); });
+    if(parts.torso) lerp(parts.torso,'z',-gait*.035,7);
+  } else {
+    arms.forEach(n=>{ const a=parts[n]; if(a?.userData?.life) a.userData.life.lower.rotation.x += (0-a.userData.life.lower.rotation.x)*Math.min(1,dt*5); });
+    if(parts.torso) parts.torso.rotation.z += (idle*.018-parts.torso.rotation.z)*Math.min(1,dt*3);
+  }
+  if(parts.head) parts.head.rotation.y += ((moving?gait*.025:idle*.045)-parts.head.rotation.y)*Math.min(1,dt*3);
+  if(parts.neck) parts.neck.rotation.y=parts.head?parts.head.rotation.y:0;
+  if(parts.pelvis) parts.pelvis.rotation.z += ((moving?-gait*.025:idle*.012)-parts.pelvis.rotation.z)*Math.min(1,dt*4);
+  // Tiny shoulder lag makes acceleration/deceleration feel muscular rather than robotic.
+  ['shoulderL','shoulderR','shoulderL2','shoulderR2'].forEach((n,i)=>{ const j=parts[n]; if(j) j.rotation.z += ((moving?(i%2?-.025:.025):idle*.01)-j.rotation.z)*Math.min(1,dt*4); });
+}
+
 function poseExtras(parts,moving,dt){
   const m=player.model; let lean=0;
   player.animT=(player.animT||0)+dt*(player.swimming?5:10);
@@ -1873,6 +2201,9 @@ function meleeAttack(){
   // Combo state: step 0 = left punch, 1 = right punch, 2 = heavy finisher, then wraps back to 0.
   // If the player waited too long since the last hit, comboResetTimer will have already hit 0 (see
   // updatePlayer), so comboStep resets to 0 there rather than here.
+  // Lock-on: snap to face the locked target (if it's close enough to be a melee target), so the swing and
+  // its hit cone both point at it even if the camera assist hasn't finished turning yet.
+  faceLockedTarget(player.form.atkRange + 4.5, 2.4);
   const step = player.comboStep;
   const isHeavy = step === 2;
   const punchKind = step===0 ? 'left' : step===1 ? 'right' : 'heavy';
@@ -1894,9 +2225,17 @@ function meleeAttack(){
   const hitDelay = animDur * (isHeavy ? 0.45 : 0.4);
   const originPos = player.pos.clone();
   const yawAtSwing = player.yaw;
+  const swingLockEn = lockedTarget(); // the target this swing was aimed at (may move before impact)
   setTimeout(()=>{
     if(!player.alive) return;
-    const forward = new THREE.Vector3(-Math.sin(yawAtSwing),0,-Math.cos(yawAtSwing));
+    let forward = new THREE.Vector3(-Math.sin(yawAtSwing),0,-Math.cos(yawAtSwing));
+    // If the swing was aimed at a locked target that is still valid and in reach, re-aim the cone at where
+    // it is NOW: the target may have been knocked/strafed during the wind-up. Still only hits what is in
+    // front of that line, so enemies behind the player remain safe.
+    if(swingLockEn && lockValid(swingLockEn)){
+      const lv=swingLockEn.mesh.position.clone().sub(originPos); lv.y=0;
+      if(lv.length()<player.form.atkRange+1.2 && lv.lengthSq()>0.0001) forward = lv.normalize();
+    }
     const dmg = player.form.atkDamage * tuning.comboMul[step];
     const knock = tuning.knock[step];
     // Combo hits 2 and 3 get a small range buffer: a real combo flurry involves stepping into the
@@ -1951,6 +2290,7 @@ function tryPlaceBlock(){
 function useSpecial(){
   const f = player.form;
   if(f.actions || !f.special || player.specialTimer>0 || player.energy < f.special.cost) return;
+  if(lockedTarget()) aimAtLock();
   player.energy -= f.special.cost;
   player.specialTimer = f.special.cooldown;
   f.special.run({player});
@@ -1961,10 +2301,13 @@ function useSpecial(){
 ========================================================================= */
 const moveInput = {x:0,y:0};
 const keys = {};
-addEventListener('keydown', e=>{ keys[e.code]=true; if(e.code==='KeyF') meleeAttack(); if(e.code==='KeyE') useSpecial(); {const ai={KeyE:0,KeyR:1,KeyT:2,KeyY:3,KeyU:4}[e.code], A=player.form.actions; if(ai!==undefined&&A&&A[ai]) useAction(A[ai],ai);} if(e.code==='KeyQ') revertToBen(); if(e.code==='KeyG') tryPlaceBlock(); });
+addEventListener('keydown', e=>{ keys[e.code]=true; if(e.code==='KeyF') meleeAttack(); if(e.code==='KeyE') useSpecial(); {const ai={KeyE:0,KeyR:1,KeyT:2,KeyY:3,KeyU:4}[e.code], A=player.form.actions; if(ai!==undefined&&A&&A[ai]) useAction(A[ai],ai);} if(e.code==='KeyQ') revertToBen(); if(e.code==='KeyL'||e.code==='Tab'){ if(e.code==='Tab') e.preventDefault(); lockButton(); } if(e.code==='KeyG') tryPlaceBlock(); });
 addEventListener('keyup', e=>{ keys[e.code]=false; const ai={KeyE:0,KeyR:1,KeyT:2,KeyY:3,KeyU:4}[e.code], A=player.form.actions; if(ai!==undefined&&A&&A[ai]&&A[ai].hold) A[ai].hold(false); });
 addEventListener('mousedown', e=>{ Audio_.resume(); if(!isTouch){ if(e.button===0) meleeAttack(); if(e.button===2) tryPlaceBlock(); } });
 addEventListener('contextmenu', e=> e.preventDefault());
+// Desktop lock-on: middle-click locks the enemy nearest the crosshair (or releases); R-click stays block placement.
+addEventListener('mousedown', e=>{ if(!isTouch && e.button===1){ e.preventDefault(); if(!lockedTarget()){ const t=pickEnemyAtScreen(innerWidth/2,innerHeight/2)||null; if(t) setLock(t); else lockButton(); } else unlockTarget('TARGET RELEASED'); } });
+addEventListener('mousemove', e=>{ if(!isTouch && (Math.abs(e.movementX||0)+Math.abs(e.movementY||0))>2) noteUserLook(); });
 
 function updateKeyboardMove(){
   if(isTouch) return;
@@ -2018,29 +2361,41 @@ joyZone.addEventListener('touchcancel', joyEnd,{passive:false});
 // its own dedicated small zone for movement; everything else is look.
 function isUiElement(el){
   while(el && el !== document.body){
-    if(el.id==='joystick-zone' || el.tagName==='BUTTON') return true;
+    if(el.id==='joystick-zone' || el.id==='lock-btn' || el.tagName==='BUTTON') return true;
     if(el.classList && (el.classList.contains('menu-btn') || el.classList.contains('act-btn'))) return true;
     el = el.parentElement;
   }
   return false;
 }
-let camTouchId=null, lastCam={x:0,y:0};
+let camTouchId=null, lastCam={x:0,y:0}, camTap=null;
 renderer.domElement.addEventListener('touchstart', e=>{
   for(const t of e.changedTouches){
     if(camTouchId!==null) continue; // one look touch at a time
     if(isUiElement(t.target)) continue;
     camTouchId = t.identifier; lastCam = {x:t.clientX, y:t.clientY};
+    camTap = { x:t.clientX, y:t.clientY, t:performance.now(), moved:0 }; // for tap-to-lock
   }
 },{passive:true});
 renderer.domElement.addEventListener('touchmove', e=>{
   for(const t of e.changedTouches){
     if(t.identifier!==camTouchId) continue;
     const dx=t.clientX-lastCam.x, dy=t.clientY-lastCam.y; lastCam={x:t.clientX,y:t.clientY};
+    if(camTap){ camTap.moved += Math.abs(dx)+Math.abs(dy); if(camTap.moved>14) noteUserLook(); } // real swipe -> camera assist yields
     player.yaw -= dx*0.0045;
     player.pitch = THREE.MathUtils.clamp(player.pitch - dy*0.0035, -1.3, 1.25);
   }
 },{passive:true});
-function camEnd(e){ for(const t of e.changedTouches) if(t.identifier===camTouchId) camTouchId=null; }
+function camEnd(e){
+  for(const t of e.changedTouches) if(t.identifier===camTouchId){
+    camTouchId=null;
+    // A short, nearly-stationary touch is a TAP: try to lock/unlock an enemy under the finger.
+    // Anything longer or that moved is a camera drag and never locks (so free look is unaffected).
+    if(e.type==='touchend' && camTap && camTap.moved<=14 && performance.now()-camTap.t<320 && player.alive){
+      tapLock(t.clientX,t.clientY); // tapping empty ground does nothing: a lock is kept until you tap the target again, use the button, or it breaks
+    }
+    camTap=null;
+  }
+}
 renderer.domElement.addEventListener('touchend', camEnd,{passive:true});
 renderer.domElement.addEventListener('touchcancel', camEnd,{passive:true});
 
@@ -2073,6 +2428,7 @@ function bindBtn(id, downFn, upFn){
 bindBtn('btn-attack', ()=>{ player.atkHeld=true; }, ()=>{ player.atkHeld=false; });
 bindBtn('btn-jump', doJump);
 bindBtn('btn-special', useSpecial);
+bindBtn('lock-btn', lockButton);
 
 // hotbar
 const hotbar = document.getElementById('hotbar');
@@ -2174,6 +2530,19 @@ function updatePlayer(dt){
   let moveZ = forward.z*my + right.z*mx;
   if(player.dashT>0){ moveX=player.dashDir.x; moveZ=player.dashDir.z; player.dashT-=dt; }
   else if(player.superHeld && Math.hypot(moveX,moveZ)<0.05){ moveX=forward.x; moveZ=forward.z; }
+  // XLR8 + lock-on: while sprinting, bend the run gently toward the locked target so a tackle can be aimed.
+  // It only nudges (never overrides) and only when you are already heading roughly toward it - so it cannot
+  // hijack steering or drag you off a route you chose.
+  if(player.form.id==='xlr8' && (player.superSpeed||0)>0.15 && player.dashT<=0){
+    const ld=lockDirFrom(player.pos), ml=Math.hypot(moveX,moveZ);
+    if(ld && ml>0.05){
+      const mdir=new THREE.Vector3(moveX/ml,0,moveZ/ml), ang=mdir.angleTo(ld);
+      if(ang<1.05){ // within ~60 degrees of the target
+        const k=Math.min(1,dt*(2.2+player.superSpeed*3.5)); // stronger the faster you go, still gentle
+        mdir.lerp(ld,k).normalize(); moveX=mdir.x*ml; moveZ=mdir.z*ml;
+      }
+    }
+  }
   else if(player.rolling && Math.hypot(moveX,moveZ)<0.05){ moveX=forward.x; moveZ=forward.z; }
   const moving = Math.hypot(moveX,moveZ) > 0.05;
 
@@ -2225,7 +2594,7 @@ function updatePlayer(dt){
       if(!en.alive) return;
       if(en.tackleUntil && now < en.tackleUntil) return;
       const dx=en.mesh.position.x-player.pos.x, dz=en.mesh.position.z-player.pos.z, d=Math.hypot(dx,dz);
-      if(d < 1.5){
+      if(d < (en===lockedTarget() ? 1.9 : 1.5)){ // slightly wider contact on the locked target so an aimed tackle lands
         const dir = d>0.001 ? new THREE.Vector3(dx/d,0,dz/d) : new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
         damageEnemy(en, 8 + s*24, dir, { heavy: s>0.6, knock: 6 + s*14 }); // max ~32: hurts badly and throws enemies, but doesn't one-shot most archetypes
         en.tackleUntil = now + 500;
@@ -2309,6 +2678,7 @@ function updatePlayer(dt){
     }
   } else if(parts.torso){ parts.torso.rotation.x = 0; }
   poseExtras(parts, moving, dt);
+  animateCharacterLife(player.model, parts, moving, dt, player.form.id, Math.max(.7, speedMult));
 
   // footstep sound throttling
   player._stepT = (player._stepT||0) + dt;
@@ -2321,6 +2691,7 @@ function updatePlayer(dt){
   // death
   if(player.health <= 0 && player.alive && !(squad.length>1 && activeDied())){
     player.alive = false;
+    unlockTarget();
     Audio_.death();
     document.getElementById('death-screen').style.display='flex';
     setTimeout(()=>{
@@ -2370,6 +2741,7 @@ function loop(){
   updateDayNight(wdt);
   updatePlayer(dt);
   updateEnemySpawning(wdt); updateEnemies(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
+  updateLockOn(dt);
   updateCamera();
   updateSpeedEffects(dt);
   const under = camera.position.y < WATER_LEVEL+0.4;
@@ -2387,8 +2759,8 @@ const menuPanel = document.getElementById('menu-panel');
 function showPanel(html){ menuPanel.innerHTML = html; menuPanel.classList.add('show'); }
 document.getElementById('btn-controls').addEventListener('click', ()=> showPanel(
   isTouch
-  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.'
-  : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben. Fly/swim: look up or down while moving.'
+  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.<br>LOCK-ON: tap an enemy to lock it (tap again to release), or use the reticle button above the joystick. The camera assists toward it and attacks/abilities face it; you can still swipe to look freely.'
+  : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben. L / Tab / middle-click = Lock-on. Fly/swim: look up or down while moving.'
 ));
 document.getElementById('btn-about').addEventListener('click', ()=> showPanel(
   'OMNITRIX: VOXEL PROTOCOL — an original fan-made prototype blending a Minecraft-style voxel world with Ben 10 Alien Force-inspired transformation and combat mechanics. All characters, names and visuals here are original interpretations.'

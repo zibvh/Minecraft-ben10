@@ -41,3 +41,18 @@ never need Android Studio or a local Android SDK.
 - The `<meta viewport>` and safe-area handling already in the game HTML
   should carry over fine inside the Android WebView, but I have not
   confirmed that on a real device.
+
+## Gameplay notes: Lock-on (Stage 6)
+
+- Tap an enemy or civilian to lock it (a red reticle + name + HP bar appear). Tap it again, or press the reticle
+  button above the joystick, to release. Desktop: L / Tab / middle-click.
+- Lock-on is optional. Swiping the screen still rotates the camera freely; camera assist backs off while you swipe.
+- While locked: the camera eases toward the target, melee swings turn to face it, abilities/projectiles fire at it,
+  Sonic Doom targets it, and XLR8 sprints bend gently toward it so a tackle can be aimed.
+- The lock breaks automatically if the target dies or gets more than ~44 units away.
+
+## Character Life / Jointed Animation Pass
+
+The current build includes a procedural character-animation pass layered onto the existing character/combat architecture. Player aliens now use segmented upper/lower limbs with visible joint pivots, wrists/elbows/hips/neck/shoulder details, gait counter-motion, idle breathing, subtle head tracking, pelvis movement, and joint follow-through. NPCs and hostile enemies use the same lightweight jointed approach. Existing combat animation code remains the primary action driver, with the life layer providing secondary motion rather than replacing attacks.
+
+The animation is procedural and offline-friendly; it does not require a skeletal animation asset pipeline or network service.
