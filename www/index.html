@@ -592,38 +592,91 @@ function disposeChunk(chunk){
 // immediately around the player are always the first to appear.
 const loadQueue = [];
 const queuedKeys = new Set();
-const CHUNKS_PER_FRAME = 2; // tune down further if a device still stutters; raise if chunks pop in too late to be seen
+const CHUNKS_PER_FRAME = 2;      // baseline budget when standing/walking
+const MAX_CHUNKS_PER_FRAME = 5;  // ceiling at extreme speed - bounded so one frame can never freeze the phone
+const LOOKAHEAD_MAX = 3;         // extra chunks to reach ahead of the player at full speed (on top of LOAD_RADIUS)
 
-function updateChunkStreaming(px,pz){
+// Track the player's actual movement (derived from position deltas) so streaming can be biased toward
+// where they are heading rather than loading a symmetric square around where they currently stand.
+let prevStreamX = null, prevStreamZ = null, velX = 0, velZ = 0, lastStreamKey = '';
+
+function updateChunkStreaming(px,pz,dt){
+  // --- estimate velocity (smoothed) ---
+  if(prevStreamX !== null && dt > 0){
+    const vx = (px-prevStreamX)/dt, vz = (pz-prevStreamZ)/dt;
+    velX += (vx-velX)*Math.min(1, dt*8); velZ += (vz-velZ)*Math.min(1, dt*8);
+  }
+  prevStreamX = px; prevStreamZ = pz;
+  const speed = Math.hypot(velX, velZ);
+  const dirX = speed>0.5 ? velX/speed : 0, dirZ = speed>0.5 ? velZ/speed : 0;
+  // 0 at walking pace, 1 at ~60 units/sec (full XLR8 speed)
+  const speedFrac = Math.max(0, Math.min(1, (speed-8)/50));
+
   const [ccx,ccz] = chunkCoordOf(px,pz);
-  if(ccx!==curChunkX || ccz!==curChunkZ || chunks.size===0){
+  // Re-plan when the chunk changes OR the heading meaningfully changes (bucketed to avoid re-planning every frame).
+  const headingBucket = speedFrac>0.05 ? Math.round(Math.atan2(dirZ,dirX)/0.6)+':'+Math.round(speedFrac*3) : 'still';
+  const planKey = ccx+','+ccz+'|'+headingBucket;
+
+  if(planKey !== lastStreamKey || chunks.size===0){
+    lastStreamKey = planKey;
     curChunkX = ccx; curChunkZ = ccz;
 
-    // Queue any missing chunks in range, nearest-to-player first.
+    // How far ahead to reach: further at higher speed. Chunk units.
+    const ahead = Math.round(LOOKAHEAD_MAX*speedFrac);
+    const reach = LOAD_RADIUS + ahead;
+
     const missing = [];
-    for(let dx=-LOAD_RADIUS; dx<=LOAD_RADIUS; dx++){
-      for(let dz=-LOAD_RADIUS; dz<=LOAD_RADIUS; dz++){
+    for(let dx=-reach; dx<=reach; dx++){
+      for(let dz=-reach; dz<=reach; dz++){
         const cx=ccx+dx, cz=ccz+dz, key=chunkKeyOf(cx,cz);
-        if(!chunks.has(key) && !queuedKeys.has(key)){ missing.push([cx,cz,dx*dx+dz*dz]); queuedKeys.add(key); }
+        // Chunks beyond the normal radius are only wanted if they lie in the forward direction.
+        const chebyshev = Math.max(Math.abs(dx),Math.abs(dz));
+        if(chebyshev > LOAD_RADIUS){
+          const len = Math.hypot(dx,dz)||1;
+          const alignment = (dx/len)*dirX + (dz/len)*dirZ; // 1 = dead ahead, -1 = directly behind
+          if(alignment < 0.55) continue;
+        }
+        if(chunks.has(key) || queuedKeys.has(key)) continue;
+        // Priority: how soon we'll reach it. Chunks ahead of us are pulled forward in the queue;
+        // chunks behind us are pushed back (they matter least when moving fast).
+        const dist2 = dx*dx+dz*dz;
+        const along = dx*dirX + dz*dirZ;              // positive = ahead
+        const priority = dist2 - along*2.5*speedFrac*Math.abs(along) ;
+        missing.push([cx,cz,priority]); queuedKeys.add(key);
       }
     }
     missing.sort((a,b)=>a[2]-b[2]);
     missing.forEach(([cx,cz])=>loadQueue.push([cx,cz]));
 
-    // Drop any still-queued-but-now-far-away entries so the queue doesn't grow unbounded if the
-    // player keeps moving before it drains (e.g. sprinting in a straight line).
+    // Re-sort the whole existing queue by the new heading so stale far-behind entries fall to the back.
+    loadQueue.sort((a,b)=>{
+      const ax=a[0]-ccx, az=a[1]-ccz, bx=b[0]-ccx, bz=b[1]-ccz;
+      const pa=ax*ax+az*az-((ax*dirX+az*dirZ)*2.5*speedFrac*Math.abs(ax*dirX+az*dirZ));
+      const pb=bx*bx+bz*bz-((bx*dirX+bz*dirZ)*2.5*speedFrac*Math.abs(bx*dirX+bz*dirZ));
+      return pa-pb;
+    });
+
+    // Drop queued chunks that are now too far from us (bounded queue, even when sprinting in a line).
+    const keepR = reach + 1;
     for(let i=loadQueue.length-1;i>=0;i--){
       const [cx,cz] = loadQueue[i];
-      if(Math.abs(cx-ccx) > UNLOAD_RADIUS || Math.abs(cz-ccz) > UNLOAD_RADIUS){ queuedKeys.delete(chunkKeyOf(cx,cz)); loadQueue.splice(i,1); }
+      if(Math.abs(cx-ccx) > keepR || Math.abs(cz-ccz) > keepR){ queuedKeys.delete(chunkKeyOf(cx,cz)); loadQueue.splice(i,1); }
     }
 
+    // Unload: distant chunks go, and behind-us chunks are released earlier when moving fast, so the
+    // number of live chunks (and memory) stays bounded even though we're now reaching further ahead.
+    const behindR = speedFrac>0.3 ? UNLOAD_RADIUS-1 : UNLOAD_RADIUS;
     for(const chunk of [...chunks.values()]){
-      if(Math.abs(chunk.cx-ccx) > UNLOAD_RADIUS || Math.abs(chunk.cz-ccz) > UNLOAD_RADIUS) disposeChunk(chunk);
+      const dx = chunk.cx-ccx, dz = chunk.cz-ccz;
+      const ahd = dx*dirX + dz*dirZ;
+      const limit = ahd >= 0 ? UNLOAD_RADIUS+ahead : behindR;
+      if(Math.abs(dx) > limit || Math.abs(dz) > limit) disposeChunk(chunk);
     }
   }
 
-  // Drain a small, fixed number of queued chunks this frame.
-  for(let i=0;i<CHUNKS_PER_FRAME && loadQueue.length;i++){
+  // Budget scales with speed: more chunks per frame when moving fast, but hard-capped.
+  const budget = Math.min(MAX_CHUNKS_PER_FRAME, CHUNKS_PER_FRAME + Math.round(speedFrac*(MAX_CHUNKS_PER_FRAME-CHUNKS_PER_FRAME)));
+  for(let i=0;i<budget && loadQueue.length;i++){
     const [cx,cz] = loadQueue.shift();
     const key = chunkKeyOf(cx,cz);
     queuedKeys.delete(key);
@@ -839,7 +892,7 @@ const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jum
 /* =========================================================================
    PLAYER
 ========================================================================= */
-updateChunkStreaming(0.5, 0.5); // queue starting chunks
+updateChunkStreaming(0.5, 0.5, 0); // queue starting chunks
 drainChunkQueueFully();          // ...and load them all now, before we ask groundTopAt for spawn height
 const player = {
   pos: new THREE.Vector3(0.5, groundTopAt(0.5,0.5)+1, 0.5),
@@ -1036,7 +1089,7 @@ const ENEMY_STATS = {
   normal:  { hp:40,  speed:2.6, damage:7,  color:0x4a2a8a, size:[0.8,1.1,0.8],  yOff:0.55, retreatHpFrac:0.25, ranged:false, chaseRange:8,  loseRange:12 },
   ranged:  { hp:32,  speed:2.2, damage:6,  color:0x2a6a8a, size:[0.75,1.05,0.75], yOff:0.53, retreatHpFrac:0,    ranged:true,  chaseRange:14, loseRange:18, preferredDist:8, projSpeed:16 },
   brute:   { hp:70,  speed:1.8, damage:12, color:0x8a2a2a, size:[1.1,1.6,1.1],  yOff:0.8,  retreatHpFrac:0,    ranged:false, chaseRange:8,  loseRange:12, knockOnHit:5 },
-  speed:   { hp:30,  speed:5.2, damage:6,  color:0xd8a020, size:[0.65,0.95,0.65], yOff:0.48, retreatHpFrac:0.2,  ranged:false, chaseRange:16, loseRange:22 },
+  speed:   { hp:30,  speed:9.0, damage:6,  color:0xd8a020, size:[0.65,0.95,0.65], yOff:0.48, retreatHpFrac:0.2,  ranged:false, chaseRange:16, loseRange:22 },
   elite:   { hp:110, speed:2.4, damage:11, color:0x1a1a2e, size:[0.95,1.35,0.95], yOff:0.68, retreatHpFrac:0.15, ranged:true,  chaseRange:16, loseRange:20, preferredDist:6, projSpeed:20 },
 };
 function makeEnemy(type, x, z){
@@ -1247,6 +1300,87 @@ function updateFx(dt){
     if(f.life<=0){ scene.remove(f.mesh); f.mesh.material.dispose(); fx.splice(i,1); }
   }
 }
+/* =========================================================================
+   XLR8 SPEED EFFECTS  (pooled - a fixed number of meshes reused every frame,
+   never allocated per frame, so this stays cheap on phones)
+========================================================================= */
+const BASE_FOV = 70, MAX_FOV_BOOST = 30;
+const STREAK_COUNT = 14, DUST_COUNT = 12;
+const streakGeo = new THREE.BoxGeometry(0.04, 0.04, 1);
+const streakMat = new THREE.MeshBasicMaterial({color:0xbfe8ff, transparent:true, opacity:0, depthWrite:false});
+const streaks = [];
+for(let i=0;i<STREAK_COUNT;i++){
+  const m = new THREE.Mesh(streakGeo, streakMat.clone());
+  m.visible = false; m.frustumCulled = false; scene.add(m);
+  streaks.push({mesh:m, seed:Math.random(), idx:i});
+}
+const dustGeo = new THREE.BoxGeometry(1,1,1);
+const dustPuffs = [];
+for(let i=0;i<DUST_COUNT;i++){
+  const m = new THREE.Mesh(dustGeo, new THREE.MeshBasicMaterial({color:0xd8cdb0, transparent:true, opacity:0, depthWrite:false}));
+  m.visible = false; m.frustumCulled = false; scene.add(m);
+  dustPuffs.push({mesh:m, life:0, max:0.5});
+}
+let dustIdx = 0, dustEmitAcc = 0, lastFov = BASE_FOV, speedShakeT = 0;
+
+function updateSpeedEffects(dt){
+  const s = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
+
+  // FOV widens with speed; only touch the projection matrix when the value actually changed.
+  const targetFov = BASE_FOV + MAX_FOV_BOOST*s;
+  const newFov = lastFov + (targetFov-lastFov)*Math.min(1, dt*6);
+  if(Math.abs(newFov-lastFov) > 0.02){ lastFov = newFov; camera.fov = newFov; camera.updateProjectionMatrix(); }
+
+  // Speed streaks: thin lines around the camera, stretched along the travel direction and sliding past.
+  const showStreaks = s > 0.25;
+  const fwd = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+  for(const st of streaks){
+    if(!showStreaks){ if(st.mesh.visible){ st.mesh.visible=false; st.mesh.material.opacity=0; } continue; }
+    st.mesh.visible = true;
+    // Each streak drifts backward past the player and wraps to the front when it passes behind.
+    st.seed = (st.seed + dt*(1.2 + s*3.5)) % 1;
+    const ang = (st.seed*7.3 + st.idx*0.9) % (Math.PI*2);
+    const radius = 1.6 + ((st.idx*0.37)%1)*2.2;
+    const along = 10 - st.seed*20; // +10 ahead ... -10 behind
+    const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    st.mesh.position.copy(player.pos)
+      .addScaledVector(fwd, along)
+      .addScaledVector(side, Math.cos(ang)*radius)
+      .add(new THREE.Vector3(0, 1 + Math.sin(ang)*radius*0.7, 0));
+    st.mesh.rotation.y = player.yaw;
+    st.mesh.scale.z = 1.5 + s*6; // longer streaks at higher speed
+    st.mesh.material.opacity = Math.min(0.55, (s-0.25)*0.9);
+  }
+
+  // Ground dust trail: emit puffs at the feet at a rate scaled by speed, only while grounded.
+  if(s > 0.15 && player.onGround && !player.flying && !player.swimming){
+    dustEmitAcc += dt*(6 + s*22);
+    while(dustEmitAcc >= 1){
+      dustEmitAcc -= 1;
+      const d = dustPuffs[dustIdx]; dustIdx = (dustIdx+1)%DUST_COUNT;
+      d.life = d.max = 0.35 + Math.random()*0.25;
+      d.mesh.visible = true;
+      d.mesh.position.set(player.pos.x + (Math.random()-0.5)*0.6, groundTopAt(player.pos.x,player.pos.z)+0.15, player.pos.z + (Math.random()-0.5)*0.6);
+      d.mesh.scale.setScalar(0.25 + s*0.35);
+    }
+  }
+  for(const d of dustPuffs){
+    if(d.life <= 0){ if(d.mesh.visible) d.mesh.visible=false; continue; }
+    d.life -= dt;
+    const k = Math.max(0, d.life/d.max);
+    d.mesh.material.opacity = k*0.55;
+    d.mesh.scale.multiplyScalar(1 + dt*2.2);
+    d.mesh.position.y += dt*0.4;
+  }
+
+  // Continuous camera shake at extreme speed (separate from the one-shot shakeCamera used by impacts).
+  if(s > 0.75){
+    speedShakeT = (s-0.75)*0.16;
+    camera.position.x += (Math.random()-0.5)*speedShakeT;
+    camera.position.y += (Math.random()-0.5)*speedShakeT;
+  }
+}
+
 function makeBoulder(x,y,z,s,color,car){
   const g=new THREE.Group(), m=new THREE.MeshLambertMaterial({color});
   if(car){
@@ -1583,7 +1717,12 @@ function provoke(en){
 function npcHurt(en,dmg,dir,opts){
   const heavy = opts && opts.heavy;
   en.hp-=dmg; heavy?Audio_.heavyHit():Audio_.hit(); en.flash=heavy?0.2:0.12; en.parts.torso.material=flashMat;
-  if(dir&&dir.lengthSq()>0){ const q=en.mesh.position.clone().addScaledVector(dir,heavy?1.1:.7); if(!blockedAt(q.x,q.z,GY)){ en.mesh.position.x=q.x; en.mesh.position.z=q.z; } }
+  if(dir&&dir.lengthSq()>0){
+    // Default shove is small; an explicit opts.knock (e.g. an XLR8 tackle) scales it up, clamped so a
+    // single hit can never launch an NPC absurdly far. Still checked against walls.
+    const shove = (opts && opts.knock!=null) ? Math.min(5, Math.max(heavy?1.1:.7, opts.knock*0.25)) : (heavy?1.1:.7);
+    const q=en.mesh.position.clone().addScaledVector(dir,shove); if(!blockedAt(q.x,q.z,GY)){ en.mesh.position.x=q.x; en.mesh.position.z=q.z; }
+  }
   provoke(en);
   if(en.hp<=0){ en.alive=false; en.state='dead'; en.deadT=4; }
 }
@@ -1682,7 +1821,7 @@ function poseExtras(parts,moving,dt){
     if(parts.leftLeg){ parts.leftLeg.rotation.x=Math.sin(A*2)*.4; parts.rightLeg.rotation.x=-Math.sin(A*2)*.4; }
   }
   if(carried) ['leftArm','rightArm','leftArm2','rightArm2'].forEach(k=>{ if(parts[k]) parts[k].rotation.x=3; });
-  if(player.dashT>0||(player.superT||0)>0.3) debris(player.pos.clone().add(new THREE.Vector3(0,.2,0)),0x28b7ff,.9,new THREE.Vector3(),.35,false);
+  // (the old per-frame debris() blue trail was removed: it allocated a new material every frame; speed trails are now pooled in updateSpeedEffects)
   if((player.superT||0)>0.2&&!player.flying&&!player.swimming){ lean=-.6*player.superT; ['leftArm','rightArm'].forEach(k=>{ if(parts[k]) parts[k].rotation.x=-1.3; }); }
   m.rotation.x+=(lean-m.rotation.x)*.18;
 }
@@ -1991,15 +2130,32 @@ function updatePlayer(dt){
   player.invuln = Math.max(0, player.invuln - dt);
   player.attacking = Math.max(0, player.attacking - dt);
   if(player.atkHeld && !(player.rolling && player.form.id==='cannonbolt')) meleeAttack();
-  if(player.superHeld && player.form.id==='xlr8' && player.energy>0){ player.energy=Math.max(0,player.energy-16*dt); player.superT=Math.min(1,(player.superT||0)+dt*1.1); if(player.energy<=0) player.superHeld=false; }
-  else { player.superHeld=false; player.superT=Math.max(0,(player.superT||0)-dt*3); }
+  // XLR8 true super speed: holding the button builds momentum through tiers instead of snapping to a
+  // flat multiplier. superT is the raw 0..1 "charge"; superSpeed is the eased curve actually applied to
+  // movement. Acceleration slows as you approach max (so the last tier takes real sustained holding),
+  // and release decelerates gradually rather than stopping instantly.
+  if(player.superHeld && player.form.id==='xlr8' && player.energy>0){
+    const tier = player.superT||0;
+    // Drain scales with the SQUARE of how fast you're going: low/mid tiers are cheap so speed can be
+    // sustained for a long time, and only the top tier costs real energy. Roughly 10s total from full.
+    player.energy = Math.max(0, player.energy - (2 + tier*tier*10)*dt);
+    // Accelerate quickly at first, more slowly near the top: rate falls from ~0.55/s down to ~0.18/s.
+    player.superT = Math.min(1, tier + dt*(0.55 - tier*0.37));
+    if(player.energy<=0) player.superHeld=false;
+  } else {
+    player.superHeld=false;
+    // Release: coast down gradually (~2s from full) rather than the old near-instant stop.
+    player.superT = Math.max(0, (player.superT||0) - dt*0.5);
+  }
+  // Eased speed curve: ease-in so low tiers feel like a fast run and only the top tier reaches extreme speed.
+  player.superSpeed = Math.pow(player.superT||0, 1.6);
 
   // Cannonbolt: hold ROLL to curl into a ball and build up speed; release to unroll back to normal.
   if(player.rollHeld && player.form.id==='cannonbolt'){ player.rolling=true; player.rollT=Math.min(1,(player.rollT||0)+dt*1.4); }
   else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*2.2); }
 
   // energy regen (paused briefly right after casting)
-  if(player.specialTimer <= player.form.special?.cooldown - 0.15 || !player.form.special){
+  if(!player.superHeld && (player.specialTimer <= player.form.special?.cooldown - 0.15 || !player.form.special)){
     player.energy = Math.min(player.form.maxEnergy, player.energy + dt*8);
   }
   if(player.speedBurstT > 0){
@@ -2013,7 +2169,7 @@ function updatePlayer(dt){
   let mx = moveInput.x, my = moveInput.y;
   const mag = Math.hypot(mx,my); if(mag>1){ mx/=mag; my/=mag; }
   const speedMult = player.speedBurstT>0 ? (player.form.special.speedMult||1) : 1;
-  const speed = player.form.speed * speedMult * (player.dashT>0?4.5:1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superT||0)*6) * (1+(player.rollT||0)*5);
+  const speed = player.form.speed * speedMult * (player.dashT>0?4.5:1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*8) * (1+(player.rollT||0)*5);
   let moveX = forward.x*my + right.x*mx;
   let moveZ = forward.z*my + right.z*mx;
   if(player.dashT>0){ moveX=player.dashDir.x; moveZ=player.dashDir.z; player.dashT-=dt; }
@@ -2056,6 +2212,24 @@ function updatePlayer(dt){
         const dmg = player.form.atkDamage * (1 + player.rollT*1.5);
         damageEnemy(en, dmg, new THREE.Vector3(dx,0,dz).normalize());
         player.ramCd = 0.35;
+      }
+    });
+  }
+  // XLR8 tackle: running into enemies at real speed hurts them and throws them aside. Uses a per-enemy
+  // cooldown (not one shared timer) so a sprint through a group can clip several enemies, but the same
+  // enemy can't be hit every single frame while you overlap it.
+  if(player.form.id==='xlr8' && (player.superSpeed||0) > 0.3 && player.alive){
+    const s = player.superSpeed;
+    const now = performance.now();
+    enemies.forEach(en=>{
+      if(!en.alive) return;
+      if(en.tackleUntil && now < en.tackleUntil) return;
+      const dx=en.mesh.position.x-player.pos.x, dz=en.mesh.position.z-player.pos.z, d=Math.hypot(dx,dz);
+      if(d < 1.5){
+        const dir = d>0.001 ? new THREE.Vector3(dx/d,0,dz/d) : new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+        damageEnemy(en, 8 + s*24, dir, { heavy: s>0.6, knock: 6 + s*14 }); // max ~32: hurts badly and throws enemies, but doesn't one-shot most archetypes
+        en.tackleUntil = now + 500;
+        if(s > 0.6) shakeCamera(0.25);
       }
     });
   }
@@ -2191,12 +2365,13 @@ function loop(){
   timeScale += ((player.slowT>0?0.3:1)-timeScale)*Math.min(1,dt*6);
   document.getElementById('slow-overlay').style.opacity = timeScale<0.9?1:0;
   const wdt = dt*timeScale;
-  updateChunkStreaming(player.pos.x, player.pos.z);
+  updateChunkStreaming(player.pos.x, player.pos.z, dt);
   water.position.x = player.pos.x; water.position.z = player.pos.z;
   updateDayNight(wdt);
   updatePlayer(dt);
   updateEnemySpawning(wdt); updateEnemies(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
   updateCamera();
+  updateSpeedEffects(dt);
   const under = camera.position.y < WATER_LEVEL+0.4;
   if(under){ scene.fog.color.set(0x1d5c8c); scene.background = scene.fog.color.clone(); }
   scene.fog.near = under?1:14; scene.fog.far = under?26:QUALITY.presets[QUALITY.level].fogFar;
