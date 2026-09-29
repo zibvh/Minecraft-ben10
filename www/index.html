@@ -217,6 +217,7 @@
     </div>
     <div class="bar-row"><span class="bar-label">HP</span><div class="bar-track"><div id="health-fill" class="bar-fill"></div></div></div>
     <div class="bar-row"><span class="bar-label">EN</span><div class="bar-track"><div id="energy-fill" class="bar-fill"></div></div></div>
+    <div class="bar-row" id="timeout-row"><span class="bar-label">OM</span><div class="bar-track"><div id="timeout-fill" class="bar-fill"></div></div></div>
   </div>
   <div id="alien-banner"></div>
   <div id="actions"></div>
@@ -940,7 +941,7 @@ function buildRig(cfg){
     parts.leftArm2=BL.sh; parts.rightArm2=BR.sh; parts.elbow2L=BL.el; parts.elbow2R=BR.el;
   }
   parts.dims={hipY,torsoH:C.torsoH,headS:C.headS,total:hipY+C.torsoH+C.neck+C.headS*1.05+.12,torsoW:C.torsoW,torsoD:C.torsoD,armLen:C.armLen};
-  parts.g=g; parts.anim={ph:0,spd:0,px:null,pz:null,t:Math.random()*10,air:0,land:0,wasGround:true,hit:0,lean:0,dead:0,vyS:0,accel:0,turn:0,massT:0};
+  parts.g=g; parts.anim={ph:0,spd:0,px:null,pz:null,t:Math.random()*10,air:0,land:0,wasGround:true,hit:0,lean:0,dead:0,vyS:0,accel:0,turn:0,massT:0,stumble:0,reactionX:0,reactionZ:0,reactionSide:0};
   return {g,parts};
 }
 // flash every material of a rig (hit feedback). on=true tints red.
@@ -1025,6 +1026,21 @@ function animateRig(parts,dt,inp){
   A.accel=_damp(A.accel||0,(A.spd-prevSpd)/Math.max(dt,.001),10,dt);
   A.turn=_damp(A.turn||0,latV,12,dt);
   const grounded=inp.grounded!==false;
+  // Surface contact: a small step lifts the leading leg and pelvis; a drop unloads the rear leg.
+  // Slope is intentionally subtle so terrain follows the body rather than making it bob.
+  const terrDelta=inp.terrainDelta||0, terrSlope=inp.terrainSlope||0, terrEvt=inp.terrainEvent||0;
+  if(grounded && !inp.flying && !inp.swimming){
+    const terr=Math.max(-1,Math.min(1,terrDelta/.55));
+    P.hipsY += terr*.045*mv;
+    P.chX += -terrSlope*.025*mv;
+    P.kL += Math.max(0,terr)*.12*mv; P.kR += Math.max(0,-terr)*.12*mv;
+    if(terrEvt!==0){
+      const pulse=_sm(Math.min(1,Math.max(0,(inp.terrainT||0)/.16)));
+      P.hipsY += terrEvt>0?.055*pulse:-.045*pulse;
+      P.chX += terrEvt>0?-.06*pulse:.045*pulse;
+      P.hdX += terrEvt>0?.025*pulse:-.02*pulse;
+    }
+  }
   if(Math.abs(A.accel)>1.8 && grounded) A.massT=Math.min(1,(A.massT||0)+dt*7);
   else A.massT=Math.max(0,(A.massT||0)-dt*5);
   const sc=Math.max(.4,(parts.dims.total*(inp.ws||PS))/(2.7*PS)); // stride scales with the body's world size
@@ -1146,8 +1162,25 @@ function animateRig(parts,dt,inp){
     P.tLx=_lerp(P.tLx,.25,.6); P.tRx=_lerp(P.tRx,-.25,.6); P.kL+=.15; P.kR+=.15; }
   // ---- melee overlay ----
   if(inp.atk) attackPose(P,parts,inp.atk,dt);
-  // ---- hit reaction ----
-  if(hurt>0){ const h=_sm(hurt); P.chX+=.42*h; P.hdX+=.4*h; P.hipsRX+=.1*h; P.hipsZ+=.12*h; P.sL.x+=-.6*h; P.sR.x+=-.6*h; P.sL.z+=-.5*h; P.sR.z+=.5*h; P.eL+=.5*h; P.eR+=.5*h; P.tLx+=.35*h; P.kL+=.4*h; P.kR+=.5*h; P.hipsY+=-.08*h; P.chY+=Math.sin(A.t*40)*.05*h; }
+  // ---- hit reaction: impact first, then balance recovery. reactionSide/reactionX/reactionZ are
+  // supplied by damageEnemy so the body twists away from the actual impact direction instead of always
+  // playing the same front-facing flinch.
+  if(hurt>0){
+    const h=_sm(hurt), side=A.reactionSide||0, rx=A.reactionX||0, rz=A.reactionZ||0;
+    const snap=.55*h, recoil=Math.min(1,Math.abs(rx)+Math.abs(rz));
+    P.chX += .42*h + snap*.10*recoil;
+    P.hdX += .4*h;
+    P.hipsRX += .1*h; P.hipsRZ += .12*h;
+    P.chY += side*.22*h; P.hdY += side*.28*h;
+    P.chZ += -side*.16*h;
+    P.sL.x+=-.6*h; P.sR.x+=-.6*h; P.sL.z+=(-.5-side*.35)*h; P.sR.z+=(.5-side*.35)*h;
+    P.eL+=.5*h; P.eR+=.5*h;
+    P.tLx+=.35*h; P.kL+=.4*h; P.kR+=.5*h;
+    P.hipsY+=-.08*h;
+    // a short balance catch: the nearer leg stiffens while the other opens to catch the shove
+    if(recoil>.2){ const catchL=side>=0?1:0; P.tLx+=catchL*.22*h; P.tRx+=(1-catchL)*-.22*h; P.kL+=.12*h; P.kR+=.12*h; }
+    P.chY+=Math.sin(A.t*40)*.05*h;
+  }
   // ---- death: crumple; the whole-body fall is applied to the model root by the caller ----
   if(dead>0){ const d=_sm(dead); P.sL.x=_lerp(P.sL.x,-.5,d); P.sR.x=_lerp(P.sR.x,.2,d); P.sL.z=_lerp(P.sL.z,-.6,d); P.sR.z=_lerp(P.sR.z,.8,d); P.eL=_lerp(P.eL,.5,d); P.eR=_lerp(P.eR,.9,d);
     P.tLx=_lerp(P.tLx,.4,d); P.tRx=_lerp(P.tRx,-.2,d); P.kL=_lerp(P.kL,.9,d); P.kR=_lerp(P.kR,.3,d); P.hdX=_lerp(P.hdX,.35,d); P.hdY=_lerp(P.hdY,.4,d); P.chX=_lerp(P.chX,.15,d); }
@@ -1184,8 +1217,8 @@ function buildCharacter(kind){
     default: pal={skin:0xe0a878, top:0x2c7a3d, bottom:0x2a2f45, accent:0x111111}; kind='ben';
   }
   const fa=kind==='four_arms', cb=kind==='cannonbolt';
-  const R=buildRig(Object.assign({legLen:1.0*scaleY, torsoH:1.15*scaleY, torsoW:fa?1.15:cb?1.4:.68, torsoD:fa?.62:cb?1.25:.38, headS:.52,
-    armLen:(fa?.95:.85)*scaleY, armT:fa?.3:.19, legT:fa?.3:cb?.4:.24, arms4:fa, sleeve:kind==='ben'||kind==='xlr8'||kind==='echo_echo'},pal));
+  const R=buildRig(Object.assign({legLen:1.0*scaleY, torsoH:1.15*scaleY, torsoW:fa?1.15:cb?1.02:.68, torsoD:fa?.62:cb?.78:.38, headS:.52,
+    armLen:(fa?.95:cb?.78:.85)*scaleY, armT:fa?.3:cb?.22:.19, legT:fa?.3:cb?.32:.24, arms4:fa, sleeve:kind==='ben'||kind==='xlr8'||kind==='echo_echo'},pal));
   const g=R.g, parts=R.parts, kindHead=parts.headMesh;
   const D=parts.dims, hs=D.headS;
   // per-alien head / body details
@@ -1195,17 +1228,26 @@ function buildCharacter(kind){
   }
   if(kind==='diamondhead'){ parts.headMesh.visible=false; const oc=new THREE.Mesh(new THREE.OctahedronGeometry(.42),parts.mats.accent); oc.position.y=hs*.5; oc.castShadow=true; parts.head.add(oc);
     [-1,1].forEach(sx=>{ const c=new THREE.Mesh(new THREE.OctahedronGeometry(.16),parts.mats.accent); c.scale.set(.6,1.6,.6); c.position.set(sx*(D.torsoW/2+.02),D.torsoH*.98,0); parts.chest.add(c); }); }
-  if(kind==='cannonbolt'){ parts.headMesh.visible=false; const sp=new THREE.Mesh(new THREE.SphereGeometry(.38,10,8),parts.mats.skin); sp.position.y=hs*.5; sp.castShadow=true; parts.head.add(sp); }
+  if(kind==='cannonbolt'){
+    // Cannonbolt: broad orange Plumber-style body with a distinct white/black armored shell.
+    // Standing silhouette stays humanoid; the shell moves from the back into a full sphere during roll.
+    parts.headMesh.visible=true;
+    parts.headMesh.scale.set(1.05,1.0,.95);
+    const face=new THREE.Mesh(new THREE.SphereGeometry(.20,10,8),rigMat(0x151515));
+    face.scale.set(1.45,.58,.32); face.position.set(0,hs*.56,-hs*.46); face.castShadow=true; parts.head.add(face);
+    const shell=new THREE.Group();
+    const shellCore=new THREE.Mesh(new THREE.SphereGeometry(.62,16,12),rigMat(0xf0f0e8));
+    shellCore.scale.set(1.05,1.18,.58); shellCore.position.set(0,0,.16); shellCore.castShadow=true; shell.add(shellCore);
+    const shellBack=new THREE.Mesh(new THREE.SphereGeometry(.51,14,10),rigMat(0x171717));
+    shellBack.scale.set(1.12,1.18,.34); shellBack.position.set(0,0,.39); shellBack.castShadow=true; shell.add(shellBack);
+    const stripe=new THREE.Mesh(new THREE.BoxGeometry(.16,1.05,.08),rigMat(0xf4f4ed));
+    stripe.position.set(0,.02,.68); stripe.castShadow=true; shell.add(stripe);
+    shell.position.set(0,D.torsoH*.52,.30); shell.scale.set(.88,1.0,.72); g.add(shell);
+    parts.shell=shell; parts.shellBaseY=D.hipY+D.torsoH*.52; parts.shellBaseZ=.30; parts.shellBaseScale=.92;
+  }
   if(kind==='heatblast'){ for(let i=0;i<3;i++){ const f=new THREE.Mesh(new THREE.ConeGeometry(.12,.4+i*.1,5),parts.mats.accent); f.position.set((i-1)*.16,hs*1.1,0); f.rotation.z=(i-1)*.25; parts.head.add(f); } }
   if(kind==='ben'){ const hair=new THREE.Mesh(UB,rigMat(0x3a2718)); hair.scale.set(hs*1.06,.14,hs*1.06); hair.position.set(0,hs*1.02,.02); parts.head.add(hair); parts.mats.hair=hair.material; parts.all.push(hair.material); }
   if(fa){ /* upper pair red, lower pair accent already; shoulder pads are top-coloured */ }
-  if(kind==='cannonbolt'){
-    // Full enclosing shell: hidden (scale 0) while standing, grows to fully cover the body when curled.
-    const shell=new THREE.Group(), shellCenterY=D.hipY+D.torsoH/2*.9;
-    const core=new THREE.Mesh(new THREE.SphereGeometry(0.62,14,10),parts.mats.skin); core.castShadow=true; shell.add(core);
-    for(let i=0;i<4;i++){ const band=new THREE.Mesh(new THREE.TorusGeometry(0.63,0.045,6,16),parts.mats.accent); band.rotation.x=Math.PI/2; band.position.y=-0.35+i*0.24; band.castShadow=true; shell.add(band); }
-    shell.position.y=shellCenterY; shell.scale.setScalar(0.001); g.add(shell); parts.shell=shell; parts.shellBaseY=shellCenterY;
-  }
   const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
   o.userData.parts=parts; o.userData.kind=kind;
   return o;
@@ -1297,6 +1339,7 @@ const player = {
   form: BEN,
   alienIndex: 0, // index into ALIENS for the swipe cycle
   health: BEN.maxHealth, energy: BEN.maxEnergy,
+  omniTime: 0, omniMax: 18, omniCooldown: 0,
   atkTimer: 0, specialTimer: 0, speedBurstT: 0, invuln: 0,
   walkT: 0, attacking: 0, alive: true, flying: false,
   comboStep: 0,        // 0 = next hit is punch 1 (left), 1 = next hit is punch 2 (right), 2 = next hit is the heavy finisher
@@ -1314,7 +1357,11 @@ function getPortraitCanvas(kind){
 }
 
 function setForm(formDef, kind){
+  const isAlien = formDef.id !== 'ben';
+  if(isAlien && player.omniCooldown>0){ statusText('OMNITRIX RECHARGING'); return; }
   player.form = formDef; if(player.driving) setTimeout(()=>{ if(player.driving) player.model.visible=false; },0);
+  if(isAlien){ player.omniMax = formDef.omniTime || 18; player.omniTime = player.omniMax; }
+  else { player.omniTime = 0; }
   player.flying = false;
   scene.remove(player.model);
   player.model = buildCharacter(kind);
@@ -1353,6 +1400,7 @@ function statusText(t){
 }
 
 function cycleAlien(dir){
+  if(player.omniCooldown>0){ statusText('OMNITRIX RECHARGING'); return; }
   player.alienIndex = (player.alienIndex + dir + ALIENS.length) % ALIENS.length;
   const a = ALIENS[player.alienIndex];
   setForm(a, a.id);
@@ -1528,7 +1576,7 @@ function makeEnemy(type, x, z, y0){
     staggerT:0, knockVel:new THREE.Vector3(),
     repositionT:0, repositionDir:1, // used by ranged/elite to strafe while shooting
     alertedT:0, // set when alerted by a scream or nearby hit even if not yet in normal chase range
-    swing:null, swSide:false, hurtT:0,
+    swing:null, swSide:false, hurtT:0, reactionX:0, reactionZ:0, reactionSide:0, stumbleT:0,
   };
   enemies.push(en);
   return en;
@@ -1548,7 +1596,9 @@ function animateEnemies(dt){
     let atk=null; if(en.swing){ en.swing.left-=dt; if(en.swing.left>0) atk=atkInput(en.swing.kind,en.swing.left,en.swing.dur,{id:'enemy_'+en.type,amp:en.type==='brute'?1.15:1,tc:en.swing.tc,side:en.swSide}); else en.swing=null; }
     en.hurtT=Math.max(0,en.hurtT-dt);
     const hurt=Math.max(en.hurtT/.45, en.staggerT>0?Math.min(1,en.staggerT/.35):0);
-    animateRig(en.parts,dt,{pos:p,fwd:{x:_wd.x,z:_wd.z},grounded:true,moving:true,ws:(stats.yOff*2)/2.7*1.1,id:'enemy',aim:stats.ranged&&en.state==='chase'&&!(atk&&atk.kind!=='shoot'),atk,hurt,flee:false});
+    en.parts.anim.reactionX=en.reactionX||0; en.parts.anim.reactionZ=en.reactionZ||0; en.parts.anim.reactionSide=en.reactionSide||0;
+    const _ef=Math.hypot(en.speedX||0,en.speedZ||0);
+    animateRig(en.parts,dt,{pos:p,fwd:{x:_wd.x,z:_wd.z},grounded:true,moving:true,ws:(stats.yOff*2)/2.7*1.1,id:'enemy',aim:stats.ranged&&en.state==='chase'&&!(atk&&atk.kind!=='shoot'),atk,hurt,flee:false,terrainDelta:en.terrainDelta||0,terrainSlope:en.terrainSlope||0,terrainEvent:en.terrainEvent||0});
   }
 }
 // Death: the body stays in the world, crumples backwards along the hit direction, then clears.
@@ -1616,6 +1666,16 @@ function updateEnemySpawning(dt){
   }
 }
 
+function combatImpactFx(pos, dir, heavy, formId){
+  if(!pos) return;
+  const n=dir&&dir.lengthSq()>0.001?dir.clone().normalize():new THREE.Vector3(0,0,-1);
+  const count=heavy?7:4;
+  const col=formId==='heatblast'?0xff8a2a:formId==='diamondhead'?0x9ffcff:0xffffff;
+  debris(pos.clone().add(new THREE.Vector3(0,.35,0)),col,heavy?.42:.28,
+    new THREE.Vector3((Math.random()-.5)*2.4+n.x*2.0,.8+Math.random()*1.5,(Math.random()-.5)*2.4+n.z*2.0),heavy?.65:.4,true);
+  if(heavy) shakeCamera(.12);
+}
+
 function damageEnemy(en, dmg, dirAway, opts){
   if(!en.alive) return;
   if(en.npc){ npcHurt(en,dmg,dirAway,opts); return; }
@@ -1625,9 +1685,16 @@ function damageEnemy(en, dmg, dirAway, opts){
   if(dirAway){
     const knock = (opts && opts.knock!=null) ? opts.knock : 3;
     en.knockVel = en.knockVel || new THREE.Vector3();
-    en.recoilT = Math.max(en.recoilT||0, heavy?.38:.18);
-    en.knockVel.set(dirAway.x*knock, 0, dirAway.z*knock);
-    en.staggerT = Math.max(en.staggerT||0, heavy ? 0.5 : 0.22);
+    const n=dirAway.clone().setY(0); if(n.lengthSq()<.001) n.set(0,0,1); else n.normalize();
+    en.recoilT = Math.max(en.recoilT||0, heavy?.48:.24);
+    en.knockVel.set(n.x*knock, 0, n.z*knock);
+    en.staggerT = Math.max(en.staggerT||0, heavy ? 0.58 : 0.24);
+    en.stumbleT = Math.max(en.stumbleT||0, heavy ? .8 : .34);
+    en.reactionX=n.x; en.reactionZ=n.z;
+    const facing=en.mesh.getWorldDirection(new THREE.Vector3());
+    en.reactionSide = Math.max(-1,Math.min(1,facing.x*n.z-facing.z*n.x));
+    en.parts.anim.reactionX=en.reactionX; en.parts.anim.reactionZ=en.reactionZ; en.parts.anim.reactionSide=en.reactionSide;
+    combatImpactFx(en.mesh.position,n,heavy,player.form&&player.form.id);
   }
   if(heavy) Audio_.heavyHit(); else Audio_.hit();
   if(en.hp <= 0){
@@ -1666,8 +1733,29 @@ function updateEnemies(dt){
       en.knockVel.multiplyScalar(Math.max(0, 1 - dt*6)); // decays to ~0 over a few hundred ms
     }
     const stats = ENEMY_STATS[en.type] || ENEMY_STATS.normal;
+    if(!en.terrainT) en.terrainT=0;
+    const edx=(p.x-(en._tx??p.x)), edz=(p.z-(en._tz??p.z));
+    const em=Math.hypot(edx,edz);
+    if(em>0.01){
+      const fx=edx/em,fz=edz/em,ef=enemyGroundY(en,stats.yOff,dt)-stats.yOff;
+      const ahead=groundTopAt(p.x+fx*.55,p.z+fz*.55,ef), delta=ahead-ef;
+      en.terrainDelta=_damp(en.terrainDelta||0,delta,14,dt);
+      en.terrainSlope=_damp(en.terrainSlope||0,(ahead-groundTopAt(p.x-fx*.4,p.z-fz*.4,ef)),10,dt);
+      if(Math.abs(delta)>.18 && Math.abs(delta)<STEP_UP+.08){ en.terrainEvent=delta>0?1:-1; en.terrainT=.14; }
+    }
+    en._tx=p.x; en._tz=p.z; en.terrainT=Math.max(0,en.terrainT-dt); if(en.terrainT<=0) en.terrainEvent=0;
     en.staggerT = Math.max(0, (en.staggerT||0) - dt);
-    if(en.staggerT > 0){ p.y = enemyGroundY(en,stats.yOff,dt); en.recoilT=Math.max(0,(en.recoilT||0)-dt); return; } // hit-reaction pause: skip normal AI this frame
+    en.stumbleT = Math.max(0, (en.stumbleT||0) - dt);
+    if(en.staggerT > 0){
+      p.y = enemyGroundY(en,stats.yOff,dt); en.recoilT=Math.max(0,(en.recoilT||0)-dt); return;
+    }
+    // Recovery window: let the enemy catch its feet before resuming normal pursuit.
+    if(en.stumbleT > 0){
+      p.y = enemyGroundY(en,stats.yOff,dt);
+      const catchDir=en.knockVel&&en.knockVel.lengthSq()>0.001?en.knockVel.clone().normalize():new THREE.Vector3();
+      if(catchDir.lengthSq()>0.001){ const nx=p.x+catchDir.x*en.speed*.18*dt, nz=p.z+catchDir.z*en.speed*.18*dt; if(!blockedAt(nx,p.z,p.y-.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-.5)) p.z=nz; }
+      return;
+    }
 
     en.alertedT = Math.max(0, (en.alertedT||0) - dt);
 
@@ -2557,7 +2645,7 @@ function meleeAttack(){
       if(dist < effectiveRange){
         const angle = forward.angleTo(toEnemy.normalize());
         if(angle < 0.6){ // narrow frontal cone (~34 degrees each side) - enemies behind or well to the side are not hit
-          damageEnemy(en, dmg, toEnemy.normalize(), { heavy:isHeavy, knock });
+          damageEnemy(en, dmg, toEnemy.normalize(), { heavy:isHeavy, knock, formId:player.form.id });
           alienMeleeFx(player.form.id, en.mesh.position.clone(), isHeavy);
           hitSomething = true;
         }
@@ -3034,7 +3122,7 @@ function playerAnimate(parts,dt,moving){
   const atk = player.punchAnimT>0 ? atkInput(player.punchKind,player.punchAnimT,player.punchAnimDur||.25,{side:player.punchSide,id,amp:id==='echo_echo'?.85:1}) : null;
   const climb=!!player.onLadder;
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb,vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,carrying:!!carried,id,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y)});
+    swimming:player.swimming,carrying:!!carried,id,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),terrainDelta:player.terrainDelta||0,terrainSlope:player.terrainSlope||0,terrainEvent:player.terrainEvent||0});
 }
 function updatePlayerOnFoot(dt){
   updateKeyboardMove();
@@ -3044,6 +3132,17 @@ function updatePlayerOnFoot(dt){
   player.punchAnimT = Math.max(0, (player.punchAnimT||0) - dt);
   player.boostT = Math.max(0,(player.boostT||0)-dt); for(const k in actCd) actCd[k]=Math.max(0,actCd[k]-dt);
   player.specialTimer = Math.max(0, player.specialTimer - dt);
+  player.omniCooldown = Math.max(0, (player.omniCooldown||0) - dt);
+  if(player.form.id !== 'ben' && player.alive){
+    player.omniTime = Math.max(0, (player.omniTime||player.omniMax||18) - dt);
+    if(player.omniTime<=0){
+      statusText('OMNITRIX TIMEOUT');
+      Audio_.horn();
+      player.omniCooldown = 3.5;
+      revertToBen();
+      player.omniCooldown = 3.5;
+    }
+  }
   player.invuln = Math.max(0, player.invuln - dt);
   player.hurtT = Math.max(0,(player.hurtT||0) - dt);
   player.attacking = Math.max(0, player.attacking - dt);
@@ -3073,7 +3172,7 @@ function updatePlayerOnFoot(dt){
   else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*2.2); }
 
   // energy regen (paused briefly right after casting)
-  if(!player.superHeld && (player.specialTimer <= player.form.special?.cooldown - 0.15 || !player.form.special)){
+  if(!player.superHeld && player.specialTimer<=0){
     player.energy = Math.min(player.form.maxEnergy, player.energy + dt*8);
   }
   if(player.speedBurstT > 0){
@@ -3212,6 +3311,24 @@ function updatePlayerOnFoot(dt){
   const feetNow = player.pos.y-PLAYER_FEET;
   const groundY = climbing ? feetNow : groundTopAt(player.pos.x, player.pos.z, feetNow);
   const wasGround = player.onGround;
+  // Character/world contact: sample the surface a short distance ahead and behind the feet.
+  // This lets the rig anticipate steps, ramps and drops instead of reacting a frame too late.
+  if(!climbing && !player.flying && !player.swimming){
+    const moveLen=Math.hypot(player.gvel.x,player.gvel.z);
+    if(moveLen>0.05){
+      const fx=player.gvel.x/moveLen, fz=player.gvel.z/moveLen;
+      const ahead=groundTopAt(player.pos.x+fx*Math.min(.85,moveLen*dt+.45),player.pos.z+fz*Math.min(.85,moveLen*dt+.45),feetNow);
+      const behind=groundTopAt(player.pos.x-fx*.45,player.pos.z-fz*.45,feetNow);
+      const delta=ahead-groundY;
+      player.terrainDelta=_damp(player.terrainDelta||0,delta,18,dt);
+      player.terrainSlope=_damp(player.terrainSlope||0,(ahead-behind),12,dt);
+      if(Math.abs(delta)>.18 && Math.abs(delta)<STEP_UP+.08 && wasGround){
+        player.terrainEvent=delta>0?1:-1; player.terrainT=.16;
+      }
+    }
+  }
+  player.terrainT=Math.max(0,(player.terrainT||0)-dt);
+  if(player.terrainT<=0) player.terrainEvent=0;
   if(wasGround) player.rampVy = (groundY-(player._lastGround===undefined?groundY:player._lastGround))/Math.max(dt,0.001);
   player._lastGround = groundY;
 
@@ -3266,14 +3383,20 @@ function updatePlayerOnFoot(dt){
   // procedural walk animation
   const parts = player.model.userData.parts;
   if(player.form.id==='cannonbolt'){
-    // Curled: shrink the visible body (head/arms/legs/torso) to nothing and grow the shell sphere to
-    // fully cover it, so the silhouette actually reads as a ball rather than a person with tucked limbs.
+    // Two-stage transformation: compress the humanoid body, then pull the armored shell around it.
     const curl = player.rollT||0;
-    const bodyScale = 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
-    if(parts.hips) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
-    if(curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
-    if(parts.shell){ parts.shell.scale.setScalar(Math.max(0.001, curl)); parts.shell.position.y = parts.shellBaseY; }
-    if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
+    const bodyScale = Math.max(.001,1-_sm(curl));
+    const bodyParts=[parts.hips,parts.chest,parts.head,parts.leftArm,parts.rightArm,parts.leftLeg,parts.rightLeg];
+    for(const j of bodyParts) if(j) j.scale.setScalar(bodyScale);
+    if(curl<0.78) playerAnimate(parts, dt, moving);
+    if(parts.shell){
+      const shellGrow=THREE.MathUtils.lerp(parts.shellBaseScale||.92,1.12,_sm(curl));
+      parts.shell.scale.set(shellGrow, shellGrow, THREE.MathUtils.lerp(.72,1.02,_sm(curl)));
+      parts.shell.position.y=parts.shellBaseY;
+      parts.shell.position.z=THREE.MathUtils.lerp(parts.shellBaseZ||.30,.02,_sm(curl));
+      parts.shell.rotation.y=player.model.rotation.y;
+    }
+    if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(5+curl*16); player.model.rotation.x = player.rollSpin; }
     else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
   } else {
   if(moving && player.onGround) player.walkT += dt*8*speedMult;
