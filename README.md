@@ -72,3 +72,35 @@ back in gives the identical building, and nothing needs the network.
 
 Technical: colliders carry optional `bot` (vertical extent), and flags `nb` (non-blocking), `ramp`, `pyr`, `ladder`.
 `groundTopAt(x,z)` is unchanged; `groundTopAt(x,z,feetY)` returns the highest surface within a step of the feet.
+
+## Gameplay notes: Vehicles (Stage 8)
+
+- Parked cars are now drivable. Walk close and tap ENTER VEHICLE (left side, above the lock button); it becomes EXIT while
+  seated. While driving the alien ability buttons, lock and hotbar hide; the attack button is HORN and jump is BRAKE
+  (handbrake). Stick up/down = throttle / brake-then-reverse, left/right = steer. Keyboard: WASD, V enter/exit, Space brake.
+- Arcade model: speed-scaled steering, wall probes with sliding, crash damage, car-vs-car bumps, ramps/drop-offs.
+  Cars have 100 HP: smoke below 45, explode at 0 (the wreck burns, hurts nearby enemies/you, then clears after ~16 s).
+  A driver ejected by an explosion takes damage. Enemy hits on a driver mostly damage the car.
+- Running enemies/NPCs over hurts them and throws them. Cars you shove or ram also hit things while sliding.
+- NPC traffic (LOW 2 / MEDIUM 4 / HIGH 6 cars) drives the road lanes, brakes for people/cars ahead, despawns when far or
+  stuck. You can take any traffic car. Cars asleep beyond ~70 units are not simulated.
+- Aliens: Four Arms punches shove/dent cars, his finisher and SLAM flip them (flip again to right them), SMASH heavily
+  damages them, and he can still lift and throw one. Heatblast fireballs/flame/melee set cars burning. XLR8 tackles cars
+  (a flip at near-max speed) and easily outruns traffic. Cannonbolt ramming smashes/flips them. Ice Diamondhead spray still works.
+- Parked cars are unloaded with their chunk unless someone is in them.
+
+## Side quest: character animation rebuild
+
+Every character (Ben, all aliens, Echo replicas, civilians, gang members, hostile enemies) now uses one jointed rig
+(`buildRig`) driven by one procedural animator (`animateRig`) instead of rigid single-box limbs.
+
+- Joints: hips, chest twist, neck/head, shoulder -> elbow -> hand, hip -> knee -> foot. Four Arms has two full arm chains per side.
+- Locomotion: idle (breathing, weight shift, head scan), walk, run and XLR8 sprint blend by real speed; opposite arm/leg swing,
+  knee flex, pelvis/chest counter-twist, hip bob, forward lean, backpedal when moving away from facing, landing squash,
+  rising/falling jump poses, ladder climbing, flying/levitating/swimming, carrying, panic run.
+- Punching: coil -> accelerating strike -> hold -> recover, with the hit landing at the same point the damage is applied
+  (40% / 45% of the swing). Torso and hips rotate into the punch, the opposite foot steps forward, the free hand guards.
+  The heavy finisher is a two-handed overhead slam with a full-body lunge. Four Arms hooks with the diagonal lower arm.
+- Enemies: hit flinch, melee swings (brute overhead slam, speed jabs), aimed pistol pose with recoil, a crumple-and-fall death
+  that clears after ~2 s. Also fixed: respawned enemies no longer register twice in the enemy list.
+- `player.hurtT` drives the player's own hit flinch. Standing Cannonbolt now walks and punches; curling still swaps to the ball.
