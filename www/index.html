@@ -104,6 +104,24 @@
   #btn-special svg{stroke:var(--energy);}
   #btn-special.cooldown{opacity:0.35;}
 
+  #veh-btn{position:absolute;left:max(20px,env(safe-area-inset-left,20px));bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 190px);
+    height:44px;padding:0 16px 0 12px;border-radius:22px;display:none;align-items:center;gap:8px;pointer-events:auto;z-index:25;
+    background:rgba(10,18,15,.72);border:2px solid rgba(57,255,138,.7);color:#dfffee;font-size:12px;font-weight:700;letter-spacing:1.5px;
+    box-shadow:0 0 12px rgba(57,255,138,.35);transition:transform .08s,background .12s,opacity .12s;}
+  #veh-btn svg{width:24px;height:24px;stroke:#39ff8a;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  #veh-btn.active{transform:scale(.92);background:rgba(57,255,138,.25);}
+  #veh-btn.exit{border-color:rgba(255,190,80,.85);box-shadow:0 0 12px rgba(255,170,60,.4);}
+  #veh-btn.exit svg{stroke:#ffbe50;}
+  #veh-hud{position:absolute;top:max(10px,env(safe-area-inset-top,10px));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:10px;
+    padding:6px 14px;border-radius:16px;background:rgba(8,14,12,.68);border:1px solid rgba(57,255,138,.45);color:#dfffee;font-size:11px;
+    letter-spacing:1.5px;font-weight:700;pointer-events:none;z-index:24;}
+  #veh-hud .vtrack{width:70px;height:7px;border-radius:4px;background:rgba(255,255,255,.14);overflow:hidden;}
+  #veh-hud .vtrack i{display:block;height:100%;width:100%;background:#39ff8a;transition:background .2s;}
+  body.driving #actions,body.driving #lock-btn,body.driving #btn-special,body.driving #hotbar{display:none !important;}
+  body.driving #btn-attack svg{display:none;}
+  body.driving #btn-attack::after{content:'HORN';font-size:11px;font-weight:700;letter-spacing:1px;color:var(--green);}
+  body.driving #btn-jump svg{display:none;}
+  body.driving #btn-jump::after{content:'BRAKE';font-size:10px;font-weight:700;letter-spacing:1px;color:var(--green);}
   #status-text{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);color:#fff;font-size:12px;
     opacity:0;letter-spacing:1px;pointer-events:none;}
   #status-text.show{opacity:0.85;transition:opacity 0.2s;}
@@ -206,6 +224,8 @@
   <div id="crosshair"></div>
   <div id="status-text"></div>
 
+  <div id="veh-hud"><span id="veh-spd">0</span><div class="vtrack"><i id="veh-hp"></i></div></div>
+  <div id="veh-btn"><svg viewBox="0 0 24 24"><path d="M3 15v-3l2-5h14l2 5v3M3 15h18M3 15v3h3v-3M18 15v3h3v-3"/><circle cx="7.5" cy="15" r="1"/><circle cx="16.5" cy="15" r="1"/></svg><b id="veh-btn-t">ENTER VEHICLE</b></div>
   <div id="lock-btn" title="Lock target"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="1.2"/></svg></div>
   <div id="hotbar"></div>
   <div id="joystick-zone"><div id="joystick-base"></div><div id="joystick-stick"></div></div>
@@ -289,6 +309,8 @@ const Audio_ = (function(){
   }
   return {
     footstep(){ noise(0.06, 0.05); },
+    horn(){ beep(330,0.2,'square',0.08); setTimeout(()=>beep(415,0.2,'square',0.06),10); },
+    crash(){ noise(0.25,0.22); beep(70,0.2,'sawtooth',0.18,40); },
     jump(){ beep(300,0.15,'square',0.12,520); },
     land(){ noise(0.08,0.12); },
     breakBlock(){ noise(0.12,0.18); },
@@ -314,9 +336,9 @@ const Audio_ = (function(){
 ========================================================================= */
 const QUALITY = { level:'MEDIUM',
   presets:{
-    LOW:{shadow:false,shadowSize:512,fogFar:44,pixelRatio:1,renderDist:22},
-    MEDIUM:{shadow:true,shadowSize:1024,fogFar:70,pixelRatio:Math.min(devicePixelRatio,1.5),renderDist:32},
-    HIGH:{shadow:true,shadowSize:2048,fogFar:100,pixelRatio:Math.min(devicePixelRatio,2),renderDist:42}
+    LOW:{shadow:false,shadowSize:512,fogFar:58,pixelRatio:1,renderDist:28},
+    MEDIUM:{shadow:true,shadowSize:1024,fogFar:92,pixelRatio:Math.min(devicePixelRatio,1.5),renderDist:40},
+    HIGH:{shadow:true,shadowSize:2048,fogFar:132,pixelRatio:Math.min(devicePixelRatio,2),renderDist:54}
   }
 };
 
@@ -324,7 +346,7 @@ const QUALITY = { level:'MEDIUM',
    RENDERER / SCENE / CAMERA
 ========================================================================= */
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 400);
+const camera = new THREE.PerspectiveCamera(68, innerWidth/innerHeight, 0.1, 520);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -342,8 +364,8 @@ function applyQuality(){
   renderer.shadowMap.enabled = p.shadow;
   sun.castShadow = p.shadow;
   sun.shadow.mapSize.set(p.shadowSize, p.shadowSize);
-  sun.shadow.camera.left=-45; sun.shadow.camera.right=45;
-  sun.shadow.camera.top=45; sun.shadow.camera.bottom=-45;
+  sun.shadow.camera.left=-58; sun.shadow.camera.right=58;
+  sun.shadow.camera.top=58; sun.shadow.camera.bottom=-58;
   sun.shadow.camera.far=120;
   scene.fog = new THREE.Fog(0x8fc7f2, 14, p.fogFar);
 }
@@ -360,11 +382,6 @@ const props=[], fx=[], actCd={}; let carried=null, timeScale=1, tornado=null, ac
 const DEB=new THREE.BoxGeometry(1,1,1);
 
 /* =========================================================================
-   STAGE 7 — VERTICAL CITY
-   Rooftops, balconies, fire escapes and deterministic stair access are layered onto the existing
-   streamed city. The original chunk lifecycle remains authoritative; these surfaces are chunk-owned.
-========================================================================= */
-/* =========================================================================
    WORLD / VOXEL TERRAIN  —  CHUNK STREAMING
    The world is logically WORLD x WORLD columns, but nothing is generated
    or held in memory until the player gets near it. Chunks are CHUNK x CHUNK
@@ -380,8 +397,8 @@ const BLOCK_TYPES = ['grass','dirt','stone','sand','wood','leaves','asphalt','co
 const BLOCK_COLOR = { grass:0x5fae3c, dirt:0x6b4a2d, stone:0x8a8a8a, sand:0xdfd0a0, wood:0x6b4a2d, leaves:0x2e8b3d, asphalt:0x3a3a40, concrete:0xb4b4ac };
 
 const CHUNK = 16;                  // columns per chunk side — matches the old city-cell grid exactly
-const LOAD_RADIUS = 3;             // chunks around the player kept live (3 => 7x7 chunk area, 112 units across)
-const UNLOAD_RADIUS = 4;           // hysteresis: unload only past this, so edge-crossing doesn't thrash
+const LOAD_RADIUS = 5;             // chunks around the player kept live (3 => 7x7 chunk area, 112 units across)
+const UNLOAD_RADIUS = 6;           // hysteresis: unload only past this, so edge-crossing doesn't thrash
 
 // Deterministic per-chunk RNG so a chunk regenerates identically every time it streams back in.
 function chunkSeed(cx,cz){ let h = (cx*374761393 + cz*668265263) ^ (cx*2246822519); h = (h ^ (h>>>15)) * 2246822519; h = (h ^ (h>>>13)) >>> 0; return h; }
@@ -472,114 +489,24 @@ function chunkAtColumn(x,z){ const [cx,cz]=chunkCoordOf(x,z); return chunks.get(
 // ---- city props (buildings/roads/trees/cars), scoped per chunk ----
 const colliders=[], cityGroup=new THREE.Group(); scene.add(cityGroup);
 const UB=new THREE.BoxGeometry(1,1,1), GY=1.5;
-// Stage 7: walkable vertical-city surfaces. These are kept separate from wall colliders so
-// rooftops can be real gameplay spaces without turning the whole building into a solid block.
-const walkSurfaces=[];
-function blockedAt(x,z,fy){
-  for(let i=colliders.length-1;i>=0;i--){
-    const c=colliders[i];
-    if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1){
-      // Once the player is at/above the roof access height, the roof itself is the walkable
-      // surface; the building's old volume collider must not prevent stepping onto it.
-      const accessY = c.roofAccessY===undefined ? c.top : c.roofAccessY;
-      if(fy < accessY-0.3) return true;
-    }
-  }
-  return false;
-}
-function cityScaledPoint(x,z,ownerList){
-  const cx=ownerList&&ownerList._centerX!==undefined?ownerList._centerX:0;
-  const cz=ownerList&&ownerList._centerZ!==undefined?ownerList._centerZ:0;
-  const k=ownerList&&ownerList._cityScale||CITY_PRESENTATION_SCALE;
-  return [cx+(x-cx)*k, cz+(z-cz)*k];
-}
-function cityScaledY(y,ownerList){
-  const k=ownerList&&ownerList._cityScale||CITY_PRESENTATION_SCALE;
-  return GY+(y-GY)*k;
-}
-function cbox(cx,by,cz,w,h,d,mat,solid,ownerList,opts){
-  const k=ownerList&&ownerList._cityScale||CITY_PRESENTATION_SCALE;
-  const [sx,sz]=cityScaledPoint(cx,cz,ownerList);
-  const sy=cityScaledY(by,ownerList), sh=h*k, sw=w*k, sd=d*k;
-  const m=new THREE.Mesh(UB,mat); m.scale.set(sw,sh,sd); m.position.set(sx,sy+sh/2,sz); m.castShadow=true; cityGroup.add(m);
+// Stage 7 collider model. A collider is an AABB {x0,x1,z0,z1,top,bot?}. Extra flags:
+//   nb     - never blocks sideways (ramps, roof pitch, ladder zones) but can still be stood on
+//   ramp   - sloped walking surface  {ax:'x'|'z', s, e, y0, y1}
+//   pyr    - pitched roof surface     {cx,cz,hw,y0,h}
+//   ladder - climb zone               {nx,nz} (outward wall normal)
+// Blocking is "body overlaps the box vertically and the feet are more than a step below the top", so thin
+// balconies/landings can be walked under, and stairs/low ledges can be walked up.
+const STEP_UP = 0.55, BODY_H = 1.7, REACH_UP = 1.6;
+function blockedAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy<c.top-STEP_UP&&(c.bot===undefined||fy+BODY_H>c.bot)) return true; } return false; }
+// Highest solid ledge top (within arm's reach above the feet) at this point, for mantling. null if none.
+function ledgeAt(x,z,fy){ let best=null; for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&c.top>fy+STEP_UP&&c.top<=fy+REACH_UP&&(c.bot===undefined||c.bot<fy+BODY_H)){ if(best===null||c.top>best) best=c.top; } } return best; }
+function ladderAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.ladder&&x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy>=c.bot-0.6&&fy<=c.top+0.2) return c; } return null; }
+function addCol(owner,c){ colliders.push(c); owner.colliders.push(c); return c; }
+function cbox(cx,by,cz,w,h,d,mat,solid,ownerList){
+  const m=new THREE.Mesh(UB,mat); m.scale.set(w,h,d); m.position.set(cx,by+h/2,cz); m.castShadow=true; cityGroup.add(m);
   ownerList.meshes.push(m);
-  if(solid){
-    const c={x0:sx-sw/2,x1:sx+sw/2,z0:sz-sd/2,z1:sz+sd/2,top:sy+sh,
-      roofAccessY:opts&&opts.roofAccessY!==undefined?cityScaledY(opts.roofAccessY,ownerList):sy+sh};
-    colliders.push(c); ownerList.colliders.push(c);
-  }
+  if(solid){ const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h,bot:by}; colliders.push(c); ownerList.colliders.push(c); }
   return m;
-}
-function addWalkSurface(x0,x1,z0,z1,top,ownerList){
-  const [sx0,sz0]=cityScaledPoint(x0,z0,ownerList), [sx1,sz1]=cityScaledPoint(x1,z1,ownerList);
-  const s={x0:Math.min(sx0,sx1),x1:Math.max(sx0,sx1),z0:Math.min(sz0,sz1),z1:Math.max(sz0,sz1),top:cityScaledY(top,ownerList)};
-  walkSurfaces.push(s); ownerList.platforms.push(s); return s;
-}
-function roofDeck(cx,cz,w,d,top,ownerList,style){
-  addWalkSurface(cx-w/2+0.12,cx+w/2-0.12,cz-d/2+0.12,cz+d/2-0.12,top,ownerList);
-  const deck=cbox(cx,top-0.08,cz,w,.16,d,flat(style||0x3d4248),false,ownerList);
-  deck.receiveShadow=true;
-  // Small rooftop service units make the roof a usable space rather than an empty box.
-  const unitMat=flat(0x555b62);
-  [[-w*.22,-d*.18],[w*.18,-d*.2],[w*.22,d*.18]].forEach(([ox,oz],i)=>{
-    cbox(cx+ox,top+.02,cz+oz,.9+.15*(i%2),.65,.65,unitMat,false,ownerList);
-  });
-}
-function rooftopProps(cx,cz,w,d,top,ownerList,rng,style){
-  roofDeck(cx,cz,w,d,top,ownerList,style);
-  // Low parapet sections leave an obvious entry/exit gap at the stair side.
-  const pm=flat(0x4b5056), gapZ=cz+d/2-.35;
-  cbox(cx-w/2+.08,top+.1,cz,.16,.7,d-.8,pm,false,ownerList);
-  cbox(cx+w/2-.08,top+.1,cz,.16,.7,d-.8,pm,false,ownerList);
-  cbox(cx,top+.1,cz-d/2+.08,w-.8,.7,.16,pm,false,ownerList);
-  // Balcony/roof vegetation or antenna variety.
-  if(rng()<0.5) cbox(cx+1.4,top+.45,cz-1.1,.55,.8,.55,flat(0x2f7d4a),false,ownerList);
-}
-function accessStairs(cx,cz,roofTop,ownerList,side){
-  const sx=cx + (side==='east' ? 4.9 : side==='west' ? -4.9 : 0);
-  const sz=cz + (side==='south' ? 4.9 : side==='north' ? -4.9 : 0);
-  const vertical = side==='east'||side==='west';
-  const dir = vertical ? (side==='east'?1:-1) : (side==='south'?1:-1);
-  const steps=Math.max(5,Math.min(12,Math.ceil((roofTop-(GY+.55))/0.72)));
-  const run=Math.min(5.2,Math.max(3.8,steps*.45));
-  const stepMat=flat(0x666b70);
-  // Stairs sit outside the building footprint. Each step is both visible geometry and a
-  // walkable surface, so normal movement code can climb them without special-case controls.
-  for(let i=0;i<steps;i++){
-    const t=(i+1)/steps, h=GY+.5+t*(roofTop-(GY+.5));
-    // Start at street level outside the building and finish at the building wall,
-    // so the final tread meets the roof deck instead of stopping beside it.
-    const along=(1-t)*run;
-    const x=vertical?sx+along*dir:cx;
-    const z=vertical?cz:sz+along*dir;
-    const w=vertical?1.8:.9, d=vertical?.9:1.8;
-    cbox(x,h-.16,z,w,.32,d,stepMat,false,ownerList);
-    addWalkSurface(x-w/2,x+w/2,z-d/2,z+d/2,h,ownerList);
-  }
-  // A simple handrail communicates the route visually.
-  const railMat=flat(0x777d82);
-  const railX=vertical?sx+dir*run/2:cx;
-  const railZ=vertical?cz:sz+dir*run/2;
-  cbox(railX, GY+.9, railZ, vertical? .12:1.4, 1.4, vertical?1.4:.12, railMat,false,ownerList);
-}
-function accessRamp(cx,cz,roofTop,ownerList){
-  const h=roofTop-(GY+.5), run=6.0, rampMat=flat(0x5a6067), k=ownerList&&ownerList._cityScale||CITY_PRESENTATION_SCALE;
-  const [rx,rz]=cityScaledPoint(cx+4.9,cz,ownerList);
-  const rh=h*k, rr=run*k;
-  const ramp=new THREE.Mesh(new THREE.BoxGeometry(1.9*k,.28*k,rr),rampMat);
-  ramp.rotation.x=-Math.atan2(rh,rr); ramp.position.set(rx,GY+.5*k+rh*.5,rz);
-  ramp.castShadow=true; cityGroup.add(ramp); ownerList.meshes.push(ramp);
-}
-function fireEscape(cx,cz,roofTop,ownerList){
-  const z=cz-4.15, fm=flat(0x3f464d);
-  const levels=Math.max(1,Math.floor((roofTop-GY)/4));
-  for(let i=0;i<levels;i++){
-    const y=GY+1.2+i*4;
-    cbox(cx+4.25,y,z,1.5,.18,2.2,fm,false,ownerList);
-    addWalkSurface(cx+3.5,cx+5.0,z-1.0,z+1.0,y+.1,ownerList);
-    cbox(cx+4.25,y,z-1.0,1.5,1.1,.08,fm,false,ownerList);
-  }
-  cbox(cx+4.25,GY,z, .12, roofTop-GY+1.0,.12,fm,false,ownerList);
 }
 function wallMat(base,win,cols,rows){
   const cv=document.createElement('canvas'); cv.width=cv.height=32; const g=cv.getContext('2d');
@@ -597,59 +524,109 @@ const rnd=n=>Math.floor(Math.random()*n); // global RNG helper used by NPCs/debr
 const PAST=['#e8d5b0','#d9a8a0','#b7d3c2','#c9c3e0','#f0e2a0'];
 const CARCOL=[0xd63a3a,0x2f6fd6,0xe8c33a,0xf0f0f0,0x2a2a2e,0x3aa860];
 
-function house(cx,cz,rnd,ownerList){
-  const h=3.2;
-  cbox(cx,GY,cz,6,h,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true,ownerList);
-  const r=new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4),flat(0x8a3b2a)); r.rotation.y=Math.PI/4; r.position.set(cx,GY+4.3,cz); r.castShadow=true; cityGroup.add(r); ownerList.meshes.push(r);
-  cbox(cx,GY,cz+3.02,1.1,2,.1,flat(0x5a3a22),false,ownerList); cbox(cx+2,GY+3.2,cz-1,.8,2,.8,flat(0x7a4a3a),false,ownerList);
-  // A low rear balcony gives low-rise structures a playable perch without pretending the pitched roof is flat.
-  const top=GY+h; cbox(cx-1.7,top,cz-3.35,3.0,.16,1.6,flat(0x6a4a34),false,ownerList);
-  addWalkSurface(cx-3.0,cx-.4,cz-4.0,cz-2.8,top+.08,ownerList);
-  cbox(cx-1.7,top+.1,cz-4.0,3,.9,.1,flat(0x555a5e),false,ownerList);
-  ownerList.treeSpots.push([cx-4,cz-4],[cx+4,cz-4]);
+// ---- Stage 7: vertical-city building blocks --------------------------------------------------------
+// Instanced box batch (one draw call for many small parts: treads, rails, rungs).
+function instBoxes(list,color,owner){
+  const m=new THREE.InstancedMesh(UB,flat(color),list.length);
+  list.forEach((q,i)=>{ dummy.position.set(q.x,q.y,q.z); dummy.rotation.set(q.rx||0,0,0); dummy.scale.set(q.sx,q.sy,q.sz); dummy.updateMatrix(); m.setMatrixAt(i,dummy.matrix); });
+  dummy.rotation.set(0,0,0); m.count=list.length; m.frustumCulled=false; cityGroup.add(m); owner.meshes.push(m); return m;
 }
-function shop(cx,cz,rnd,ownerList){
-  const h=4, top=GY+h;
-  cbox(cx,GY,cz,8,h,7,wallMat('#cfcfd6','#bfe6f5',4,1),true,ownerList);
-  cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),false,ownerList);
-  cbox(cx,GY+2.6,cz+3.9,8,.5,1.4,flat([0xd85a4a,0x4a7bd8,0xd8b84a][rnd(3)]),false,ownerList);
-  cbox(cx,GY+3.3,cz+3.6,5,.9,.2,signMat(['CAFE','MARKET','PIZZA','BOOKS'][rnd(4)],'#222'),false,ownerList);
-  rooftopProps(cx,cz,8,7,top,ownerList,rnd,0x555560); accessStairs(cx,cz,top,ownerList,'south');
+// Zig-zag exterior fire escape on a building's +X face. n flights, each rising H, alternating lanes/directions,
+// with a landing at every turn. Flights are smooth ramp colliders (nb) so walking, XLR8 sprinting and replica
+// following are all simple; the visible treads are cosmetic steps along the same line.
+function fireEscape(fx,zA,zB,n,H,y0,owner){
+  const W=1.2, NS=7, L=zB-zA, tr=[], rl=[], lanes=[fx+0.75,fx+2.05], run=L/NS;
+  for(let k=0;k<n;k++){
+    const ln=k%2, xc=lanes[ln], ya=y0+k*H, yb=ya+H;
+    const zs=ln===0?zA:zB, ze=ln===0?zB:zA, sg=Math.sign(ze-zs);
+    addCol(owner,{x0:xc-W/2,x1:xc+W/2,z0:zA,z1:zB,top:yb,bot:ya,nb:true,ramp:{ax:'z',s:zs,e:ze,y0:ya,y1:yb}});
+    for(let i=0;i<NS;i++){ const t=(i+.5)/NS; tr.push({x:xc,y:ya+H*(i+1)/NS-0.06,z:zs+(ze-zs)*t,sx:W,sy:.12,sz:Math.abs(run)+.04}); }
+    const ang=-Math.atan2(H,L)*sg, len=Math.hypot(H,L), zc=(zA+zB)/2;
+    [-1,1].forEach(sd=>rl.push({x:xc+sd*(W/2-.03),y:ya+H/2+.95,z:zc,sx:.05,sy:.05,sz:len,rx:ang}));
+    const lz0 = ze===zB ? zB : zA-1.2, lx0=fx+0.1, lx1=fx+2.7;
+    addCol(owner,{x0:lx0,x1:lx1,z0:lz0,z1:lz0+1.2,bot:yb-0.2,top:yb});
+    tr.push({x:(lx0+lx1)/2,y:yb-0.1,z:lz0+.6,sx:lx1-lx0,sy:.2,sz:1.2});
+    rl.push({x:lx1-.03,y:yb+.9,z:lz0+.6,sx:.05,sy:.05,sz:1.2});
+    rl.push({x:(lx0+lx1)/2,y:yb+.9,z:ze===zB?lz0+1.17:lz0+.03,sx:lx1-lx0,sy:.05,sz:.05});
+  }
+  instBoxes(tr,0x4a4f57,owner); instBoxes(rl,0xc9ced6,owner);
 }
-function apartment(cx,cz,rnd,ownerList){
-  const h=6+rnd(3)*3, top=GY+h;
-  cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList);
-  cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),false,ownerList);
-  rooftopProps(cx,cz,7,7,top,ownerList,rnd,0x444444);
-  accessStairs(cx,cz,top,ownerList,'east'); fireEscape(cx,cz,top,ownerList);
-  // Balconies on alternating sides create intermediate fighting/landing points.
-  for(let i=0;i<Math.max(1,Math.floor(h/3));i++){
-    const y=GY+2.2+i*3;
-    cbox(cx-3.8,y,cz,1.5,.16,2.0,flat(0x5d4634),false,ownerList);
-    cbox(cx-4.45,y+.1,cz,0.1,.9,2.0,flat(0x555a5e),false,ownerList);
-    addWalkSurface(cx-4.55,cx-3.7,cz-1,cz+1,y+.08,ownerList);
+// Wall ladder. (x,z) is the point on the wall face, (nx,nz) the outward normal. Face it and push forward to climb.
+function ladder(x,z,nx,nz,y0,y1,owner){
+  const dep=0.9, hw=0.6;
+  addCol(owner,{ bot:y0, top:y1, nb:true, ladder:{nx,nz},
+    x0:nx?Math.min(x,x+nx*dep):x-hw, x1:nx?Math.max(x,x+nx*dep):x+hw,
+    z0:nz?Math.min(z,z+nz*dep):z-hw, z1:nz?Math.max(z,z+nz*dep):z+hw });
+  const px=x+nx*0.08, pz=z+nz*0.08, len=y1-y0, tx=nz?1:0, tz=nx?1:0, q=[];
+  [-1,1].forEach(sd=>q.push({x:px+tx*.3*sd,y:(y0+y1)/2,z:pz+tz*.3*sd,sx:.06,sy:len,sz:.06}));
+  for(let y=y0+.3;y<y1;y+=.45) q.push({x:px,y,z:pz,sx:tx?.66:.05,sy:.05,sz:tz?.66:.05});
+  instBoxes(q,0xd8b24a,owner);
+}
+const railMat = new THREE.MeshLambertMaterial({color:0x9aa0a8,transparent:true,opacity:.55});
+// Balcony slab sticking out of a wall (solid, thin: walk under it, land on it). faceX = wall x, dir = -1 west / +1 east.
+function balcony(faceX,dir,cz,level,owner){
+  const cxp=faceX+dir*0.65;
+  cbox(cxp,level-0.2,cz,1.3,0.2,3,flat(0x55575e),true,owner);
+  const r1=cbox(faceX+dir*1.27,level,cz,.06,.85,3,railMat,false,owner);
+  cbox(cxp,level,cz-1.47,1.3,.85,.06,railMat,false,owner); cbox(cxp,level,cz+1.47,1.3,.85,.06,railMat,false,owner);
+}
+// Solid rooftop clutter (crates, AC units, vents). keepEast leaves the fire-escape arrival side clear.
+function roofProps(cx,cz,roofY,hw,hd,owner,keepEast){
+  const vr=owner.vr, T=[[1.3,1.0,1.3,0x8a8f96],[1.0,1.0,1.0,0x9a6b3a],[1.7,0.75,0.9,0xb9c0c8],[0.9,1.5,0.9,0x707880]];
+  const n=2+Math.floor(vr()*3);
+  for(let i=0;i<n;i++){
+    const t=T[Math.floor(vr()*4)], spanX=2*hw-2.4-(keepEast?2.4:0);
+    if(spanX<=0) continue;
+    const px=cx-hw+1.2+vr()*spanX, pz=cz-hd+1.2+vr()*(2*hd-2.4);
+    cbox(px,roofY,pz,t[0],t[1],t[2],flat(t[3]),true,owner);
   }
 }
+
+function house(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz,6,3.2,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true,ownerList);
+  const r=new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4),flat(0x8a3b2a)); r.rotation.y=Math.PI/4; r.position.set(cx,GY+4.3,cz); r.castShadow=true; cityGroup.add(r); ownerList.meshes.push(r);
+  cbox(cx,GY,cz+3.02,1.1,2,.1,flat(0x5a3a22),false,ownerList); cbox(cx+2,GY+3.2,cz-1,.8,2,.8,flat(0x7a4a3a),true,ownerList);
+  ownerList.treeSpots.push([cx-4,cz-4],[cx+4,cz-4]);
+  // walkable pitched roof, a side ladder up to the eave, a garage annex and a porch deck to hop up from
+  addCol(ownerList,{x0:cx-3.54,x1:cx+3.54,z0:cz-3.54,z1:cz+3.54,top:GY+3.2,bot:GY+3.2,nb:true,pyr:{cx,cz,hw:3.54,y0:GY+3.2,h:2.2}});
+  ladder(cx+1.2,cz-3,0,-1,GY,GY+3.2,ownerList);
+  cbox(cx+4.4,GY,cz+.5,2.8,1.5,3.6,flat(0xb8b0a0),true,ownerList);
+  cbox(cx,GY,cz+3.9,2.6,.45,1.7,flat(0x8a8a8a),true,ownerList);
+}
+function shop(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz,8,4,7,wallMat('#cfcfd6','#bfe6f5',4,1),true,ownerList); cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),true,ownerList);
+  cbox(cx,GY+2.6,cz+3.9,8,.5,1.4,flat([0xd85a4a,0x4a7bd8,0xd8b84a][rnd(3)]),false,ownerList);
+  cbox(cx,GY+3.3,cz+3.6,5,.9,.2,signMat(['CAFE','MARKET','PIZZA','BOOKS'][rnd(4)],'#222'),false,ownerList);
+  ladder(cx-4,cz,-1,0,GY,GY+4,ownerList);
+  roofProps(cx,cz,GY+4.4,4,3.5,ownerList,false);
+  ownerList.roofSpots.push([cx+1,cz,GY+4.4]);
+}
+function apartment(cx,cz,rnd,ownerList){
+  const h=6+rnd(3)*3, n=h/3, vr=ownerList.vr;
+  cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList); cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),true,ownerList);
+  fireEscape(cx+3.5,cz-2.6,cz+2.6,n,3,GY,ownerList);
+  for(let k=1;k<n;k++) if(vr()<.6) balcony(cx-3.5,-1,cz+(vr()-.5)*2,GY+k*3,ownerList);
+  roofProps(cx,cz,GY+h+.4,3.5,3.5,ownerList,true);
+  ownerList.roofSpots.push([cx-1,cz,GY+h+.4]);
+}
 function tower(cx,cz,rnd,ownerList){
-  const h=18+rnd(4)*5, top=GY+h;
-  cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList);
-  cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),false,ownerList);
-  cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList);
-  rooftopProps(cx,cz,8,8,top,ownerList,rnd,0x333a44); accessStairs(cx,cz,top,ownerList,'west'); fireEscape(cx,cz,top,ownerList);
-  // Deep balconies at two heights make towers useful traversal points for flying and jumping.
-  [Math.max(GY+5,top*.38), Math.max(GY+10,top*.68)].forEach((y,i)=>{
-    cbox(cx+(i?4.2:-4.2),y,cz,1.6,.18,3.0,flat(0x4a4f58),false,ownerList);
-    addWalkSurface(cx+(i?3.7:-5.0),cx+(i?5.0:-3.7),cz-1.5,cz+1.5,y+.09,ownerList);
-  });
+  const h=18+rnd(4)*5, n=Math.min(12,Math.round(h/3)), vr=ownerList.vr;
+  cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList); cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),true,ownerList); cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList);
+  fireEscape(cx+4,cz-3.2,cz+3.2,n,h/n,GY,ownerList);
+  for(let k=2;k<n;k+=2) if(vr()<.45) balcony(cx-4,-1,cz+(vr()-.5)*3,GY+k*(h/n),ownerList);
+  cbox(cx-2,GY+h+.5,cz-2.2,1.8,2.2,1.8,flat(0x8a5a3a),true,ownerList); // water tank
+  roofProps(cx,cz,GY+h+.5,4,4,ownerList,true);
+  ownerList.roofSpots.push([cx+.5,cz+1.5,GY+h+.5]);
 }
 function school(cx,cz,rnd,ownerList){
-  cbox(cx,GY,cz-2.5,9.4,5.5,4,wallMat('#c9553a','#cfe8f5',6,2),true,ownerList); cbox(cx,GY+5.5,cz-2.5,9.8,.5,4.4,flat(0x333333),false,ownerList);
-  cbox(cx,GY+6,cz-2.5,2.6,3.5,2.6,wallMat('#c9553a','#ffe28a',1,1),false,ownerList);
+  cbox(cx,GY,cz-2.5,9.4,5.5,4,wallMat('#c9553a','#cfe8f5',6,2),true,ownerList); cbox(cx,GY+5.5,cz-2.5,9.8,.5,4.4,flat(0x333333),true,ownerList);
+  cbox(cx,GY+6,cz-2.5,2.6,3.5,2.6,wallMat('#c9553a','#ffe28a',1,1),true,ownerList);
   cbox(cx,GY+3.4,cz-.4,6,1,.3,signMat('SCHOOL','#1a4b8c'),false,ownerList);
   cbox(cx-3.5,GY,cz+3,.15,7,.15,flat(0xdddddd),false,ownerList); cbox(cx-3.1,GY+6,cz+3,.9,.6,.05,flat(0xdd3333),false,ownerList);
   [-1,1].forEach(s=>cbox(cx+s*3.5,GY,cz+3.6,.2,2,2.5,flat(0xffffff),false,ownerList));
-  rooftopProps(cx,cz-2.5,9.4,4, GY+5.5, ownerList, rnd, 0x333333);
-  accessStairs(cx,cz-2.5,GY+5.5,ownerList,'east'); accessRamp(cx,cz-2.5,GY+5.5,ownerList);
+  fireEscape(cx+4.7,cz-4.3,cz+1.2,2,2.75,GY,ownerList);
+  ladder(cx+1.3,cz-2.5,1,0,GY+6,GY+9.5,ownerList);
+  ownerList.roofSpots.push([cx-3,cz-2.5,GY+6]);
 }
 function park(cx,cz,rnd,ownerList){
   cbox(cx,GY,cz,3,.4,3,flat(0x4aa8e0),false,ownerList); cbox(cx,GY+.4,cz,.6,1.2,.6,flat(0xbbbbbb),false,ownerList); cbox(cx,GY,cz+4.3,2.2,.5,.6,flat(0x6b4a2d),false,ownerList);
@@ -664,7 +641,7 @@ const leafMat = new THREE.MeshLambertMaterial({color:0x2e8b3d});
 function generateChunk(cx, cz){
   const key = chunkKeyOf(cx,cz);
   const meshes = newChunkMeshes();
-  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[], platforms:[] } };
+  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[], roofSpots:[] } };
   // freeSlots/usedCount for each block type are created lazily in getOrCreateMesh, only when that chunk actually uses that type
   chunks.set(key, chunk);
 
@@ -689,8 +666,8 @@ function generateChunk(cx, cz){
   // city cell: one building/park per chunk, deterministic by chunk coord (special-cases mirror the old fixed 8x8 map at the origin, then repeats the pattern outward so it tiles forever)
   const rnd = seededRng(chunkSeed(cx,cz));
   const rndInt = n => Math.floor(rnd()*n);
+  chunk.props.vr = seededRng((chunkSeed(cx,cz) ^ 0x5bd1e995) || 12345); // vertical-city extras use their own stream
   const centerCx = x0 + CHUNK/2 - 0.5, centerCz = z0 + CHUNK/2 - 0.5;
-  chunk.props._centerX=centerCx; chunk.props._centerZ=centerCz; chunk.props._cityScale=CITY_PRESENTATION_SCALE;
   const kindPick = (cx===128&&cz===128) ? park : (cx===128&&cz===127) ? school : KINDS[(((cx%8)+8)%8*3 + ((cz%8)+8)%8*5 + cx*cz)%8];
   kindPick(centerCx, centerCz, rndInt, chunk.props);
 
@@ -712,7 +689,6 @@ function generateChunk(cx, cz){
   // trees for this chunk
   const spots = chunk.props.treeSpots;
   if(spots.length){
-    for(let i=0;i<spots.length;i++){ const q=cityScaledPoint(spots[i][0],spots[i][1],chunk.props); spots[i][0]=q[0]; spots[i][1]=q[1]; }
     const trunkI = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6,2.2,0.6), trunkMat, spots.length);
     const leafI = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2,2.2,2.2), leafMat, spots.length);
     spots.forEach((s,n)=>{
@@ -729,7 +705,7 @@ function generateChunk(cx, cz){
     const carX = vert ? centerCx - CHUNK/2 + lane*3 : centerCx + (rnd()-0.5)*8;
     const carZ = vert ? centerCz + (rnd()-0.5)*8 : centerCz - CHUNK/2 + lane*3;
     const car = makeBoulder(carX, GY+.95, carZ, 1.9, CARCOL[rndInt(6)], true);
-    car.mesh.rotation.y = vert?0:Math.PI/2;
+    car.mesh.rotation.y = vert?0:Math.PI/2; car.yaw = car.mesh.rotation.y; car.by = GY;
     chunk.props.carRef = car; // tracked so it can be cleaned up on unload
   }
 
@@ -740,10 +716,9 @@ function disposeChunk(chunk){
   // Only remove the InstancedMesh from the scene — geometry and material are shared across
   // every chunk now (see blockMaterials/sharedBoxGeo above), so they must never be disposed here.
   Object.values(chunk.meshes).forEach(m=>{ scene.remove(m); });
-  chunk.props.meshes.forEach(m=>{ scene.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)) m.material.dispose(); });
+  chunk.props.meshes.forEach(m=>{ if(m.parent) m.parent.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)&&m.material!==railMat){ if(m.material.map) m.material.map.dispose(); m.material.dispose(); } });
   chunk.props.colliders.forEach(c=>{ const i=colliders.indexOf(c); if(i>=0) colliders.splice(i,1); });
-  chunk.props.platforms.forEach(s=>{ const i=walkSurfaces.indexOf(s); if(i>=0) walkSurfaces.splice(i,1); });
-  if(chunk.props.carRef){ const i=props.indexOf(chunk.props.carRef); if(i>=0) props.splice(i,1); }
+  if(chunk.props.carRef && !chunk.props.carRef.driver && chunk.props.carRef!==carried){ removeVehicle(chunk.props.carRef); }
   // clear this chunk's block registry entries (terrain memory is freed; columnHeight persists so ground queries outside load radius still resolve sanely)
   const x0 = chunk.cx*CHUNK - HALF, z0 = chunk.cz*CHUNK - HALF;
   for(let lx=0; lx<CHUNK; lx++) for(let lz=0; lz<CHUNK; lz++){
@@ -761,7 +736,7 @@ const loadQueue = [];
 const queuedKeys = new Set();
 const CHUNKS_PER_FRAME = 2;      // baseline budget when standing/walking
 const MAX_CHUNKS_PER_FRAME = 5;  // ceiling at extreme speed - bounded so one frame can never freeze the phone
-const LOOKAHEAD_MAX = 3;         // extra chunks to reach ahead of the player at full speed (on top of LOAD_RADIUS)
+const LOOKAHEAD_MAX = 4;         // extra chunks to reach ahead of the player at full speed (on top of LOAD_RADIUS)
 
 // Track the player's actual movement (derived from position deltas) so streaming can be biased toward
 // where they are heading rather than loading a symmetric square around where they currently stand.
@@ -870,15 +845,21 @@ water.rotation.x = -Math.PI/2; water.position.y = WATER_LEVEL + 0.4;
 water.visible=false; scene.add(water);
 
 // Returns the Y of the walkable surface (top face of the highest solid block).
-function groundTopAt(x,z){
+// Y of the walkable surface. With no feet height it is the terrain top (old behaviour, every existing caller).
+// With fy it is the highest surface - terrain, roof, landing, ramp, pitched roof - that is at most a step above fy.
+function groundTopAt(x,z,fy){
   const gx = Math.round(x), gz = Math.round(z);
   const t = columnHeight[colKey(gx,gz)];
   let best = Math.max(t===undefined ? -3 : t, -14) + 0.5;
-  // Walkable roofs, balconies and individual stair treads override the voxel ground when
-  // the player is inside their small footprint.
-  for(let i=walkSurfaces.length-1;i>=0;i--){
-    const s=walkSurfaces[i];
-    if(gx>=s.x0&&gx<=s.x1&&gz>=s.z0&&gz<=s.z1 && s.top>best) best=s.top;
+  if(fy===undefined) return best;
+  const lim = fy + STEP_UP;
+  for(let i=colliders.length-1;i>=0;i--){
+    const c=colliders[i];
+    if(c.ladder||x<=c.x0||x>=c.x1||z<=c.z0||z>=c.z1) continue;
+    let h=c.top;
+    if(c.ramp){ const r=c.ramp, u=Math.max(0,Math.min(1,((r.ax==='z'?z:x)-r.s)/(r.e-r.s))); h=r.y0+(r.y1-r.y0)*u; }
+    else if(c.pyr){ const q=c.pyr, m=Math.max(Math.abs(x-q.cx),Math.abs(z-q.cz)); h=q.y0+q.h*Math.max(0,1-m/q.hw); }
+    if(h<=lim && h>best) best=h;
   }
   return best;
 }
@@ -904,97 +885,332 @@ function updateDayNight(dt){
 }
 
 /* =========================================================================
-   CHARACTER / WORLD PRESENTATION PASS
-   Preserves the existing gameplay units and streamed-world architecture while making
-   characters read larger, heavier and more physically present against the city.
-========================================================================= */
-const PRESENTATION = {
-  characterScale: 1.34, npcScale: 1.12, enemyScale: 1.12, cityScale: 1.16,
-  cameraDist: 5.55, cameraHeight: 1.48, cameraFollow: 0.13, cameraLookAhead: 7.5
-};
-const CITY_PRESENTATION_SCALE = PRESENTATION.cityScale;
-
-/* =========================================================================
    CHARACTER MODEL BUILDER
 ========================================================================= */
+/* =========================================================================
+   JOINTED CHARACTER RIG + PROCEDURAL ANIMATOR
+   Every character (Ben, aliens, Echo replicas, civilians, gang members, hostile enemies) is now a real joint chain:
+   hips -> chest -> neck -> head, shoulder -> elbow -> hand, hip -> knee -> ankle. animateRig() drives all of it from
+   a few inputs (speed, grounded, attack, hurt...) so walk / run / sprint / idle / jump / land / punch / hit / death
+   all share one system. Old part names (leftArm, rightArm, leftLeg, rightLeg, head, torso) still point at the
+   shoulder / hip / head / chest pivots so older code keeps working.
+   Conventions: model faces -Z. Positive X-rotation swings a limb FORWARD (and tips the chest BACK); knees use negative X.
+========================================================================= */
+const _rigMats = [];
+function rigMat(c){ const m=new THREE.MeshLambertMaterial({color:c}); return m; }
+// cfg: {legLen,torsoH,torsoW,torsoD,headS,armLen,armT,legT,skin,top,bottom,accent,arms4,hand,foot,widthMul}
+function buildRig(cfg){
+  const C=Object.assign({legLen:1,torsoH:1.15,torsoW:.68,torsoD:.38,headS:.52,armLen:.85,armT:.19,legT:.24,neck:.1,arms4:false,widthMul:1},cfg);
+  const mats={skin:rigMat(C.skin),top:rigMat(C.top),bottom:rigMat(C.bottom),accent:rigMat(C.accent)};
+  const all=Object.values(mats);
+  const box=(w,h,d,mat,x,y,z)=>{ const m=new THREE.Mesh(UB,mat); m.scale.set(w,h,d); m.position.set(x||0,y||0,z||0); m.castShadow=true; return m; };
+  const grp=(x,y,z)=>{ const g=new THREE.Group(); g.position.set(x||0,y||0,z||0); return g; };
+  const g=new THREE.Group(), parts={mats,all};
+  const hipY=C.legLen, thigh=C.legLen*.5, shin=C.legLen*.5;
+  const hips=grp(0,hipY+.09,0); g.add(hips); parts.hips=hips; parts.hipY=hipY+.09; // +.09 so the soles (not the ankles) touch the ground
+  hips.add(box(C.torsoW*.92,.22,C.torsoD*1.05,mats.bottom,0,.05,0)); // pelvis / belt
+  const lsp=Math.max(.16,C.torsoW*.27);
+  function leg(sx){
+    const t=grp(sx*lsp,-.02,0); hips.add(t); t.add(box(C.legT,thigh,C.legT,mats.bottom,0,-thigh/2,0));
+    const k=grp(0,-thigh,0); t.add(k); k.add(box(C.legT*.9,shin,C.legT*.9,mats.bottom,0,-shin/2,0));
+    const a=grp(0,-shin,0); k.add(a); a.add(box(C.legT*1.05,.1,C.legT*1.55,mats.accent,0,-.02,-C.legT*.25));
+    return {t,k,a};
+  }
+  const L=leg(-1), R=leg(1);
+  parts.leftLeg=L.t; parts.rightLeg=R.t; parts.kneeL=L.k; parts.kneeR=R.k; parts.footL=L.a; parts.footR=R.a;
+  const chest=grp(0,.12,0); hips.add(chest); parts.chest=chest; parts.torso=chest;
+  chest.add(box(C.torsoW,C.torsoH,C.torsoD,mats.top,0,C.torsoH/2,0)); parts.torsoMesh=chest.children[0];
+  const shY=C.torsoH*.86;
+  const neck=grp(0,C.torsoH,0); chest.add(neck); parts.neck=neck; neck.add(box(C.headS*.36,C.neck+.04,C.headS*.36,mats.skin,0,(C.neck)/2,0));
+  const head=grp(0,C.neck,0); neck.add(head); parts.head=head; parts.headMesh=box(C.headS,C.headS*1.05,C.headS,mats.skin,0,C.headS*.5,0); head.add(parts.headMesh);
+  const ua=C.armLen*.5, fa=C.armLen*.5;
+  function arm(sx,y,inset,accent){
+    const mm=accent?mats.accent:mats.skin, sm=accent?mats.accent:(C.sleeve?mats.top:mats.skin);
+    const sh=grp(sx*(C.torsoW/2+C.armT*.5+.02-(inset||0)),y,0); chest.add(sh);
+    sh.add(box(C.armT*1.25,C.armT*1.1,C.armT*1.25,mats.top,0,0,0)); // shoulder cap
+    sh.add(box(C.armT,ua,C.armT,sm,0,-ua/2,0));
+    const el=grp(0,-ua,0); sh.add(el); el.add(box(C.armT*.9,fa,C.armT*.9,mm,0,-fa/2,0));
+    const hd=box(C.armT*1.25,C.armT*1.25,C.armT*1.25,mm,0,-fa-C.armT*.4,0); el.add(hd);
+    return {sh,el,hd};
+  }
+  const AL=arm(-1,shY), AR=arm(1,shY);
+  parts.leftArm=AL.sh; parts.rightArm=AR.sh; parts.elbowL=AL.el; parts.elbowR=AR.el; parts.handL=AL.hd; parts.handR=AR.hd;
+  if(C.arms4){
+    const BL=arm(-1,shY-.3,.06,true), BR=arm(1,shY-.3,.06,true);
+    parts.leftArm2=BL.sh; parts.rightArm2=BR.sh; parts.elbow2L=BL.el; parts.elbow2R=BR.el;
+  }
+  parts.dims={hipY,torsoH:C.torsoH,headS:C.headS,total:hipY+C.torsoH+C.neck+C.headS*1.05+.12,torsoW:C.torsoW,torsoD:C.torsoD,armLen:C.armLen};
+  parts.g=g; parts.anim={ph:0,spd:0,px:null,pz:null,t:Math.random()*10,air:0,land:0,wasGround:true,hit:0,lean:0,dead:0,vyS:0,accel:0,turn:0,massT:0};
+  return {g,parts};
+}
+// flash every material of a rig (hit feedback). on=true tints red.
+function rigFlash(parts,on){ if(!parts||!parts.all) return; for(const m of parts.all) m.emissive.setHex(on?0x661a1a:0x000000); }
+function rigDispose(parts){ if(!parts||!parts.all) return; for(const m of parts.all) m.dispose(); }
+
+const _ez=(x)=>x<0?0:x>1?1:x, _sm=(x)=>{x=_ez(x);return x*x*(3-2*x);}, _eo=(x)=>{x=_ez(x);return 1-(1-x)*(1-x)*(1-x);}, _ei=(x)=>{x=_ez(x);return x*x*x;};
+const _lerp=(a,b,t)=>a+(b-a)*t, _damp=(c,t,r,dt)=>c+(t-c)*(1-Math.exp(-r*dt));
+const _J=(name)=>({x:0,y:0,z:0});
+function newPose(){ const P={hipsY:0,hipsZ:0,hipsRX:0,hipsRY:0,hipsRZ:0,chX:0,chY:0,chZ:0,hdX:0,hdY:0,hdZ:0,stance:0};
+  for(const k of ['sL','sR','s2L','s2R']) P[k]={x:0,y:0,z:0}; for(const k of ['eL','eR','e2L','e2R','tLx','tRx','kL','kR','fL','fR']) P[k]=0; P.tLz=0; P.tRz=0; return P; }
+const _P=newPose();
+function resetPose(P){ for(const k in P){ const v=P[k]; if(typeof v==='number') P[k]=0; else { v.x=0; v.y=0; v.z=0; } } }
+
+// Full-body attack overlay. t 0..1 across the swing; the hit lands at tc (meleeAttack applies damage at 0.40 / 0.45 of the
+// swing, so the fist arrives exactly then). Phases: coil (0..0.55*tc) -> strike (accelerating into contact) -> hold -> recover.
+function attackPose(P,parts,at,dt){
+  const kind=at.kind, t=_ez(at.t), amp=at.amp||1, tc=at.tc||(kind==='heavy'||kind==='slam'?.45:.4), a=tc*.55;
+  let coil, ext;
+  if(t<a){ coil=_sm(t/a); ext=0; }
+  else if(t<tc){ const u=Math.pow((t-a)/(tc-a),1.5); coil=1-u; ext=u; }
+  else { coil=0; const hold=(1-tc)*.28; ext=1-_sm((t-tc-hold)/Math.max(.01,1-tc-hold)); }
+  const env=_sm(Math.min(t/.12,1))*(1-_sm((t-.88)/.12)); // how much of the fighting stance is applied
+  const four=!!parts.leftArm2, id=at.id, cb=id==='cannonbolt', xl=id==='xlr8';
+  const guard=(S,side,e,k)=>{ S.x=_lerp(S.x,.62,k); S.y=_lerp(S.y,side*.42,k); S.z=_lerp(S.z,side*.1,k); return _lerp(e,1.85,k); }; // inward = +y for the right arm
+  if(kind==='left'||kind==='right'){
+    const sd=kind==='right'?1:-1, arms=[[sd>0?P.sR:P.sL,sd>0?'eR':'eL',sd]];
+    if(four&&id==='four_arms') arms.push([sd>0?P.s2L:P.s2R,sd>0?'e2L':'e2R',-sd]); // the diagonal lower arm hooks in sync
+    // free arm holds a guard beside the chin
+    const oS=sd>0?P.sL:P.sR, oe=sd>0?'eL':'eR'; P[oe]=guard(oS,-sd,P[oe],env);
+    arms.forEach(([S,ek,sg],i)=>{
+      const hookY=i?1.0:0;
+      guard(S,sg,0,env);
+      S.x = _lerp(.62,.05,coil)*env + 1.5*ext*amp*(i?.9:1) + (1-env)*S.x;   // cocked back beside the ribs -> horizontal at contact
+      S.y = sg*(.42*env*(1-ext) + .14*coil - (.5+hookY*.3)*ext);           // in across the body, then out to compensate the torso twist
+      S.z = sg*(.06+.08*hookY)*ext;
+      P[ek] = _lerp(_lerp(1.85,2.35,coil),.06,ext);
+    });
+    P.chY += sd*(-.30*coil + .60*ext)*amp; P.hipsRY += sd*(-.14*coil + .32*ext)*amp;
+    P.chX += (.10*coil - .24*ext)*amp; P.hdY += -sd*.16*ext*amp; P.hdX += .08*ext;
+    const lead=sd>0?'L':'R', rear=sd>0?'R':'L';
+    P['t'+lead+'x']=_lerp(P['t'+lead+'x'],.55,env); P['k'+lead]=_lerp(P['k'+lead],.5,env);
+    P['t'+rear+'x']=_lerp(P['t'+rear+'x'],-.5*(cb?.5:1),env); P['k'+rear]=_lerp(P['k'+rear],.95,env); P['f'+rear]=_lerp(P['f'+rear],.75,env);
+    P.hipsZ += -.16*ext*amp*(xl?1.4:1); P.hipsY += -.07*env-.04*ext;
+  } else if(kind==='heavy'||kind==='slam'){
+    // Two-handed finisher: rear back with both fists high, then throw the whole body forward and slam down.
+    const arms=[[P.sL,'eL',-1,0],[P.sR,'eR',1,0]]; if(four) arms.push([P.s2L,'e2L',-1,1],[P.s2R,'e2R',1,1]);
+    arms.forEach(([S,ek,sg,low])=>{
+      S.x = ( _lerp(.5,low?.9:2.35,coil) + 0 )*(1-ext) + ext*(low?1.5:1.45)*amp;   // overhead (upper) / cocked (lower) -> slam forward
+      S.y = sg*(.3*(1-ext)); S.z = sg*.1*ext;
+      P[ek] = _lerp(_lerp(1.6,low?2.2:1.1,coil),.12,ext);
+    });
+    P.chX += (.5*coil - .8*ext)*amp; P.hipsRX += (.1*coil-.22*ext)*amp; P.hdX += (-.25*coil+.45*ext);
+    P.chY += (at.side?1:-1)*.2*ext; P.hipsY += -.15*env-.15*ext*(cb?0:1); P.hipsZ += -.3*ext*amp-.05*coil;
+    P.tLx=_lerp(P.tLx,.75,env); P.kL=_lerp(P.kL,.9,env); P.tRx=_lerp(P.tRx,-.4,env); P.kR=_lerp(P.kR,1.2,env); P.fR=_lerp(P.fR,.8,env);
+    if(cb){ P.chX+=-.4*ext; P.hipsY+=.08*ext; }
+  } else if(kind==='shoot'){
+    const k=1-_sm(t/.55); P.sR.x+=-.35*k; P.eR+=.5*k; P.chX+=.1*k; P.hdX+=-.08*k;
+  }
+}
+/* Alien biomechanics: each body has a distinct center of mass, cadence, joint stiffness and secondary motion. */
+const BIO={
+  ben:{mass:.85,cad:.95,lean:1,arm:1,stiff:.9,bounce:1,turn:1},
+  four_arms:{mass:1.65,cad:.78,lean:.72,arm:.72,stiff:1.35,bounce:.45,turn:.72},
+  heatblast:{mass:.65,cad:1.02,lean:.8,arm:1.15,stiff:.62,bounce:1.35,turn:1.08},
+  xlr8:{mass:.42,cad:1.55,lean:1.65,arm:.55,stiff:.72,bounce:1.15,turn:1.65},
+  diamondhead:{mass:1.45,cad:.74,lean:.58,arm:.68,stiff:1.7,bounce:.35,turn:.62},
+  echo_echo:{mass:.55,cad:1.28,lean:1.05,arm:1.25,stiff:.58,bounce:1.45,turn:1.18},
+  cannonbolt:{mass:1.3,cad:.9,lean:.65,arm:.7,stiff:1.4,bounce:.5,turn:.75}
+};
+/* Main animator. inp: {pos, fwd:{x,z}, grounded, vy, flying, hover, swimming, carrying, superT, atk:{kind,t,side,id,amp,tc},
+   aim, flee, hurt(0..1), dead(0..1), hp, id, powerScale} */
+function animateRig(parts,dt,inp){
+  if(!parts||!parts.hips||dt<=0) return;
+  const A=parts.anim, P=_P; resetPose(P);
+  A.t+=dt;
+  // world speed from position delta (works identically for player, replicas, NPCs, enemies; teleports are ignored)
+  let spd=0, fwdV=1, latV=0;
+  if(inp.pos){ if(A.px!==null){ const dx=inp.pos.x-A.px, dz=inp.pos.z-A.pz, d=Math.hypot(dx,dz); spd=d/dt; if(spd>90){ spd=0; } else if(inp.fwd&&d>1e-4){ fwdV=(dx*inp.fwd.x+dz*inp.fwd.z)/d; latV=(dx*-inp.fwd.z+dz*inp.fwd.x)/d; } } A.px=inp.pos.x; A.pz=inp.pos.z; }
+  const prevSpd=A.spd;
+  A.spd=_damp(A.spd,spd,14,dt);
+  A.accel=_damp(A.accel||0,(A.spd-prevSpd)/Math.max(dt,.001),10,dt);
+  A.turn=_damp(A.turn||0,latV,12,dt);
+  const grounded=inp.grounded!==false;
+  if(Math.abs(A.accel)>1.8 && grounded) A.massT=Math.min(1,(A.massT||0)+dt*7);
+  else A.massT=Math.max(0,(A.massT||0)-dt*5);
+  const sc=Math.max(.4,(parts.dims.total*(inp.ws||PS))/(2.7*PS)); // stride scales with the body's world size
+  const s=Math.min(4.2,A.spd/(3.6*sc)); // normalised: 1 = walk, ~2 = run, 3+ = sprint
+  const r=_sm((s-1.25)/1.1), q=_sm((s-2.5)/1.2), mv=_sm(s/.35);
+  A.vyS=_damp(A.vyS,inp.vy||0,12,dt);
+  // landing detection
+  if(!A.wasGround && grounded){ A.land=Math.min(1,.35+Math.max(0,-(A.lastVy||0))/22); }
+  A.wasGround=grounded; A.lastVy=inp.vy||0; A.land=Math.max(0,A.land-dt*3.4);
+  const dir=(fwdV<-.15&&inp.fwd)?-1:1; // backpedal
+  A.ph += dt*(5.2+2.5*Math.min(s,3.4)+1.2*q)*dir*mv; 
+  const ph=A.ph, sL=Math.sin(ph), sR=-sL, cL=Math.cos(ph), cR=-cL;
+  const dead=inp.dead||0, hurt=inp.hurt||0;
+  // ---- locomotion ----
+  if(grounded && !inp.flying && !inp.swimming){
+    const legAmp=_lerp(_lerp(.5,.95,r),1.15,q), kmax=_lerp(.7,1.75,r), lean=-( .04+.16*r+.22*q );
+    const mass=_sm(Math.min(1,Math.abs(A.accel)/7));
+    P.hipsRY += A.turn*.20*(.35+.65*mv);
+    P.chY += -A.turn*.12*(.35+.65*mv);
+    P.chZ += A.turn*.055*(.25+.75*mv);
+    if(A.accel>0.8){ P.chX += -.10*mass; P.hdX += .06*mass; P.hipsY += .018*mass; }
+    if(A.accel<-1.0){ P.chX += .13*mass; P.hdX += -.05*mass; P.hipsY += -.035*mass; P.kL += .12*mass; P.kR += .12*mass; }
+    P.hdY += -A.turn*.08*mv; P.hdZ += -A.turn*.035*mv;
+    P.tLx = sL*legAmp*mv; P.tRx = sR*legAmp*mv;
+    const kf=(c,sn)=> Math.max(0,c*.8+.2*sn)*kmax + (1-r)*.12 + r*.18*Math.max(0,-c);      // flex on the forward swing, slight flex at contact
+    P.kL = kf(cL,sL)*mv; P.kR = kf(cR,sR)*mv;
+    P.fL = -(P.tLx-P.kL)*.55 + Math.max(0,-cL)*.35*mv; P.fR = -(P.tRx-P.kR)*.55 + Math.max(0,-cR)*.35*mv;
+    P.hipsY += (Math.cos(ph*2)*(.025+.05*r+.05*q) - (.02+.07*r+.08*q))*mv;
+    P.hipsRY += sL*.20*mv*(1-.4*r); P.chY += -sL*.30*mv*(1-.2*r)*(1+.4*q); P.hipsRZ += sL*.045*mv*(1-r); P.chZ += -sL*.03*mv;
+    P.chX += lean*mv; P.hdX += -lean*.75*mv; P.hdY += sL*.1*mv;
+    P.hipsZ += latV*.0; 
+    // arms swing opposite the legs, elbows fold more as speed rises
+    const aa=_lerp(_lerp(.55,1.0,r),1.25,q);
+    P.sL.x = -sL*aa*mv; P.sR.x = -sR*aa*mv;
+    P.eL = (_lerp(.2,1.45,r)+.28*Math.max(0,-sL)*(.4+r))*mv + .12*(1-mv); P.eR = (_lerp(.2,1.45,r)+.28*Math.max(0,-sR)*(.4+r))*mv + .12*(1-mv);
+    P.sL.z = -.05-.08*r; P.sR.z = .05+.08*r; P.sL.y=r*.12; P.sR.y=-r*.12;
+    if(parts.leftArm2){ P.s2L.x=-sR*aa*.8*mv; P.s2R.x=-sL*aa*.8*mv; P.e2L=.35+.5*r; P.e2R=.35+.5*r; P.s2L.z=-.12; P.s2R.z=.12; }
+    // idle: breathing, weight shift, slow head scan, relaxed arms
+    const idle=1-mv, bt=A.t;
+    P.chX += Math.sin(bt*1.9)*.02*idle; P.sL.x += (.06+Math.sin(bt*1.9+.6)*.03)*idle; P.sR.x += (.06+Math.sin(bt*1.9+1.2)*.03)*idle;
+    P.hipsRZ += Math.sin(bt*.7)*.03*idle; P.chZ += -Math.sin(bt*.7)*.02*idle; P.hdY += Math.sin(bt*.45)*.22*idle; P.hipsY += Math.sin(bt*1.9)*.008*idle;
+    P.tLx += .03*idle; P.kL += .04*idle; P.tRx += -.03*idle; P.kR += .07*idle;
+    if(parts.leftArm2){ P.s2L.x+=.1*idle; P.s2R.x+=.1*idle; P.e2L+=.5*idle; P.e2R+=.5*idle; }
+    // landing squash
+    if(A.land>0){ const k=_sm(A.land); P.hipsY += -.2*k; P.tLx+=.5*k; P.tRx+=.35*k; P.kL+=1.15*k; P.kR+=1.0*k; P.chX+=-.3*k; P.hdX+=.15*k; P.sL.x+=.5*k; P.sR.x+=.5*k; P.sL.z+=-.2*k; P.sR.z+=.2*k; }
+  } else if(!inp.flying && !inp.swimming){
+    // airborne: rising = knees tucked / fists up, falling = legs reach down, arms spread for balance
+    const rise=_sm(A.vyS/6), fall=_sm(-A.vyS/8);
+    P.tLx=.55*rise+.25*fall; P.tRx=-.4*rise+.05*fall; P.kL=1.25*rise+.35*fall; P.kR=1.35*rise+.5*fall; P.fL=.3; P.fR=.3;
+    P.sL.x=-.4+1.0*rise-.2*fall; P.sR.x=-.4+1.0*rise-.2*fall; P.sL.z=-.35-.55*fall; P.sR.z=.35+.55*fall; P.eL=.5+.6*rise; P.eR=.5+.6*rise;
+    P.chX=-.12*rise+.1*fall; P.hdX=.1; P.hipsY=.02; P.hipsRZ=0;
+    if(parts.leftArm2){ P.s2L.x=.5*rise; P.s2R.x=.5*rise; P.s2L.z=-.5; P.s2R.z=.5; P.e2L=.6; P.e2R=.6; }
+  }
+  if(inp.climb){ const cph=A.climbPh=(A.climbPh||0)+dt*(inp.climbSpd||0)*3.4, c=Math.sin(cph);
+    P.sL.x=2.3+c*.55; P.sR.x=2.3-c*.55; P.eL=.9-c*.55; P.eR=.9+c*.55; P.sL.z=-.1; P.sR.z=.1; P.tLx=.55+c*.6; P.tRx=.55-c*.6; P.kL=.9-c*.5; P.kR=.9+c*.5; P.chX=-.1; P.hdX=-.15; P.hipsY=-.02; if(parts.leftArm2){ P.s2L.x=2.0-c*.4; P.s2R.x=2.0+c*.4; P.e2L=.8; P.e2R=.8; } }
+  // ---- flying / hovering / swimming ----
+  if(inp.flying){
+    if(inp.hover){ // levitate upright, arms low and relaxed, gentle bob
+      P.hipsY=Math.sin(A.t*2.2)*.05; P.tLx=.15; P.tRx=-.1; P.kL=.35; P.kR=.55; P.sL.x=.25; P.sR.x=.25; P.sL.z=-.5; P.sR.z=.5; P.eL=.5; P.eR=.5; P.chX=.03; P.fL=.6; P.fR=.6;
+      if(parts.leftArm2){ P.s2L.x=.3; P.s2R.x=.3; P.s2L.z=-.6; P.s2R.z=.6; P.e2L=.5; P.e2R=.5; }
+    } else { // Superman: arms locked forward over the head, legs streamed behind, slight wobble
+      const up=inp.moving?2.85:.55; P.sL.x=up; P.sR.x=up; P.eL=.1; P.eR=.1; P.sL.z=-.08; P.sR.z=.08;
+      P.tLx=.12+Math.sin(A.t*9)*.14; P.tRx=.12-Math.sin(A.t*9)*.14; P.kL=.25; P.kR=.25; P.fL=.6; P.fR=.6; P.chX=inp.moving?-.05:.03; P.hdX=inp.moving?.35:0;
+      P.hipsRZ=Math.sin(A.t*3)*.03;
+    }
+  } else if(inp.swimming){
+    const sw=A.t*6; P.sL.x=1.4+Math.sin(sw)*1.4; P.sR.x=1.4-Math.sin(sw)*1.4; P.eL=.5+Math.max(0,Math.sin(sw))*.6; P.eR=.5+Math.max(0,-Math.sin(sw))*.6;
+    P.tLx=Math.sin(sw*2)*.45; P.tRx=-Math.sin(sw*2)*.45; P.kL=.3+Math.max(0,Math.sin(sw*2))*.4; P.kR=.3+Math.max(0,-Math.sin(sw*2))*.4; P.chY=Math.sin(sw)*.25; P.hdX=.5; 
+  }
+  // ---- special stances ----
+  if(inp.superT>.2 && grounded && !inp.flying){ // XLR8 sprint: arms swept back, deep forward lean, driving knees
+    const k=_ez(inp.superT); P.sL.x=_lerp(P.sL.x,-1.5,k); P.sR.x=_lerp(P.sR.x,-1.5,k); P.eL=_lerp(P.eL,.35,k); P.eR=_lerp(P.eR,.35,k); P.chX+=-.35*k; P.hdX+=.3*k; P.sL.z=-.12; P.sR.z=.12;
+    P.tLx*=1.25; P.tRx*=1.25; P.kL*=1.2; P.kR*=1.2;
+  }
+  /* Form-specific biomechanics: preserve the shared rig, but alter the physical language of each creature. */
+  const bio=BIO[inp.id||'ben']||BIO.ben;
+  const movingNow=mv>0.05;
+  if(grounded && !inp.flying && !inp.swimming){
+    const accelLoad=_sm(Math.min(1,Math.abs(A.accel)/(4.5/bio.mass)));
+    const brakeLoad=_sm(Math.min(1,Math.max(0,-A.accel)/(4.0/bio.mass)));
+    P.hipsRY += A.turn*.08*bio.turn*(.3+.7*mv);
+    P.chY -= A.turn*.045*bio.turn*mv;
+    P.chX += -bio.lean*(.035*r+.075*q)*mv;
+    P.hdX += bio.lean*(.025*r+.045*q)*mv;
+    P.hipsY += Math.sin(ph*2)*.018*bio.bounce*mv;
+    P.chZ += Math.sin(ph*2+1.1)*.018*(1-bio.stiff*.35)*mv;
+    P.hdY += Math.sin(A.t*0.55+ph*.08)*.035*(1-bio.stiff*.3);
+    P.sL.x *= bio.arm; P.sR.x *= bio.arm;
+    P.eL = _lerp(P.eL,P.eL*bio.stiff,.45); P.eR = _lerp(P.eR,P.eR*bio.stiff,.45);
+    if(accelLoad>0.05){
+      P.chX += -accelLoad*.07*bio.mass; P.hdX += accelLoad*.04;
+      P.hipsY += accelLoad*.025*bio.mass; P.kL += accelLoad*.12*bio.mass; P.kR += accelLoad*.12*bio.mass;
+    }
+    if(brakeLoad>0.05){
+      P.chX += brakeLoad*.11*bio.mass; P.hdX -= brakeLoad*.055;
+      P.hipsY -= brakeLoad*.035*bio.mass; P.kL += brakeLoad*.18*bio.mass; P.kR += brakeLoad*.18*bio.mass;
+    }
+    if(inp.id==='four_arms'){
+      P.hipsY -= .045*mv; P.chX += -.055*mv; P.sL.z -= .08*mv; P.sR.z += .08*mv;
+      if(parts.leftArm2){ P.s2L.z-=.1*mv; P.s2R.z+=.1*mv; P.e2L+=.12; P.e2R+=.12; }
+    } else if(inp.id==='xlr8'){
+      P.chX += -.16*mv; P.hdX += .11*mv; P.sL.x -= .24*mv; P.sR.x -= .24*mv;
+      P.sL.z -= .05*mv; P.sR.z += .05*mv; P.hipsRY += A.turn*.12*mv;
+    } else if(inp.id==='heatblast'){
+      const float=Math.sin(A.t*2.5)*.045; P.hipsY += float; P.chZ += Math.sin(A.t*1.7)*.035;
+      P.sL.z += Math.sin(A.t*2.1)*.06; P.sR.z -= Math.sin(A.t*2.1)*.06;
+    } else if(inp.id==='diamondhead'){
+      P.chZ *= .45; P.hipsRZ *= .4; P.sL.z *= .55; P.sR.z *= .55;
+      P.kL += .08*mv; P.kR += .08*mv;
+    } else if(inp.id==='echo_echo'){
+      const spring=Math.sin(A.t*8.5+ph)*.035*mv; P.hipsY += spring; P.chZ += spring*.8;
+      P.sL.x += Math.sin(A.t*7.2)*.08*mv; P.sR.x += Math.sin(A.t*7.2+1.2)*.08*mv;
+    }
+  }
+  if(inp.carrying){ for(const [S,ek] of [[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
+  if(inp.flee){ P.sL.x=2.5+Math.sin(A.t*14)*.35; P.sR.x=2.5-Math.sin(A.t*14)*.35; P.eL=.8; P.eR=.8; P.chX+=-.12; P.hdX+=.25; }
+  if(inp.aim){ // pistol/blaster: right arm straight out, left hand supports, head turned down the sight line
+    P.sR.x=1.55; P.sR.y=-.05; P.eR=.05; P.sL.x=1.3; P.sL.y=-.45; P.eL=.85; P.sR.z=.03; P.chY+=.18; P.chX+=-.05; P.hdY+=-.15;
+    P.tLx=_lerp(P.tLx,.25,.6); P.tRx=_lerp(P.tRx,-.25,.6); P.kL+=.15; P.kR+=.15; }
+  // ---- melee overlay ----
+  if(inp.atk) attackPose(P,parts,inp.atk,dt);
+  // ---- hit reaction ----
+  if(hurt>0){ const h=_sm(hurt); P.chX+=.42*h; P.hdX+=.4*h; P.hipsRX+=.1*h; P.hipsZ+=.12*h; P.sL.x+=-.6*h; P.sR.x+=-.6*h; P.sL.z+=-.5*h; P.sR.z+=.5*h; P.eL+=.5*h; P.eR+=.5*h; P.tLx+=.35*h; P.kL+=.4*h; P.kR+=.5*h; P.hipsY+=-.08*h; P.chY+=Math.sin(A.t*40)*.05*h; }
+  // ---- death: crumple; the whole-body fall is applied to the model root by the caller ----
+  if(dead>0){ const d=_sm(dead); P.sL.x=_lerp(P.sL.x,-.5,d); P.sR.x=_lerp(P.sR.x,.2,d); P.sL.z=_lerp(P.sL.z,-.6,d); P.sR.z=_lerp(P.sR.z,.8,d); P.eL=_lerp(P.eL,.5,d); P.eR=_lerp(P.eR,.9,d);
+    P.tLx=_lerp(P.tLx,.4,d); P.tRx=_lerp(P.tRx,-.2,d); P.kL=_lerp(P.kL,.9,d); P.kR=_lerp(P.kR,.3,d); P.hdX=_lerp(P.hdX,.35,d); P.hdY=_lerp(P.hdY,.4,d); P.chX=_lerp(P.chX,.15,d); }
+  // ---- apply with per-joint smoothing (attacks & hits use a stiff rate so they stay snappy) ----
+  const fast=(inp.atk||hurt>0||dead>0)?38:(inp.flying||inp.swimming?12:(grounded?26:14)), rt=fast;
+  const ap=(o,k,v)=>{ o.rotation[k]=_damp(o.rotation[k],v,rt,dt); };
+  const hb=parts.hipY, hy=hb+P.hipsY; parts.hips.position.y=_damp(parts.hips.position.y,hy,rt,dt); parts.hips.position.z=_damp(parts.hips.position.z,P.hipsZ,rt,dt);
+  ap(parts.hips,'x',P.hipsRX); ap(parts.hips,'y',P.hipsRY); ap(parts.hips,'z',P.hipsRZ);
+  ap(parts.chest,'x',P.chX); ap(parts.chest,'y',P.chY); ap(parts.chest,'z',P.chZ);
+  ap(parts.head,'x',P.hdX); ap(parts.head,'y',P.hdY); ap(parts.head,'z',P.hdZ);
+  const J=[[parts.leftArm,P.sL],[parts.rightArm,P.sR],[parts.leftArm2,P.s2L],[parts.rightArm2,P.s2R]];
+  for(const [o,S] of J){ if(!o) continue; ap(o,'x',S.x); ap(o,'y',S.y); ap(o,'z',S.z); }
+  ap(parts.elbowL,'x',P.eL); ap(parts.elbowR,'x',P.eR); if(parts.elbow2L){ ap(parts.elbow2L,'x',P.e2L); ap(parts.elbow2R,'x',P.e2R); }
+  ap(parts.leftLeg,'x',P.tLx); ap(parts.rightLeg,'x',P.tRx); ap(parts.leftLeg,'z',P.tLz); ap(parts.rightLeg,'z',P.tRz);
+  ap(parts.kneeL,'x',-P.kL); ap(parts.kneeR,'x',-P.kR); ap(parts.footL,'x',P.fL); ap(parts.footR,'x',P.fR);
+  if(parts.footL&&parts.footR&&grounded&&!inp.flying&&!inp.swimming){
+    const plantL=Math.max(0,-cL), plantR=Math.max(0,-cR);
+    ap(parts.footL,'z',-sL*.06*mv); ap(parts.footR,'z',-sR*.06*mv);
+    ap(parts.footL,'x',P.fL-plantL*.10*mv); ap(parts.footR,'x',P.fR-plantR*.10*mv);
+  }
+}
+// Helper: turn a timer-driven attack ({kind,dur,t}) into the attack input for animateRig.
+function atkInput(kind,left,dur,extra){ if(!(left>0)||!kind) return null; const o={kind,t:1-Math.max(0,Math.min(1,left/dur))}; if(extra) Object.assign(o,extra); return o; }
+
 function buildCharacter(kind){
-  const g = new THREE.Group();
-  const parts = {};
-  function mat(color){ return new THREE.MeshLambertMaterial({color}); }
-  function box(w,h,d,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color)); m.castShadow=true; return m; }
-  function joint(radius,color){ const m=new THREE.Mesh(new THREE.SphereGeometry(radius,8,6),mat(color)); m.castShadow=true; return m; }
-  function limb(side, upperW, upperH, lowerW, lowerH, color, jointColor, kindName){
-    const root=new THREE.Group();
-    const upper=box(upperW,upperH,upperW,color); upper.geometry.translate(0,-upperH/2,0); root.add(upper);
-    const elbow=joint(Math.max(.075,Math.min(upperW,.14)),jointColor); elbow.position.y=-upperH; root.add(elbow);
-    const lower=box(lowerW,lowerH,lowerW,color); lower.geometry.translate(0,-lowerH/2,0); lower.position.y=-upperH; root.add(lower);
-    const wrist=joint(Math.max(.06,Math.min(lowerW,.11)),jointColor); wrist.position.y=-(upperH+lowerH); root.add(wrist);
-    root.userData.life={upper,lower,elbow,wrist,baseX:0,side,kind:kindName};
-    return root;
-  }
-
-  let scaleY = 1, palette;
+  let pal, scaleY=1;
   switch(kind){
-    case 'four_arms': palette = {skin:0xd8432e, torso:0x2244aa, accent:0x111111}; scaleY=1.25; break;
-    case 'heatblast': palette = {skin:0xff9a2e, torso:0xff5a1e, accent:0xffe27a}; break;
-    case 'xlr8':      palette = {skin:0x1c3fbf, torso:0x0c2270, accent:0x8fd6ff}; scaleY=0.95; break;
-    case 'diamondhead': palette = {skin:0x35c9c0, torso:0x1e8f88, accent:0xdfffff}; break;
-    case 'echo_echo': palette = {skin:0xf1f4f7, torso:0xdde3e9, accent:0x1a1a1a}; scaleY=0.85; break;
-    case 'cannonbolt': palette = {skin:0xd8862e, torso:0x8a4a12, accent:0xf2c14e}; scaleY=0.8; break;
-    default: palette = {skin:0xe0a878, torso:0x2c7a3d, accent:0x111111}; kind='ben';
+    case 'four_arms': pal={skin:0xd8432e, top:0x2244aa, bottom:0x1a2a6a, accent:0x111111}; scaleY=1.25; break;
+    case 'heatblast': pal={skin:0xff9a2e, top:0xff5a1e, bottom:0xe8451a, accent:0xffe27a}; break;
+    case 'xlr8':      pal={skin:0x1c3fbf, top:0x0c2270, bottom:0x143399, accent:0x8fd6ff}; scaleY=0.95; break;
+    case 'diamondhead': pal={skin:0x35c9c0, top:0x1e8f88, bottom:0x2ab0a8, accent:0xdfffff}; break;
+    case 'echo_echo': pal={skin:0xf1f4f7, top:0xdde3e9, bottom:0xc9d1d9, accent:0x1a1a1a}; scaleY=0.85; break;
+    case 'cannonbolt': pal={skin:0xd8862e, top:0x8a4a12, bottom:0xa85e1e, accent:0xf2c14e}; scaleY=0.8; break;
+    default: pal={skin:0xe0a878, top:0x2c7a3d, bottom:0x2a2f45, accent:0x111111}; kind='ben';
   }
-  const torsoWidth = kind==='four_arms' ? 1.35 : kind==='cannonbolt' ? 1.4 : 0.68;
-  const torsoDepth = kind==='four_arms' ? 0.68 : kind==='cannonbolt' ? 1.25 : 0.38;
-  const legWidth   = kind==='four_arms' ? 0.2  : kind==='cannonbolt' ? 0.4 : 0.24;
-  const legH = 1.0, torsoH = 1.15, headH = 0.55;
-  const hipY = legH * scaleY;
-  const torsoCenterY = hipY + (torsoH/2) * scaleY;
-  const shoulderY = hipY + torsoH * 0.82 * scaleY;
-  const headCenterY = hipY + (torsoH + headH/2) * scaleY;
-
-  const pelvis=box(torsoWidth*.78,.16,torsoDepth*.82,palette.accent); pelvis.position.y=hipY+.02; g.add(pelvis); parts.pelvis=pelvis;
-  const hipL=joint(legWidth*.62,palette.accent), hipR=joint(legWidth*.62,palette.accent); hipL.position.set(-0.26,hipY,0); hipR.position.set(0.26,hipY,0); g.add(hipL,hipR); parts.hipL=hipL; parts.hipR=hipR;
-
-  const head = box(0.52,0.55,0.52, kind==='diamondhead'?palette.accent:palette.skin); head.position.y=headCenterY;
-  if(kind==='echo_echo'){ const vz=box(0.5,0.14,0.06,0x111111); vz.position.set(0,headCenterY+0.05,-0.36); g.add(vz); }
-  if(kind==='diamondhead'){ head.geometry = new THREE.OctahedronGeometry(0.42); }
-  if(kind==='cannonbolt'){ head.geometry = new THREE.SphereGeometry(0.38,10,8); }
-  g.add(head); parts.head=head; parts.neck=joint(.16,palette.skin); parts.neck.position.set(0,headCenterY-headH/2-.02,0); g.add(parts.neck);
-
+  const fa=kind==='four_arms', cb=kind==='cannonbolt';
+  const R=buildRig(Object.assign({legLen:1.0*scaleY, torsoH:1.15*scaleY, torsoW:fa?1.15:cb?1.4:.68, torsoD:fa?.62:cb?1.25:.38, headS:.52,
+    armLen:(fa?.95:.85)*scaleY, armT:fa?.3:.19, legT:fa?.3:cb?.4:.24, arms4:fa, sleeve:kind==='ben'||kind==='xlr8'||kind==='echo_echo'},pal));
+  const g=R.g, parts=R.parts, kindHead=parts.headMesh;
+  const D=parts.dims, hs=D.headS;
+  // per-alien head / body details
+  if(kind==='echo_echo'){
+    const vz=new THREE.Mesh(UB,rigMat(0x111111)); vz.scale.set(.5,.14,.06); vz.position.set(0,hs*.58,-hs/2-.02); parts.head.add(vz);
+    [-0.27,0.27].forEach(x=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.08,10),rigMat(0x111111)); c.rotation.x=Math.PI/2; c.position.set(x,D.torsoH*.6,-D.torsoD/2-0.03); parts.chest.add(c); });
+  }
+  if(kind==='diamondhead'){ parts.headMesh.visible=false; const oc=new THREE.Mesh(new THREE.OctahedronGeometry(.42),parts.mats.accent); oc.position.y=hs*.5; oc.castShadow=true; parts.head.add(oc);
+    [-1,1].forEach(sx=>{ const c=new THREE.Mesh(new THREE.OctahedronGeometry(.16),parts.mats.accent); c.scale.set(.6,1.6,.6); c.position.set(sx*(D.torsoW/2+.02),D.torsoH*.98,0); parts.chest.add(c); }); }
+  if(kind==='cannonbolt'){ parts.headMesh.visible=false; const sp=new THREE.Mesh(new THREE.SphereGeometry(.38,10,8),parts.mats.skin); sp.position.y=hs*.5; sp.castShadow=true; parts.head.add(sp); }
+  if(kind==='heatblast'){ for(let i=0;i<3;i++){ const f=new THREE.Mesh(new THREE.ConeGeometry(.12,.4+i*.1,5),parts.mats.accent); f.position.set((i-1)*.16,hs*1.1,0); f.rotation.z=(i-1)*.25; parts.head.add(f); } }
+  if(kind==='ben'){ const hair=new THREE.Mesh(UB,rigMat(0x3a2718)); hair.scale.set(hs*1.06,.14,hs*1.06); hair.position.set(0,hs*1.02,.02); parts.head.add(hair); parts.mats.hair=hair.material; parts.all.push(hair.material); }
+  if(fa){ /* upper pair red, lower pair accent already; shoulder pads are top-coloured */ }
   if(kind==='cannonbolt'){
-    const shell = new THREE.Group(); const shellCenterY=torsoCenterY-.05;
-    const core=new THREE.Mesh(new THREE.SphereGeometry(.62,14,10),mat(palette.skin)); core.castShadow=true; shell.add(core);
-    for(let i=0;i<4;i++){ const band=new THREE.Mesh(new THREE.TorusGeometry(.63,.045,6,16),mat(palette.accent)); band.rotation.x=Math.PI/2; band.position.y=-.35+i*.24; band.castShadow=true; shell.add(band); }
-    shell.position.y=shellCenterY; shell.scale.setScalar(.001); g.add(shell); parts.shell=shell; parts.shellBaseY=shellCenterY;
+    // Full enclosing shell: hidden (scale 0) while standing, grows to fully cover the body when curled.
+    const shell=new THREE.Group(), shellCenterY=D.hipY+D.torsoH/2*.9;
+    const core=new THREE.Mesh(new THREE.SphereGeometry(0.62,14,10),parts.mats.skin); core.castShadow=true; shell.add(core);
+    for(let i=0;i<4;i++){ const band=new THREE.Mesh(new THREE.TorusGeometry(0.63,0.045,6,16),parts.mats.accent); band.rotation.x=Math.PI/2; band.position.y=-0.35+i*0.24; band.castShadow=true; shell.add(band); }
+    shell.position.y=shellCenterY; shell.scale.setScalar(0.001); g.add(shell); parts.shell=shell; parts.shellBaseY=shellCenterY;
   }
-
-  const torso=box(torsoWidth,torsoH,torsoDepth,palette.torso); torso.position.y=torsoCenterY; g.add(torso); parts.torso=torso;
-  if(kind==='echo_echo'){ [-.27,.27].forEach(x=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(.17,.17,.08,10),mat(0x111111)); c.rotation.x=Math.PI/2; c.position.set(x,torsoCenterY+.12,-torsoDepth/2-.03); g.add(c); }); }
-
-  const armGeo=kind==='four_arms'?[.3,.95,.3]:[.19,.85,.19];
-  const armSpacing=kind==='four_arms'?torsoWidth/2+.18:.46;
-  function makeArm(x,extra,lowerBias=0){
-    const arm=limb(x<0?'left':'right',armGeo[0],armGeo[1]*.54,armGeo[0]*.92,armGeo[1]*.46,extra?palette.accent:palette.skin,palette.skin,kind);
-    arm.position.set(x,shoulderY+lowerBias,0); arm.userData.life.baseY=arm.position.y; g.add(arm); return arm;
-  }
-  parts.leftArm=makeArm(-armSpacing); parts.rightArm=makeArm(armSpacing);
-  parts.shoulderL=joint(armGeo[0]*.58,palette.skin); parts.shoulderR=joint(armGeo[0]*.58,palette.skin); parts.shoulderL.position.set(-armSpacing,shoulderY,0); parts.shoulderR.position.set(armSpacing,shoulderY,0); g.add(parts.shoulderL,parts.shoulderR);
-  if(kind==='four_arms'){
-    parts.leftArm2=makeArm(-armSpacing*.68,true,-.25); parts.rightArm2=makeArm(armSpacing*.68,true,-.25);
-    parts.shoulderL2=joint(armGeo[0]*.5,palette.skin); parts.shoulderR2=joint(armGeo[0]*.5,palette.skin); parts.shoulderL2.position.set(-armSpacing*.68,shoulderY-.25,0); parts.shoulderR2.position.set(armSpacing*.68,shoulderY-.25,0); g.add(parts.shoulderL2,parts.shoulderR2);
-  }
-
-  function makeLeg(x){
-    const leg=limb(x<0?'left':'right',legWidth,legH*.52,legWidth*.96,legH*.48,palette.accent,palette.accent,kind);
-    leg.position.set(x,hipY,0); leg.userData.life.baseY=hipY; g.add(leg); return leg;
-  }
-  const legSpacing=kind==='four_arms'?.18:.26; parts.leftLeg=makeLeg(-legSpacing); parts.rightLeg=makeLeg(legSpacing);
-  const footL=box(legWidth*1.35,.12,legWidth*1.7,palette.accent), footR=box(legWidth*1.35,.12,legWidth*1.7,palette.accent);
-  footL.position.set(-legSpacing,-.02,-.07); footR.position.set(legSpacing,-.02,-.07); g.add(footL,footR); parts.footL=footL; parts.footR=footR;
-
-  const o=new THREE.Group(); g.position.y=-.9; o.add(g); o.rotation.order='YXZ'; o.userData.parts=parts; o.userData.kind=kind; o.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28,breath:Math.random()*6.28};
+  const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
+  o.userData.parts=parts; o.userData.kind=kind;
   return o;
 }
+
 // tiny portrait renderer (renders each alien to a mini canvas for the HUD)
 function renderPortrait(kind){
   const size = 92;
@@ -1030,7 +1246,7 @@ const ACT={
  smash:{label:'SMASH',cost:10,cd:0.6,run:()=>smash()},
  grab:{label:()=>carried?'THROW':'GRAB',cost:0,cd:0.3,run:()=>carried?throwProp():grabProp()},
  drop:{label:'DROP',cost:0,cd:0.2,show:()=>!!carried,run:()=>dropProp()},
- slam:{label:'SLAM',cost:35,cd:5,run:()=>{shockwaveAt(player.pos,4.5,40,true);shakeCamera(0.3);shatterNear(player.pos,4.5);}},
+ slam:{label:'SLAM',cost:35,cd:5,run:()=>{shockwaveAt(player.pos,4.5,40,true);shakeCamera(0.34);shatterNear(player.pos,4.5,'slam');}},
  dash:{label:'SPEED',hold:v=>{player.superHeld=v;},cost:0,cd:0},
  tornado:{label:'TORNADO',cost:35,cd:8,run:()=>spawnTornado()},
  slow:{label:'SLOW TIME',cost:30,cd:9,run:()=>{player.slowT=6;statusText('TIME SLOWED');}},
@@ -1040,29 +1256,29 @@ const ACT={
  roll:{label:()=>player.rolling?'UNROLL':'ROLL',hold:v=>{player.rollHeld=v;},cost:0,cd:0}
 };
 const ALIENS = [
-  { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:6.6,
-    atkDamage:22, atkRange:2.4, atkCooldown:0.7, modelScale:1.22,
+  { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:10.5,
+    atkDamage:22, atkRange:2.4, atkCooldown:0.7, modelScale:1.24,
     special:{ name:'GROUND SLAM', cost:35, cooldown:5,
-      run(ctx){ shockwaveAt(ctx.player.pos, 4.5, 40, true); shakeCamera(0.3); } } },
+      run(ctx){ shockwaveAt(ctx.player.pos, 4.5, 40, true); shakeCamera(0.34); } } },
   { id:'heatblast', name:'HEATBLAST', actions:[ACT.fire,ACT.fly,ACT.burn], maxHealth:100, maxEnergy:120, speed:3.0, jump:5.6, flies:true, flySpeed:22,
-    atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.05,
+    atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.10,
     special:{ name:'FIREBALL', cost:20, cooldown:1.2,
       run(ctx){ spawnProjectile(ctx.player, 0xff5a1e, 26, 18, false); } } },
   { id:'xlr8', name:'XLR8', actions:[ACT.dash,ACT.tornado,ACT.slow], maxHealth:90, maxEnergy:110, speed:7.4, jump:6.0,
-    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:1.02,
+    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:1.06,
     special:{ name:'SPEED BURST', cost:8, cooldown:0.1, duration:4, speedMult:1.9, drainPerSec:8,
       run(ctx){ ctx.player.speedBurstT = 4; } } },
   { id:'diamondhead', name:'DIAMONDHEAD', flies:true, flySpeed:9, actions:[ACT.spray,ACT.shard,ACT.shield,ACT.wall,ACT.lev], maxHealth:130, maxEnergy:100, speed:2.9, jump:5.4,
-    atkDamage:18, atkRange:2.0, atkCooldown:0.6, modelScale:1.08,
+    atkDamage:18, atkRange:2.0, atkCooldown:0.6, modelScale:1.10,
     special:{ name:'CRYSTAL SHARD', cost:22, cooldown:1.4,
       run(ctx){ spawnProjectile(ctx.player, 0x35e0d6, 30, 24, true); } } },
   { id:'echo_echo', name:'ECHO ECHO', actions:[ACT.scream,ACT.split,ACT.reps,ACT.doom], maxHealth:90, maxEnergy:100, speed:5.4, jump:6.4,
-    atkDamage:9, atkRange:1.8, atkCooldown:0.3, modelScale:0.98, special:null },
+    atkDamage:9, atkRange:1.8, atkCooldown:0.3, modelScale:1.04, special:null },
   { id:'cannonbolt', name:'CANNONBOLT', actions:[ACT.roll], maxHealth:140, maxEnergy:110, speed:3.6, jump:5.4,
-    atkDamage:24, atkRange:1.6, atkCooldown:0.5, modelScale:1.08,
+    atkDamage:24, atkRange:1.6, atkCooldown:0.5, modelScale:1.10,
     special:null },
 ];
-const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jump:6.0, modelScale:1.0,
+const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jump:6.0, modelScale:1.08,
   atkDamage:8, atkRange:1.6, atkCooldown:0.45, special:null };
 
 /* =========================================================================
@@ -1073,8 +1289,11 @@ drainChunkQueueFully();          // ...and load them all now, before we ask grou
 const player = {
   pos: new THREE.Vector3(0.5, groundTopAt(0.5,0.5)+1, 0.5),
   vel: new THREE.Vector3(),
+  gvel: new THREE.Vector3(),
   yaw: 0, pitch: -0.12,
   onGround: true,
+  locomotion:'idle',
+  locomotionT:0,
   form: BEN,
   alienIndex: 0, // index into ALIENS for the swipe cycle
   health: BEN.maxHealth, energy: BEN.maxEnergy,
@@ -1082,8 +1301,7 @@ const player = {
   walkT: 0, attacking: 0, alive: true, flying: false,
   comboStep: 0,        // 0 = next hit is punch 1 (left), 1 = next hit is punch 2 (right), 2 = next hit is the heavy finisher
   comboResetTimer: 0,  // counts down after each hit; if it reaches 0 before the next hit, the combo resets to step 0
-  punchAnimT: 0, punchAnimDur: 0.25, punchKind: 'left', landingT:0, landingStrength:0, lastGrounded:true,
-  impactKick:0, impactLean:0, hurtT:0, hurtDir:new THREE.Vector3(), combatStepT:0
+  punchAnimT: 0, punchAnimDur: 0.25, punchKind: 'left' // drives the current swing's animation shape
 
 };
 player.model = buildCharacter('ben');
@@ -1096,7 +1314,7 @@ function getPortraitCanvas(kind){
 }
 
 function setForm(formDef, kind){
-  player.form = formDef;
+  player.form = formDef; if(player.driving) setTimeout(()=>{ if(player.driving) player.model.visible=false; },0);
   player.flying = false;
   scene.remove(player.model);
   player.model = buildCharacter(kind);
@@ -1147,8 +1365,12 @@ function revertToBen(){
 /* =========================================================================
    CAMERA CONTROLLER (third person)
 ========================================================================= */
-const PS = 0.55 * PRESENTATION.characterScale;
-const camState = { dist:PRESENTATION.cameraDist, height:PRESENTATION.cameraHeight };
+// SCALE PASS: larger bodies + farther camera make the existing voxel world read as a full-sized world.
+const CHARACTER_SCALE = 1.42;
+const PS = 0.55 * CHARACTER_SCALE;
+const PLAYER_FEET = 1.26;
+const camState = { dist:6.15, height:1.58, vx:0,vy:0,vz:0 };
+const CAMERA_WORLD_FEEL = 1.30;
 function updateCamera(){
   // A proper look direction that incorporates pitch (up/down) as well as yaw,
   // so tilting down actually tilts the view down instead of just changing
@@ -1158,14 +1380,18 @@ function updateCamera(){
     Math.sin(player.pitch),
     Math.cos(player.pitch) * -Math.cos(player.yaw)
   );
-  const heroHeight=Math.max(1,(player.form.modelScale||1)*PRESENTATION.characterScale);
-  const pivot=player.pos.clone().add(new THREE.Vector3(0,camState.height+(heroHeight-1)*0.22,0));
-  const desired=pivot.clone().addScaledVector(lookDir,-camState.dist*(1+(heroHeight-1)*0.10));
-  camera.position.lerp(desired,PRESENTATION.cameraFollow);
-  const lookAt=pivot.clone().addScaledVector(lookDir,PRESENTATION.cameraLookAhead);
+  const drv = player.driving ? 1 : 0;
+  const hspeed=Math.hypot(player.gvel?.x||0,player.gvel?.z||0);
+  const speedVisual = Math.min(1, hspeed/14);
+  const targetHeight=camState.height + drv*.6 + speedVisual*.10;
+  const pivot = player.pos.clone().add(new THREE.Vector3(0,targetHeight,0));
+  const dist=camState.dist*CAMERA_WORLD_FEEL + drv*4.1 + speedVisual*.55;
+  const desired = pivot.clone().addScaledVector(lookDir, -dist);
+  // velocity lead makes the camera feel attached to a moving body rather than a fixed point in space
+  if(player.gvel){ desired.x += player.gvel.x*.045; desired.z += player.gvel.z*.045; }
+  camera.position.lerp(desired, 0.13 + speedVisual*.05);
+  const lookAt = pivot.clone().addScaledVector(lookDir, 8);
   camera.lookAt(lookAt);
-  const hitCam=Math.max(player.impactKick||0, player.landingStrength||0)*0.035;
-  if(hitCam>0){ camera.position.x += (Math.random()-.5)*hitCam; camera.position.y += (Math.random()-.5)*hitCam; }
 }
 
 /* =========================================================================
@@ -1203,6 +1429,8 @@ function updateProjectiles(dt){
     if(pp.y<groundTopAt(pp.x,pp.z)||blockedAt(pp.x,pp.z,pp.y-0.5)) dead=true;
     if(p.style==='fire'){ for(let k=0;k<2;k++) debris(pp.clone().add(new THREE.Vector3((Math.random()-.5)*.3,(Math.random()-.5)*.3,(Math.random()-.5)*.3)),Math.random()<.5?0xff5a1e:0xffd84a,.4+Math.random()*.3,new THREE.Vector3(0,1.2,0),.45,false); p.mesh.scale.setScalar(1+Math.sin(p.life*30)*.12); }
     else if(p.style==='crystal') p.mesh.rotation.y+=dt*10;
+    if(!p.hostile){ for(const pr of props){ if(!pr.veh||pr.driver||pr.wreck||p.hitSet.has(pr)) continue;
+      const q=pr.mesh.position; if(Math.abs(pp.y-q.y)<1.6 && Math.hypot(pp.x-q.x,pp.z-q.z)<2.0){ p.hitSet.add(pr); vehicleHit(pr,p.dir,p.damage*.8,p.style==='fire'?5:3,p.style==='fire'?'fire':'punch'); dead=true; } } }
     if(p.hostile){
       // Enemy-fired projectile: can hit the player or whichever squad unit (Echo Echo replica) is nearest its current position.
       const tu = nearestTarget(pp);
@@ -1272,27 +1500,74 @@ const ENEMY_STATS = {
   speed:   { hp:30,  speed:9.0, damage:6,  color:0xd8a020, size:[0.65,0.95,0.65], yOff:0.48, retreatHpFrac:0.2,  ranged:false, chaseRange:16, loseRange:22 },
   elite:   { hp:110, speed:2.4, damage:11, color:0x1a1a2e, size:[0.95,1.35,0.95], yOff:0.68, retreatHpFrac:0.15, ranged:true,  chaseRange:16, loseRange:20, preferredDist:6, projSpeed:20 },
 };
-function makeEnemy(type, x, z){
+const ENEMY_LOOK = {
+  normal:{skin:0xc8a07a,bottom:0x241a3c,accent:0x1a1a1a,torsoW:.74,torsoD:.4,armT:.2,legT:.25},
+  ranged:{skin:0xc8a07a,bottom:0x123040,accent:0x111111,torsoW:.62,torsoD:.36,armT:.18,legT:.22},
+  brute: {skin:0xb98a68,bottom:0x3a1414,accent:0x1a1a1a,torsoW:1.12,torsoD:.62,armT:.34,legT:.32,headS:.44,armLen:.95},
+  speed: {skin:0xc8a07a,bottom:0x5a4210,accent:0x222222,torsoW:.52,torsoD:.3,armT:.16,legT:.2,legLen:1.08,torsoH:1.0},
+  elite: {skin:0x9a7a62,bottom:0x0c0c18,accent:0xcc2222,torsoW:.82,torsoD:.42,armT:.22,legT:.26,legLen:1.05,torsoH:1.2}
+};
+function makeEnemy(type, x, z, y0){
   const stats = ENEMY_STATS[type] || ENEMY_STATS.normal;
-  const root=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.BoxGeometry(...stats.size),new THREE.MeshLambertMaterial({color:stats.color})); body.castShadow=true; body.position.y=stats.yOff; root.add(body);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(Math.max(.22,stats.size[0]*.34),8,6),new THREE.MeshLambertMaterial({color:stats.color})); head.position.y=stats.yOff+stats.size[1]*.58; head.castShadow=true; root.add(head);
-  const shoulderL=new THREE.Mesh(new THREE.SphereGeometry(.12,7,5),new THREE.MeshLambertMaterial({color:stats.color})); shoulderL.position.set(-stats.size[0]*.58,stats.yOff+stats.size[1]*.32,0); root.add(shoulderL);
-  const shoulderR=shoulderL.clone(); shoulderR.position.x=-shoulderL.position.x; root.add(shoulderR);
-  const limb=(x)=>{ const g=new THREE.Group(); const up=new THREE.Mesh(new THREE.BoxGeometry(.16,stats.size[1]*.32,.16),new THREE.MeshLambertMaterial({color:stats.color})); up.geometry.translate(0,-stats.size[1]*.16,0); g.add(up); const e=new THREE.Mesh(new THREE.SphereGeometry(.09,7,5),new THREE.MeshLambertMaterial({color:stats.size[0]>1?.1:stats.color})); e.position.y=-stats.size[1]*.32; g.add(e); const lo=new THREE.Mesh(new THREE.BoxGeometry(.15,stats.size[1]*.28,.15),new THREE.MeshLambertMaterial({color:stats.color})); lo.geometry.translate(0,-stats.size[1]*.14,0); lo.position.y=-stats.size[1]*.32; g.add(lo); g.position.set(x,stats.yOff+stats.size[1]*.32,0); root.add(g); return g; };
-  const parts={torso:body,head,leftArm:limb(-stats.size[0]*.62),rightArm:limb(stats.size[0]*.62),leftLeg:limb(-stats.size[0]*.28),rightLeg:limb(stats.size[0]*.28)};
-  root.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28};
-  const y=groundTopAt(x,z); root.position.set(x,y,z); root.scale.setScalar(PRESENTATION.enemyScale); scene.add(root);
-  const en={
-    mesh: root, parts, type, hp: stats.hp, maxHp: stats.hp,
+  const y = y0!==undefined ? y0 : groundTopAt(x,z);
+  const look=Object.assign({},ENEMY_LOOK[type]||ENEMY_LOOK.normal,{top:stats.color,sleeve:true});
+  const R=buildRig(look), parts=R.parts;
+  const k=(stats.yOff*2)/parts.dims.total;
+  R.g.scale.setScalar(k); R.g.position.y=-stats.yOff;
+  if(type==='ranged'||type==='elite'){ const gun=new THREE.Mesh(UB,rigMat(0x1c1c22)); gun.scale.set(.12,.46,.15); gun.position.set(0,-parts.dims.armLen*.5-.16,0); parts.elbowR.add(gun); parts.all.push(gun.material); }
+  if(type==='elite'){ const v=new THREE.Mesh(UB,rigMat(0xff3030)); v.scale.set(parts.dims.headS*.9,.1,.05); v.position.set(0,parts.dims.headS*.58,-parts.dims.headS/2-.02); parts.head.add(v); parts.all.push(v.material); }
+  if(type==='speed'){ const hb=new THREE.Mesh(UB,rigMat(0xff5a2a)); hb.scale.set(parts.dims.headS*1.06,.09,parts.dims.headS*1.06); hb.position.set(0,parts.dims.headS*.78,0); parts.head.add(hb); parts.all.push(hb.material); }
+  const spin=new THREE.Group(); spin.rotation.y=Math.PI; spin.add(R.g); // the rig faces -Z; lookAt() aims +Z
+  const body=new THREE.Group(); body.add(spin);
+  body.position.set(x, y + stats.yOff, z);
+  scene.add(body);
+  const en = {
+    mesh: body, parts, spin, type, hp: stats.hp, maxHp: stats.hp,
     speed: stats.speed, damage: stats.damage, atkCd:0, alive:true,
     state:'wander', target:new THREE.Vector3(x,0,z), wanderT:0, home:new THREE.Vector3(x,0,z),
-    staggerT:0, knockVel:new THREE.Vector3(), hurtT:0, hurtDir:new THREE.Vector3(), hitFlashT:0, attackWindup:0,
+    staggerT:0, knockVel:new THREE.Vector3(),
     repositionT:0, repositionDir:1, // used by ranged/elite to strafe while shooting
     alertedT:0, // set when alerted by a scream or nearby hit even if not yet in normal chase range
+    swing:null, swSide:false, hurtT:0,
   };
   enemies.push(en);
   return en;
+}
+// --- enemy animation helpers ---
+const _wd=new THREE.Vector3();
+function enemySwing(en,kind,dur,tc){ if(kind==='light'){ en.swSide=!en.swSide; kind=en.swSide?'right':'left'; } en.swing={kind,dur,left:dur,tc:tc||.3}; }
+function animateEnemies(dt){
+  for(let i=0;i<enemies.length;i++){
+    const en=enemies[i]; if(en.npc||!en.alive||en.ice||!en.parts) continue;
+    const p=en.mesh.position; if(Math.abs(p.x-player.pos.x)>60||Math.abs(p.z-player.pos.z)>60) continue; // asleep
+    const stats=ENEMY_STATS[en.type]||ENEMY_STATS.normal;
+    en.mesh.getWorldDirection(_wd);
+    // wandering enemies turn to face where they walk (chase/retreat use lookAt in the AI)
+    const px=en.parts.anim.px, pz=en.parts.anim.pz;
+    if(en.state==='wander' && px!==null){ const vx=p.x-px, vz=p.z-pz; if(vx*vx+vz*vz>1e-5){ const want=Math.atan2(vx,vz); let cur=Math.atan2(_wd.x,_wd.z), d=want-cur; d=Math.atan2(Math.sin(d),Math.cos(d)); en.mesh.rotation.set(0,cur+d*Math.min(1,dt*8),0); en.mesh.getWorldDirection(_wd); } }
+    let atk=null; if(en.swing){ en.swing.left-=dt; if(en.swing.left>0) atk=atkInput(en.swing.kind,en.swing.left,en.swing.dur,{id:'enemy_'+en.type,amp:en.type==='brute'?1.15:1,tc:en.swing.tc,side:en.swSide}); else en.swing=null; }
+    en.hurtT=Math.max(0,en.hurtT-dt);
+    const hurt=Math.max(en.hurtT/.45, en.staggerT>0?Math.min(1,en.staggerT/.35):0);
+    animateRig(en.parts,dt,{pos:p,fwd:{x:_wd.x,z:_wd.z},grounded:true,moving:true,ws:(stats.yOff*2)/2.7*1.1,id:'enemy',aim:stats.ranged&&en.state==='chase'&&!(atk&&atk.kind!=='shoot'),atk,hurt,flee:false});
+  }
+}
+// Death: the body stays in the world, crumples backwards along the hit direction, then clears.
+const dyingRigs=[];
+function startEnemyDeath(en,dir){
+  const mesh=en.mesh; if(!mesh) return; rigFlash(en.parts,false);
+  const st=ENEMY_STATS[en.type]||ENEMY_STATS.normal;
+  dyingRigs.push({mesh,parts:en.parts,spin:en.spin,t:0,vx:dir?dir.x*3.4:0,vz:dir?dir.z*3.4:0,yOff:st.yOff});
+}
+function updateDyingRigs(dt){
+  for(let i=dyingRigs.length-1;i>=0;i--){
+    const d=dyingRigs[i]; d.t+=dt; const k=Math.min(1,d.t/.55), m=d.mesh.position;
+    d.spin.rotation.x=-1.45*_eo(k);
+    animateRig(d.parts,dt,{dead:k,grounded:true,ws:.5});
+    const nx=m.x+d.vx*dt, nz=m.z+d.vz*dt; if(!blockedAt(nx,m.z,m.y-d.yOff)) m.x=nx; if(!blockedAt(m.x,nz,m.y-d.yOff)) m.z=nz; d.vx*=Math.max(0,1-dt*5); d.vz*=Math.max(0,1-dt*5);
+    const gy=groundTopAt(m.x,m.z,m.y-d.yOff)+.28; m.y+=(gy-m.y)*Math.min(1,dt*10);
+    if(d.t>1.5) d.mesh.scale.setScalar(Math.max(.001,1-(d.t-1.5)/.4));
+    if(d.t>1.9){ scene.remove(d.mesh); rigDispose(d.parts); dyingRigs.splice(i,1); }
+  }
 }
 // Maintains a small population of enemies near the player, mixing all 5 archetypes. Capped low and
 // distance-gated (like the NPC spawner already does for civilians/gangs) so this stays cheap on mobile -
@@ -1304,6 +1579,20 @@ function pickEnemyType(){
   for(const [type,w] of ENEMY_TYPE_WEIGHTS){ if(r<w) return type; r-=w; }
   return 'normal';
 }
+// Enemies stand on whatever surface is under them (rooftops, landings, ramps) and drop down when they walk off.
+function enemyGroundY(en,yOff,dt){
+  const p=en.mesh.position, feet=p.y-yOff, sf=groundTopAt(p.x,p.z,feet+0.05);
+  return (sf>=feet ? sf : Math.max(sf, feet-16*dt)) + yOff;
+}
+// A rooftop within reach of the player (12-38 units away) to ambush from, so rooftops become fighting spaces.
+function roofSpawnPoint(){
+  const cc=chunkCoordOf(player.pos.x,player.pos.z), cand=[];
+  for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++){
+    const ch=chunks.get(chunkKeyOf(cc[0]+dx,cc[1]+dz)); if(!ch||!ch.props.roofSpots) continue;
+    ch.props.roofSpots.forEach(q=>{ const d=Math.hypot(q[0]-player.pos.x,q[1]-player.pos.z); if(d>12&&d<38&&!blockedAt(q[0],q[1],q[2])) cand.push(q); });
+  }
+  return cand.length ? cand[Math.floor(Math.random()*cand.length)] : null;
+}
 const MAX_ENEMIES = 10;
 let enemySpawnT = 0;
 function updateEnemySpawning(dt){
@@ -1314,6 +1603,10 @@ function updateEnemySpawning(dt){
   if(active >= MAX_ENEMIES) return;
   // Spawn somewhere in a ring around the player - far enough not to appear on top of them, close enough
   // to matter, and never inside a solid block.
+  if(Math.random()<0.3){ // ~1 in 3 spawns is an ambusher on a nearby rooftop (only the weaker archetypes)
+    const rs=roofSpawnPoint();
+    if(rs){ makeEnemy(Math.random()<0.6?'ranged':'normal', rs[0], rs[1], rs[2]); return; }
+  }
   for(let tries=0; tries<6; tries++){
     const ang = Math.random()*Math.PI*2, dist = 18 + Math.random()*22;
     const x = Math.round(player.pos.x + Math.cos(ang)*dist), z = Math.round(player.pos.z + Math.sin(ang)*dist);
@@ -1328,28 +1621,24 @@ function damageEnemy(en, dmg, dirAway, opts){
   if(en.npc){ npcHurt(en,dmg,dirAway,opts); return; }
   en.hp -= dmg;
   const heavy = opts && opts.heavy;
-  // Group roots do not own a material; flash their visible meshes instead.
-  en.hitFlashT = heavy ? 0.18 : 0.10;
-  en.mesh.traverse(o=>{ if(o.isMesh && o.material){ o.userData._hitBase = o.material.emissive ? o.material.emissive.getHex() : 0; if(o.material.emissive) o.material.emissive.setHex(0x550000); } });
-  setTimeout(()=>{ en.mesh.traverse(o=>{ if(o.isMesh && o.material && o.material.emissive && o.userData._hitBase!=null) o.material.emissive.setHex(o.userData._hitBase); }); }, heavy?200:120);
+  rigFlash(en.parts,true); en.hurtT=heavy?.5:.28; const _pp=en.parts; setTimeout(()=>rigFlash(_pp,false), heavy?200:120);
   if(dirAway){
     const knock = (opts && opts.knock!=null) ? opts.knock : 3;
     en.knockVel = en.knockVel || new THREE.Vector3();
+    en.recoilT = Math.max(en.recoilT||0, heavy?.38:.18);
     en.knockVel.set(dirAway.x*knock, 0, dirAway.z*knock);
-    en.hurtDir.copy(dirAway);
-    en.hurtT = Math.max(en.hurtT||0, heavy ? 0.34 : 0.18);
     en.staggerT = Math.max(en.staggerT||0, heavy ? 0.5 : 0.22);
-    en.mesh.userData.impact = heavy ? 1 : 0.65;
   }
   if(heavy) Audio_.heavyHit(); else Audio_.hit();
   if(en.hp <= 0){
     en.alive = false;
     if(lock.en===en) setLock(null); // never let a lock survive onto a recycled enemy object
-    scene.remove(en.mesh);
+    startEnemyDeath(en, dirAway);
     setTimeout(()=>{
       const x = Math.round(player.pos.x + (Math.random()-0.5)*40);
       const z = Math.round(player.pos.z + (Math.random()-0.5)*40);
-      Object.assign(en, makeEnemy(pickEnemyType(),x,z));
+      const ne = makeEnemy(pickEnemyType(),x,z); enemies.pop(); // makeEnemy registers itself; reuse this slot instead of duplicating
+      Object.assign(en, ne);
     }, 8000);
   }
 }
@@ -1370,9 +1659,6 @@ function updateEnemies(dt){
     }
 
     // Knockback: real velocity that decays over time, checked against collision so a hit can't shove an enemy through a wall.
-    en.hurtT=Math.max(0,(en.hurtT||0)-dt);
-    en.hitFlashT=Math.max(0,(en.hitFlashT||0)-dt);
-    if(en.hurtT>0){ en.mesh.userData.impact=Math.max(en.mesh.userData.impact||0,0.15); }
     if(en.knockVel && en.knockVel.lengthSq() > 0.0001){
       const nx = p.x + en.knockVel.x*dt, nz = p.z + en.knockVel.z*dt;
       if(!blockedAt(nx, p.z, p.y-0.5)) p.x = nx;
@@ -1381,7 +1667,7 @@ function updateEnemies(dt){
     }
     const stats = ENEMY_STATS[en.type] || ENEMY_STATS.normal;
     en.staggerT = Math.max(0, (en.staggerT||0) - dt);
-    if(en.staggerT > 0){ p.y = groundTopAt(p.x,p.z) + stats.yOff; return; } // hit-reaction pause: skip normal AI this frame
+    if(en.staggerT > 0){ p.y = enemyGroundY(en,stats.yOff,dt); en.recoilT=Math.max(0,(en.recoilT||0)-dt); return; } // hit-reaction pause: skip normal AI this frame
 
     en.alertedT = Math.max(0, (en.alertedT||0) - dt);
 
@@ -1405,7 +1691,7 @@ function updateEnemies(dt){
       const away = p.clone().sub(tpos); away.y=0;
       if(away.lengthSq() > 0.01){ away.normalize(); const nx=p.x+away.x*en.speed*1.3*dt, nz=p.z+away.z*en.speed*1.3*dt;
         if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
-      p.y = groundTopAt(p.x,p.z) + stats.yOff;
+      p.y = enemyGroundY(en,stats.yOff,dt);
       en.mesh.lookAt(tpos.x, p.y, tpos.z);
       // Recover enough to stop fleeing after a little distance/time, so retreat doesn't become permanent.
       if(distToTarget > stats.loseRange*0.9) en.state = 'wander';
@@ -1416,9 +1702,9 @@ function updateEnemies(dt){
         const dir = tpos.clone().sub(p); dir.y = 0; const dist = dir.length(); dir.normalize();
         const pref = stats.preferredDist || 8;
         if(dist > pref + 1.5){
-          p.addScaledVector(dir, en.speed*dt);
+          { const nx=p.x+dir.x*en.speed*dt, nz=p.z+dir.z*en.speed*dt; if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
         } else if(dist < pref - 1.5){
-          p.addScaledVector(dir, -en.speed*0.8*dt);
+          { const nx=p.x-dir.x*en.speed*0.8*dt, nz=p.z-dir.z*en.speed*0.8*dt; if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
         } else {
           // strafe: perpendicular to the target direction, flipping occasionally so it doesn't look robotic
           en.repositionT -= dt;
@@ -1428,17 +1714,17 @@ function updateEnemies(dt){
           if(!blockedAt(nx,p.z,p.y-0.5)) p.x = nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z = nz;
         }
         if(en.atkCd<=0 && dist < (stats.chaseRange)){
-          en.atkCd = en.type==='elite' ? 1.1 : 1.6;
+          en.atkCd = en.type==='elite' ? 1.1 : 1.6; enemySwing(en,'shoot',.32);
           const shotDir = tpos.clone().sub(p); shotDir.y = 0.15; shotDir.normalize();
           spawnProjectile(null, en.type==='elite'?0xff5a5a:0x5ac8ff, en.damage, stats.projSpeed||16, false, en.type==='elite'?'fire':null,
             { explicitDir: shotDir, explicitFrom: p.clone().add(new THREE.Vector3(0,0.6,0)), hostile:true });
         }
         // Elite occasionally also closes in for a melee hit if the target strays very close.
         if(en.type==='elite' && dist < 1.8 && en.atkCd<=0.4){
-          en.atkCd = 0.9;
+          en.atkCd = 0.9; enemySwing(en,'heavy',.5,.3);
           if(player.alive && (tu.unit || player.invuln<=0)) hurtTarget(tu, en.damage*1.4);
         }
-        p.y = groundTopAt(p.x,p.z) + stats.yOff;
+        p.y = enemyGroundY(en,stats.yOff,dt);
         en.mesh.lookAt(tpos.x, p.y, tpos.z);
       } else {
         // Melee archetypes (normal, brute, speed): straightforward close-and-hit, same shared pattern,
@@ -1450,8 +1736,9 @@ function updateEnemies(dt){
         } else if(en.atkCd<=0 && player.alive && (tu.unit || player.invuln<=0)){
           hurtTarget(tu, en.damage);
           en.atkCd = en.type==='brute' ? 1.6 : en.type==='speed' ? 0.9 : 1.2;
+          if(en.type==='brute') enemySwing(en,'heavy',.7,.32); else enemySwing(en,'light',en.type==='speed'?.16:.26,.28);
         }
-        p.y = groundTopAt(p.x,p.z) + stats.yOff;
+        p.y = enemyGroundY(en,stats.yOff,dt);
         en.mesh.lookAt(tpos.x, p.y, tpos.z);
       }
     } else {
@@ -1463,12 +1750,13 @@ function updateEnemies(dt){
       const dir = en.target.clone().sub(p); dir.y=0;
       if(dir.length()>0.3){ dir.normalize(); const nx=p.x+dir.x*en.speed*0.4*dt, nz=p.z+dir.z*en.speed*0.4*dt;
         if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
-      p.y = groundTopAt(p.x,p.z) + stats.yOff;
+      p.y = enemyGroundY(en,stats.yOff,dt);
     }
   });
 }
 
 function flashDamage(){
+  player.hurtT=.35;
   const el = document.getElementById('damage-overlay');
   el.style.boxShadow = 'inset 0 0 140px 30px rgba(255,0,0,0.55)';
   setTimeout(()=> el.style.boxShadow = 'inset 0 0 120px 20px rgba(255,0,0,0)', 200);
@@ -1622,7 +1910,7 @@ function updateFx(dt){
     const f=fx[i]; f.life-=dt; const m=f.mesh.position;
     if(f.grav){ f.vel.y+=GRAVITY*dt; }
     m.addScaledVector(f.vel,dt); if(f.grow) f.mesh.scale.multiplyScalar(1+f.grow*dt);
-    if(f.grav){ const g=groundTopAt(m.x,m.z); if(m.y<g){ m.y=g; f.vel.set(0,0,0); } }
+    if(f.grav){ const g=groundTopAt(m.x,m.z,m.y+0.2); if(m.y<g){ m.y=g; f.vel.set(0,0,0); } }
     f.mesh.material.opacity=Math.max(0,f.life/f.max);
     if(f.life<=0){ scene.remove(f.mesh); f.mesh.material.dispose(); fx.splice(i,1); }
   }
@@ -1654,7 +1942,7 @@ function updateSpeedEffects(dt){
   const s = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
 
   // FOV widens with speed; only touch the projection matrix when the value actually changed.
-  const targetFov = BASE_FOV + MAX_FOV_BOOST*s;
+  const targetFov = BASE_FOV + MAX_FOV_BOOST*s + (player.driving ? MAX_FOV_BOOST*0.45*Math.min(1,Math.abs(player.driving.v)/CAR_MAX_FWD) : 0);
   const newFov = lastFov + (targetFov-lastFov)*Math.min(1, dt*6);
   if(Math.abs(newFov-lastFov) > 0.02){ lastFov = newFov; camera.fov = newFov; camera.updateProjectionMatrix(); }
 
@@ -1687,7 +1975,7 @@ function updateSpeedEffects(dt){
       const d = dustPuffs[dustIdx]; dustIdx = (dustIdx+1)%DUST_COUNT;
       d.life = d.max = 0.35 + Math.random()*0.25;
       d.mesh.visible = true;
-      d.mesh.position.set(player.pos.x + (Math.random()-0.5)*0.6, groundTopAt(player.pos.x,player.pos.z)+0.15, player.pos.z + (Math.random()-0.5)*0.6);
+      d.mesh.position.set(player.pos.x + (Math.random()-0.5)*0.6, groundTopAt(player.pos.x,player.pos.z,player.pos.y-PLAYER_FEET)+0.15, player.pos.z + (Math.random()-0.5)*0.6);
       d.mesh.scale.setScalar(0.25 + s*0.35);
     }
   }
@@ -1719,7 +2007,7 @@ function makeBoulder(x,y,z,s,color,car){
     b.scale.set(.7,.6,.7); b.position.set(.15,.55,.1); a.castShadow=b.castShadow=true; g.add(a,b);
   }
   g.scale.setScalar(s); g.rotation.y=Math.random()*3; g.position.set(x,y,z); scene.add(g);
-  const p={mesh:g,s,vel:new THREE.Vector3(),state:'rest',color,car}; props.push(p); return p;
+  const p={mesh:g,s,vel:new THREE.Vector3(),state:'rest',color,car}; props.push(p); if(car) initVeh(p); return p;
 }
 // (parked cars are now generated per-chunk in generateChunk(), see chunk.props.carRef)
 function shatter(p,blast){
@@ -1731,17 +2019,20 @@ function shatter(p,blast){
     for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){ const h=columnHeight[colKey(gx+dx,gz+dz)]; if(h!==undefined&&h>-90) removeBlockAt(gx+dx,h,gz+dz); }
   }
 }
-function shatterNear(c,r){ for(let i=props.length-1;i>=0;i--){ const p=props[i]; if(p!==carried&&p.mesh.position.distanceTo(c)<r+p.s*.5){ shatter(p,false); props.splice(i,1); } } }
+function shatterNear(c,r,mode){ for(let i=props.length-1;i>=0;i--){ const p=props[i]; if(p!==carried&&p.mesh.position.distanceTo(c)<r+p.s*.5){
+  if(p.veh){ if(p.driver) continue; const d=p.mesh.position.clone().sub(c); d.y=0; if(d.lengthSq()<.01) d.set(Math.random()-.5,0,Math.random()-.5); d.normalize();
+    if(mode==='slam') flipVehicle(p,d); else { shoveVehicle(p,d,16); damageVehicle(p,45,'punch'); shakeCamera(.25); } continue; }
+  shatter(p,false); props.splice(i,1); } } }
 function smash(){
   player.attacking=.3; Audio_.attack(); shakeCamera(.25);
   const c=player.pos.clone().add(new THREE.Vector3(-Math.sin(player.yaw)*2.6,0,-Math.cos(player.yaw)*2.6));
-  shatterNear(c,3.2); shockwaveAt(c,2.8,30,true);
+  shatterNear(c,3.2,'smash'); shockwaveAt(c,2.8,30,true);
   const r=raycastBlocks();
   if(r){ const [x,y,z]=r.blockPos; for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++) removeBlockAt(x+dx,y+dy,z+dz); }
 }
 function grabProp(){
   let best=null,bd=5.5;
-  props.forEach(p=>{ const d=p.mesh.position.distanceTo(player.pos); if(p.state==='rest'&&d<bd){ best=p; bd=d; } });
+  props.forEach(p=>{ const d=p.mesh.position.distanceTo(player.pos); if(p.state==='rest'&&!p.driver&&d<bd){ best=p; bd=d; } });
   if(!best){
     const r=raycastBlocks(); if(!r){ statusText('NOTHING TO GRAB'); return; }
     const [x,y,z]=r.blockPos, b=blocks.get(keyOf(x,y,z)), type=b&&b.active?b.type:'stone';
@@ -1775,7 +2066,7 @@ function spawnTornado(){
   if(tornado) scene.remove(tornado.mesh);
   const g=new THREE.Group(), mat=new THREE.MeshBasicMaterial({color:0xbfe8ff,transparent:true,opacity:.35,side:THREE.DoubleSide});
   for(let i=0;i<7;i++){ const c=new THREE.Mesh(new THREE.CylinderGeometry(.6+i*.45,.5+i*.4,1.2,10,1,true),mat); c.position.y=.6+i*1.1; g.add(c); }
-  g.position.set(player.pos.x,player.pos.y-1,player.pos.z); scene.add(g);
+  g.position.set(player.pos.x,player.pos.y-PLAYER_FEET,player.pos.z); scene.add(g);
   tornado={mesh:g,dir:new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw)),life:5,tick:0}; Audio_.special();
 }
 function updateTornado(dt){
@@ -1799,7 +2090,7 @@ function crystalWall(){
   const f={x:-Math.sin(player.yaw),z:-Math.cos(player.yaw)}, r={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)};
   const mt=new THREE.MeshLambertMaterial({color:0x7ff5ee,transparent:true,opacity:.75,emissive:0x1a6b6b});
   for(let i=-3;i<=3;i++){
-    const x=player.pos.x+f.x*3.5+r.x*i*1.1, z=player.pos.z+f.z*3.5+r.z*i*1.1, gy=groundTopAt(x,z);
+    const x=player.pos.x+f.x*3.5+r.x*i*1.1, z=player.pos.z+f.z*3.5+r.z*i*1.1, gy=groundTopAt(x,z,player.pos.y-PLAYER_FEET);
     const m=new THREE.Mesh(UB,mt); m.scale.set(1.2,.01,1.2); m.position.set(x,gy,z); m.castShadow=true; scene.add(m);
     const col={x0:x-.6,x1:x+.6,z0:z-.6,z1:z+.6,top:gy+3.6}; colliders.push(col); crystals.push({m,col,gy,life:12,age:0});
   }
@@ -1808,7 +2099,7 @@ function crystalWall(){
 function updateCrystals(dt){
   if(player.shieldT>0){
     player.shieldT-=dt; player.invuln=Math.max(player.invuln,.1);
-    if(shield){ shield.position.set(player.pos.x,player.pos.y-1,player.pos.z); shield.rotation.y+=dt*3; if(player.shieldT<=0){ scene.remove(shield); shield=null; } }
+    if(shield){ shield.position.set(player.pos.x,player.pos.y-PLAYER_FEET,player.pos.z); shield.rotation.y+=dt*3; if(player.shieldT<=0){ scene.remove(shield); shield=null; } }
   }
   for(let i=crystals.length-1;i>=0;i--){
     const c=crystals[i]; c.age+=dt; c.life-=dt;
@@ -1886,6 +2177,21 @@ function renderSquad(){
   add('chip mode'+(squadMode==='follow'?' on':''),'👣',()=>{ squadMode='follow'; renderSquad(); });
   add('chip mode'+(squadMode==='bot'?' on':''),'🤖',()=>{ squadMode='bot'; renderSquad(); });
 }
+// Replica vertical motion: stand on rooftops/landings/ramps, hop up to ledges the leader is standing on, and if the
+// leader is somewhere a hop can't reach (a tall roof) the replica warps up beside them after a moment.
+function unitVertical(u,goalFeet,gd,dt){
+  const feet=u.pos.y-PLAYER_FEET; u.vy=u.vy||0;
+  const sf=groundTopAt(u.pos.x,u.pos.z,feet+0.05);
+  let nf;
+  if(u.vy<=0 && feet-sf<=0.6){
+    nf=sf; u.vy=0; u.leapCd=Math.max(0,(u.leapCd||0)-dt);
+    const dh=goalFeet-sf;
+    if(dh>0.9 && dh<6.3 && gd<12 && u.leapCd<=0){ u.vy=Math.sqrt(2*18*(Math.min(dh,4.6)+0.9)); u.leapCd=1.2; nf=sf+0.01; u.warpT=0; }
+    else if(dh>=6.3 && gd<30){ u.warpT=(u.warpT||0)+dt; if(u.warpT>1.6){ u.warpT=0; u.pos.set(player.pos.x+((u.n||1)%2?1.4:-1.4),player.pos.y,player.pos.z+0.6); nf=u.pos.y-1; for(let i=0;i<6;i++) debris(u.pos.clone().add(new THREE.Vector3(0,1,0)),0xcfefff,.25,new THREE.Vector3((Math.random()-.5)*4,Math.random()*3,(Math.random()-.5)*4),.5,false); } }
+    else u.warpT=0;
+  } else { u.vy=Math.max(-38,u.vy+GRAVITY*dt); nf=feet+u.vy*dt; if(nf<=sf && u.vy<=0){ nf=sf; u.vy=0; } }
+  u.pos.y=nf+PLAYER_FEET;
+}
 function updateSquad(dt){
   if(!squad.length) return;
   const act=squad.find(u=>u.active); if(act){ act.health=player.health; act.energy=player.energy; act.yaw=player.yaw; }
@@ -1902,16 +2208,17 @@ function updateSquad(dt){
     if(tgt){ goal=tgt.mesh.position; stop=1.6; } else { const a=idx*2.1+Math.PI; goal=player.pos.clone().add(new THREE.Vector3(Math.cos(a)*2.6,0,Math.sin(a)*2.6)); stop=squadMode==='follow'?.6:2.5; }
     const dx=goal.x-u.pos.x, dz=goal.z-u.pos.z, d=Math.hypot(dx,dz); let moving=false;
     if(d>stop){ const sp=(d>10?9:5.4)*dt, nx=u.pos.x+dx/d*sp, nz=u.pos.z+dz/d*sp, fy=u.pos.y-1;
-      if(!blockedAt(nx,u.pos.z,fy)) u.pos.x=nx; if(!blockedAt(u.pos.x,nz,fy)) u.pos.z=nz; moving=true; u.yaw=Math.atan2(-dx,-dz); }
+      const bx=blockedAt(nx,u.pos.z,fy); if(!bx) u.pos.x=nx; const bz=blockedAt(u.pos.x,nz,fy); if(!bz) u.pos.z=nz; moving=true; u.yaw=Math.atan2(-dx,-dz);
+      if((bx||bz) && (u.vy||0)!==0){ const lt=ledgeAt(bx?nx:u.pos.x,bz?nz:u.pos.z,fy); if(lt!==null){ if(bx) u.pos.x=nx; if(bz) u.pos.z=nz; u.pos.y=lt+1; u.vy=0; } } }
     if(d>28) u.pos.set(player.pos.x+2,player.pos.y,player.pos.z);
-    u.pos.y=groundTopAt(u.pos.x,u.pos.z)+1;
+    unitVertical(u, tgt ? tgt.mesh.position.y-0.6 : player.pos.y-PLAYER_FEET, d, dt);
     if(tgt){ const ed=tgt.mesh.position.distanceTo(u.pos);
       if(ed<2.1&&u.cd<=0){ damageEnemy(tgt,9,new THREE.Vector3(dx,0,dz).normalize()); u.cd=.5; u.atkT=.25; u.punch=!u.punch; }
       else if(ed>=3&&ed<11&&u.energy>=20&&u.cd<=0){ u.energy-=20; u.cd=1.6; u.yaw=Math.atan2(-dx,-dz); sonicBlast(u.pos,flatFwd(u.yaw),22,11); } }
-    const P=u.model.userData.parts; u.walkT+=moving?dt*9:0; const sw=moving?Math.sin(u.walkT)*.5:0;
-    P.leftLeg.rotation.x=sw; P.rightLeg.rotation.x=-sw; P.leftArm.rotation.x=-sw*.8; P.rightArm.rotation.x=sw*.8;
-    if(u.atkT>0) (u.punch?P.rightArm:P.leftArm).rotation.x=1.7*Math.sin(Math.min(1,u.atkT/.25)*Math.PI);
-    u.model.position.set(u.pos.x,u.pos.y-1+.9*PS,u.pos.z); u.model.scale.setScalar(PS);
+    const P=u.model.userData.parts, mry=u.model.rotation.y;
+    animateRig(P,dt,{pos:u.pos,fwd:{x:-Math.sin(mry),z:-Math.cos(mry)},grounded:Math.abs(u.vy||0)<.05,vy:u.vy||0,moving,id:'echo_echo',
+      atk:atkInput(u.punch?'right':'left',u.atkT,.25,{id:'echo_echo',amp:.85,tc:.3}),hurt:0});
+    u.model.position.set(u.pos.x,u.pos.y-PLAYER_FEET+0.045*PS,u.pos.z); u.model.scale.setScalar(PS);
     let dy=u.yaw-u.model.rotation.y; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); u.model.rotation.y+=dy*Math.min(1,dt*12);
   });
   for(const k in panelEls){ const e=panelEls[k]; if(!e.u) continue; e.el.classList.toggle('sel',e.u.active); e.el.style.setProperty('--hp',Math.max(0,e.u.health/player.form.maxHealth*100)); }
@@ -1954,7 +2261,7 @@ function streamTick(kind,dt){
   for(let d=.8;d<9;d+=.5){
     const q=from.clone().addScaledVector(dir,d);
     if(q.y<groundTopAt(q.x,q.z)||blockedAt(q.x,q.z,q.y)){ hit={pos:q,type:'world'}; break; }
-    const pr=props.find(p=>p!==carried&&p.mesh.position.distanceTo(q)<p.s*.9); if(pr){ hit={pos:pr.mesh.position.clone(),type:'prop',pr}; break; }
+    const pr=props.find(p=>p!==carried&&p!==player.driving&&p.mesh.position.distanceTo(q)<p.s*.9); if(pr){ hit={pos:pr.mesh.position.clone(),type:'prop',pr}; if(fire&&pr.veh) vehicleHit(pr,dir,4,0,'fire'); break; }
   }
   if(!hit) return;
   if(fire){ ices.forEach(ic=>{ if(ic.m.position.distanceTo(hit.pos)<3.5) ic.life-=4; }); }
@@ -2003,22 +2310,17 @@ const flashMat=new THREE.MeshLambertMaterial({color:0xffffff,emissive:0xff3030})
 const SKINS=[0xf1c8a0,0xd9a577,0xa8744a,0x6e4a2e], SHIRTS=[0x3a6ea8,0xc25a8a,0x8a9a3a,0xe0e0e0,0x8a5a2a,0x3a3a3a], PANTS=[0x2a2a3a,0x4a3a2a,0x1a3a5a];
 const GANGS=[{name:'RED',col:0xb32222,home:[-30.5,17.5]},{name:'PURPLE',col:0x7a2fb3,home:[33.5,-14.5]},{name:'YELLOW',col:0xd8b81a,home:[1.5,-46.5]}].map(g=>({...g,size:4,members:[],respT:0}));
 function makeNpcModel(skin,shirt,pants,cap){
-  const g=new THREE.Group(), parts={};
-  const mk=(geo,c,x,y,z)=>{ const m=new THREE.Mesh(geo,nm(c)); m.position.set(x,y,z); m.castShadow=true; g.add(m); return m; };
-  const j=(c,x,y,z)=>mk(new THREE.SphereGeometry(.09,7,5),c,x,y,z);
-  const limb=(x,y,color)=>{ const r=new THREE.Group(); const up=mk(new THREE.BoxGeometry(.16,.28,.16),color,0,0,0); up.geometry.translate(0,-.14,0); r.add(up); const e=new THREE.Mesh(new THREE.SphereGeometry(.08,7,5),nm(skin)); e.position.y=-.28; r.add(e); const lo=new THREE.Mesh(NG.arm,color===shirt?nm(shirt):nm(color)); lo.position.y=-.55; lo.geometry.translate(0,-.135,0); r.add(lo); r.userData.life={upper:up,lower:lo}; r.position.set(x,y,0); g.add(r); return r; };
-  parts.torso=mk(NG.torso,shirt,0,.95,0); parts.head=mk(NG.head,skin,0,1.45,0); parts.neck=j(skin,0,1.22,0);
-  parts.leftLeg=limb(-.13,.65,pants); parts.rightLeg=limb(.13,.65,pants);
-  parts.leftArm=limb(-.37,1.22,shirt); parts.rightArm=limb(.37,1.22,shirt);
-  if(cap) mk(NG.cap,cap,0,1.68,0);
-  g.position.y=-.95; g.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28}; return {g,parts,shirt};
+  const R=buildRig({legLen:.66,torsoH:.62,torsoW:.5,torsoD:.28,headS:.36,armLen:.58,armT:.14,legT:.17,neck:.06,skin,top:shirt,bottom:pants,accent:0x222222,sleeve:true});
+  const parts=R.parts;
+  if(cap){ const c=new THREE.Mesh(UB,rigMat(cap)); c.scale.set(.42,.12,.42); c.position.y=.36*1.05; parts.head.add(c); parts.all.push(c.material); }
+  R.g.position.y=-.95; R.g.scale.setScalar(.95); return {g:R.g,parts,shirt};
 }
 function spawnNpc(gang,x,z){
   const gy=groundTopAt(x,z), gg=!!gang;
   const m=makeNpcModel(SKINS[rnd(4)],gg?gang.col:SHIRTS[rnd(6)],gg?0x1a1a1a:PANTS[rnd(3)],gg?gang.col:0);
-  const root=new THREE.Group(); root.add(m.g); root.position.set(x,gy+.95*PRESENTATION.npcScale,z); root.scale.setScalar(PRESENTATION.npcScale); scene.add(root);
+  const root=new THREE.Group(); root.add(m.g); root.position.set(x,gy+.95,z); scene.add(root);
   const en={npc:true,gang:gang||null,mesh:root,parts:m.parts,shirt:m.shirt,hp:gg?60:40,maxHp:gg?60:40,speed:gg?2.6:2.2,damage:gg?8:5,armed:gg&&Math.random()<.5,
-    atkCd:0,atk:0,punch:false,alive:true,state:'wander',hurtT:0,hurtDir:new THREE.Vector3(),impact:0,aggro:false,fear:0,fightT:0,wanderT:0,walkT:0,yaw:Math.random()*6.28,flash:0,
+    atkCd:0,atk:0,punch:false,alive:true,state:'wander',aggro:false,fear:0,fightT:0,wanderT:0,walkT:0,yaw:Math.random()*6.28,flash:0,
     home:new THREE.Vector3(x,0,z),target:new THREE.Vector3(x,0,z),threat:null};
   root.rotation.y=en.yaw; enemies.push(en); if(gang) gang.members.push(en); return en;
 }
@@ -2052,7 +2354,7 @@ function provoke(en){
 }
 function npcHurt(en,dmg,dir,opts){
   const heavy = opts && opts.heavy;
-  en.hp-=dmg; heavy?Audio_.heavyHit():Audio_.hit(); en.flash=heavy?0.2:0.12; en.parts.torso.material=flashMat;
+  en.hp-=dmg; heavy?Audio_.heavyHit():Audio_.hit(); en.flash=heavy?0.2:0.12; en.hurtT=heavy?.45:.25; rigFlash(en.parts,true);
   if(dir&&dir.lengthSq()>0){
     // Default shove is small; an explicit opts.knock (e.g. an XLR8 tackle) scales it up, clamped so a
     // single hit can never launch an NPC absurdly far. Still checked against walls.
@@ -2064,6 +2366,7 @@ function npcHurt(en,dmg,dir,opts){
 }
 function hurtTarget(tu,dmg){
   if(tu.unit) tu.unit.health-=dmg;
+  else if(player.driving){ const c=player.driving; damageVehicle(c,dmg*1.1,'hit'); if(player.invuln<=0){ player.health-=dmg*.2; player.invuln=.3; flashDamage(); } }
   else if(player.alive&&player.invuln<=0){ player.health-=dmg; player.invuln=.4; flashDamage(); }
 }
 GANGS.forEach(g=>{ for(let i=0;i<g.size;i++) spawnNpc(g,g.home[0]+(Math.random()-.5)*5,g.home[1]+(Math.random()-.5)*5); });
@@ -2080,14 +2383,17 @@ function updateNpcs(dt){
   for(let i=enemies.length-1;i>=0;i--){
     const en=enemies[i]; if(!en.npc) continue;
     if(en.state==='dead'){
-      en.deadT-=dt; en.mesh.rotation.x+=(-1.5-en.mesh.rotation.x)*Math.min(1,dt*8);
-      if(en.deadT<=0){ scene.remove(en.mesh); enemies.splice(i,1); if(en.gang){ const k=en.gang.members.indexOf(en); if(k>=0) en.gang.members.splice(k,1); en.gang.respT=25; } }
+      en.deadT-=dt; en.mesh.rotation.x+=(-1.5-en.mesh.rotation.x)*Math.min(1,dt*8); animateRig(en.parts,dt,{dead:Math.min(1,(4-en.deadT)/.5),grounded:true,ws:.9});
+      if(en.deadT<=0){ scene.remove(en.mesh); rigDispose(en.parts); enemies.splice(i,1); if(en.gang){ const k=en.gang.members.indexOf(en); if(k>=0) en.gang.members.splice(k,1); en.gang.respT=25; } }
       continue;
     }
     if(en.ice) continue;
     en.atkCd=Math.max(0,en.atkCd-dt); en.atk=Math.max(0,en.atk-dt);
-    if(en.flash>0){ en.flash-=dt; if(en.flash<=0) en.parts.torso.material=nm(en.shirt); }
+    if(en.flash>0){ en.flash-=dt; if(en.flash<=0) rigFlash(en.parts,false); }
+    en.hurtT=Math.max(0,(en.hurtT||0)-dt);
     const p=en.mesh.position; let goal=null, stop=.5, speed=en.speed*.6, aim=false;
+    const threatNear=player.alive&&Math.hypot(player.pos.x-p.x,player.pos.z-p.z)<9;
+    if(en.state==='wander' && threatNear && !en.aggro){ en.noticeT=(en.noticeT||0)+dt; if(en.noticeT>.35 && Math.random()<.02) en.state='flee'; } else if(!threatNear) en.noticeT=0;
     if(en.state==='fight'){
       const tu=nearestTarget(p), dx=tu.pos.x-p.x, dz=tu.pos.z-p.z, d=Math.hypot(dx,dz);
       en.fightT-=dt; if(d<12) en.fightT=Math.max(en.fightT,5);
@@ -2115,16 +2421,9 @@ function updateNpcs(dt){
     }
     p.y=groundTopAt(p.x,p.z)+.95;
     let dy=en.yaw-en.mesh.rotation.y; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); en.mesh.rotation.y+=dy*Math.min(1,dt*10);
-    animateCharacterLife(en.mesh,en.parts,moving,dt,en.type==='speed'?'speed':'enemy',Math.max(.8,en.speed/2.5));
-    applyCombatBodyLanguage(en.mesh,en.parts,dt,en);
-    en.walkT+=moving?dt*(speed>3?11:7):0; const sw=moving?Math.sin(en.walkT)*.6:0, P=en.parts;
-    P.leftLeg.rotation.x=sw; P.rightLeg.rotation.x=-sw; P.leftArm.rotation.x=-sw*.8; P.rightArm.rotation.x=sw*.8;
-    if(en.state==='flee'){ P.leftArm.rotation.x=P.rightArm.rotation.x=2.6; }
-    if(aim) P.rightArm.rotation.x=1.55;
-    if(en.atk>0) (en.punch?P.rightArm:P.leftArm).rotation.x=1.7*Math.sin(Math.min(1,en.atk/.25)*Math.PI);
-    animateCharacterLife(en.mesh, P, moving, dt, 'npc', Math.max(.8,speed/2.5));
-    applyCombatBodyLanguage(en.mesh,P,dt,en);
-    if(en.flash>0){const hitBlend=Math.min(1,en.flash*7);P.torso.rotation.x+=.18*hitBlend;P.head.rotation.x-=.12*hitBlend;P.leftArm.rotation.x+=.28*hitBlend;P.rightArm.rotation.x+=.28*hitBlend;}
+    { const ry=en.mesh.rotation.y;
+      animateRig(en.parts,dt,{pos:p,fwd:{x:-Math.sin(ry),z:-Math.cos(ry)},grounded:true,moving,ws:.95,id:'ben',flee:en.state==='flee',aim:aim,
+        atk:atkInput(en.punch?'right':'left',en.atk,.25,{id:'npc',amp:.9,tc:.3}),hurt:(en.hurtT||0)/.45}); }
   }
 }
 function useAction(a,k){
@@ -2142,173 +2441,6 @@ function buildActions(){
     if(a.hold){ const up=e=>{ a.hold(false); e.preventDefault(); }; ['touchend','touchcancel'].forEach(n=>b.addEventListener(n,up,{passive:false})); ['mouseup','mouseleave'].forEach(n=>b.addEventListener(n,up)); }
   });
 }
-function applyCombatBodyLanguage(model, parts, dt, state){
-  if(!model || !parts || !state) return;
-  const spring=(o,k,t,r)=>{ if(o) o.rotation[k] += (t-o.rotation[k])*Math.min(1,dt*r); };
-  const hurt=Math.max(0,state.hurtT||0);
-  if(hurt>0){
-    state.hurtT=Math.max(0,hurt-dt);
-    const q=Math.sin(Math.min(1,hurt/0.34)*Math.PI);
-    const dx=state.hurtDir?.x||0, dz=state.hurtDir?.z||0;
-    const side=(dx*Math.cos(model.rotation.y)-dz*Math.sin(model.rotation.y));
-    const back=(dx*Math.sin(model.rotation.y)+dz*Math.cos(model.rotation.y));
-    if(parts.torso){ spring(parts.torso,'z',side*0.20*q,10); spring(parts.torso,'x',-back*0.16*q,10); }
-    if(parts.head) spring(parts.head,'z',-side*0.10*q,10);
-    if(parts.leftArm) spring(parts.leftArm,'x',-0.35*q,11);
-    if(parts.rightArm) spring(parts.rightArm,'x',-0.35*q,11);
-    if(parts.leftLeg) spring(parts.leftLeg,'x',0.18*q,9);
-    if(parts.rightLeg) spring(parts.rightLeg,'x',0.18*q,9);
-  }
-  const impact=model.userData.impact||0;
-  if(impact>0){
-    model.userData.impact=Math.max(0,impact-dt*4.5);
-    const q=impact;
-    if(parts.torso) spring(parts.torso,'x',-0.24*q,12);
-    if(parts.pelvis) spring(parts.pelvis,'x',0.08*q,10);
-  }
-}
-
-function animateCharacterLife(model,parts,moving,dt,style='humanoid',speedFactor=1){
-  if(!model||!parts) return;
-  const L=model.userData.life||(model.userData.life={t:0,phase:0,breath:0,motion:0});
-  L.motion=(L.motion||0)+((moving?1:0)-(L.motion||0))*Math.min(1,dt*(moving?10:7));
-  L.t+=dt*(1.8+7.2*L.motion*speedFactor); L.breath+=dt*(moving?2.5:1.15);
-  const gait=Math.sin(L.t), idle=Math.sin(L.breath+L.phase), gaitOpp=-gait;
-  const bob=(moving?Math.abs(gait)*.055:Math.sin(L.breath*.7+L.phase)*.012)*L.motion;
-  const spring=(o,k,t,r)=>{if(o)o.rotation[k]+=(t-o.rotation[k])*Math.min(1,dt*r)};
-  const arms=['leftArm','rightArm','leftArm2','rightArm2'];
-  if(style==='cannonbolt') return;
-  if(parts.pelvis){spring(parts.pelvis,'z',-gait*.045*L.motion+idle*.01,7);spring(parts.pelvis,'x',-.035*L.motion+Math.abs(gait)*.018*L.motion,6);parts.pelvis.position.y+=bob-(parts.pelvis.userData._bob||0);parts.pelvis.userData._bob=bob;}
-  if(parts.torso){spring(parts.torso,'z',gait*.065*L.motion+idle*.018*(1-L.motion),7);spring(parts.torso,'y',-gait*.025*L.motion,5);spring(parts.torso,'x',-.045*L.motion,5);}
-  if(parts.neck)spring(parts.neck,'x',-gait*.018*L.motion,8);
-  if(parts.head){spring(parts.head,'y',(moving?gaitOpp*.035:idle*.055),5);spring(parts.head,'z',-gait*.018*L.motion,5);spring(parts.head,'x',-.025*L.motion+idle*.008*(1-L.motion),4);}
-  if(L.motion>.01){
-    if(parts.leftLeg){spring(parts.leftLeg,'x',gait*.52,10);if(parts.leftLeg.userData.life?.lower)spring(parts.leftLeg.userData.life.lower,'x',Math.max(0,-gait)*.30+Math.max(0,gait)*-.08,11);}
-    if(parts.rightLeg){spring(parts.rightLeg,'x',-gait*.52,10);if(parts.rightLeg.userData.life?.lower)spring(parts.rightLeg.userData.life.lower,'x',Math.max(0,gait)*.30+Math.max(0,-gait)*-.08,11);}
-    arms.forEach((n,i)=>{const a=parts[n];if(!a?.userData?.life)return;const side=i%2?1:-1;spring(a,'x',side*gait*.30,8);if(a.userData.life.lower)spring(a.userData.life.lower,'x',side*Math.max(0,-gait)*.18,9);if(a.userData.life.wrist)spring(a.userData.life.wrist,'z',side*gait*.015,7);});
-    ['shoulderL','shoulderR','shoulderL2','shoulderR2'].forEach((n,i)=>{const j=parts[n];if(j)spring(j,'z',(i%2?-.035:.035)*L.motion,6);});
-  }else{
-    arms.forEach(n=>{const a=parts[n];if(a?.userData?.life){spring(a,'x',0,5);if(a.userData.life.lower)spring(a.userData.life.lower,'x',0,5);}});
-    ['leftLeg','rightLeg'].forEach(n=>{const a=parts[n];if(a){spring(a,'x',0,5);if(a.userData.life?.lower)spring(a.userData.life.lower,'x',0,5);}});
-    ['shoulderL','shoulderR','shoulderL2','shoulderR2'].forEach(n=>{const j=parts[n];if(j)spring(j,'z',idle*.012,4);});
-  }
-  if(model.userData.kind==='four_arms'){if(parts.torso)spring(parts.torso,'x',-.065*L.motion,5);if(parts.head)spring(parts.head,'y',gaitOpp*.022,5);}
-  else if(model.userData.kind==='xlr8'||style==='speed'){if(parts.torso)spring(parts.torso,'x',-.11*L.motion,7);if(parts.head)spring(parts.head,'x',-.045*L.motion,7);}
-  else if(model.userData.kind==='echo_echo'){if(parts.torso)spring(parts.torso,'z',gait*.085*L.motion,8);}
-}
-function applyAlienBiomechanics(model,parts,moving,dt,speedMult=1){
-  if(!model||!parts) return;
-  const id=model.userData.kind||player.form?.id||'ben';
-  const B=model.userData.bio||(model.userData.bio={t:Math.random()*6.28,phase:Math.random()*6.28,lastSpeed:0,rollPhase:0});
-  const speedNow=player.form?.speed||4;
-  const speedRatio=Math.min(3,Math.max(0,speedMult||1));
-  B.t += dt*(moving ? 3.5+speedNow*0.9*speedRatio : 1.2);
-  const s=Math.sin(B.t+B.phase), c=Math.cos(B.t+B.phase);
-  const superS=player.form?.id==='xlr8'?Math.max(0,player.superSpeed||0):0;
-  const roll=player.form?.id==='cannonbolt'?Math.max(0,player.rollT||0):0;
-  const spring=(o,k,target,rate)=>{if(o)o.rotation[k]+=(target-o.rotation[k])*Math.min(1,dt*rate);};
-  const posSpring=(o,k,target,rate)=>{if(o)o.position[k]+=(target-o.position[k])*Math.min(1,dt*rate);};
-  const movingQ=moving?1:0;
-
-  if(id==='four_arms'){
-    // Four Arms carries his mass through the hips and shoulders. The upper pair leads,
-    // the lower pair lags slightly, and each foot plants with a visible weight transfer.
-    const heavy=0.55+0.45*Math.min(1,speedRatio);
-    if(parts.pelvis) spring(parts.pelvis,'z',-s*.10*movingQ,5.5);
-    if(parts.torso){spring(parts.torso,'x',-.10*movingQ-heavy*.035,4.8);spring(parts.torso,'z',s*.075*movingQ,4.8);}
-    if(parts.head) spring(parts.head,'z',-s*.035*movingQ,5.5);
-    if(parts.leftLeg) spring(parts.leftLeg,'x',s*.42*movingQ,6.5);
-    if(parts.rightLeg) spring(parts.rightLeg,'x',-s*.42*movingQ,6.5);
-    if(parts.leftArm) spring(parts.leftArm,'x',-s*.24*movingQ,5.2);
-    if(parts.rightArm) spring(parts.rightArm,'x',s*.24*movingQ,5.2);
-    if(parts.leftArm2) spring(parts.leftArm2,'x',-s*.34*movingQ+c*.07*movingQ,4.5);
-    if(parts.rightArm2) spring(parts.rightArm2,'x',s*.34*movingQ-c*.07*movingQ,4.5);
-    if(player.onGround && player.landingT>0){
-      const lk=(player.landingT/.18)*player.landingStrength;
-      if(parts.pelvis) posSpring(parts.pelvis,'y',parts.pelvis.userData.bioBaseY??parts.pelvis.position.y,10);
-      model.scale.y=Math.max(.001,(1-(lk*.045)));
-    }
-  } else if(id==='xlr8'){
-    // XLR8 is aerodynamic: the pelvis turns first, the chest and head stabilize behind it,
-    // and the limbs cycle faster as the speed charge rises. Deceleration leaves a brief recovery sway.
-    const fast=superS>0.03 ? (0.7+superS*1.8) : 0;
-    const stride=movingQ*(0.45+fast*.55);
-    const lean=-(0.10+superS*.52)*movingQ;
-    if(parts.pelvis) spring(parts.pelvis,'y',-s*.025*stride,9);
-    if(parts.torso){spring(parts.torso,'x',lean,9);spring(parts.torso,'z',s*.055*stride,10);}
-    if(parts.head){spring(parts.head,'x',-lean*.42,11);spring(parts.head,'z',-s*.045*stride,11);}
-    if(parts.neck) spring(parts.neck,'x',lean*.22,10);
-    if(parts.leftLeg) spring(parts.leftLeg,'x',s*(.65+fast*.48),13);
-    if(parts.rightLeg) spring(parts.rightLeg,'x',-s*(.65+fast*.48),13);
-    if(parts.leftArm) spring(parts.leftArm,'x',-s*(.32+fast*.22),12);
-    if(parts.rightArm) spring(parts.rightArm,'x',s*(.32+fast*.22),12);
-    // At high speed the shoulders bank into turns rather than staying square to the camera.
-    const turn=player.moveInput?.x||0;
-    if(parts.shoulderL) spring(parts.shoulderL,'z',-turn*(.12+superS*.18),8);
-    if(parts.shoulderR) spring(parts.shoulderR,'z',-turn*(.12+superS*.18),8);
-  } else if(id==='heatblast'){
-    // Heatblast's body follows the flame: loose shoulders, fluid arms, and a buoyant torso.
-    const airborne=player.flying?1:0;
-    const heat=0.75+airborne*.35+(player.boostT>0?.35:0);
-    if(parts.pelvis) spring(parts.pelvis,'z',s*.045*heat,5);
-    if(parts.torso){spring(parts.torso,'x',(player.flying&&moving)?-.22:0,6);spring(parts.torso,'z',s*.10*heat,5);}
-    if(parts.head) spring(parts.head,'z',-s*.06*heat,5);
-    if(parts.leftArm) spring(parts.leftArm,'x',-1.05+s*.16*heat,5.5);
-    if(parts.rightArm) spring(parts.rightArm,'x',-1.05-s*.16*heat,5.5);
-    if(parts.leftLeg) spring(parts.leftLeg,'x',.12+s*.12*airborne,5);
-    if(parts.rightLeg) spring(parts.rightLeg,'x',.12-s*.12*airborne,5);
-    if(airborne){
-      const buoy=Math.sin(B.t*.72+B.phase)*.045;
-      posSpring(parts.torso,'y',(parts.torso.userData.bioBaseY??parts.torso.position.y)+buoy,4);
-    }
-  } else if(id==='diamondhead'){
-    // Diamondhead is rigid and crystalline: less flex, delayed limb motion, and a deliberate
-    // shoulder-to-hip counter-rotation instead of rubbery humanoid sway.
-    if(parts.pelvis) spring(parts.pelvis,'z',-s*.035*movingQ,3.8);
-    if(parts.torso){spring(parts.torso,'x',-.045*movingQ,3.6);spring(parts.torso,'z',s*.035*movingQ,3.8);}
-    if(parts.head) spring(parts.head,'z',-s*.018*movingQ,3.4);
-    if(parts.leftLeg) spring(parts.leftLeg,'x',s*.34*movingQ,5.0);
-    if(parts.rightLeg) spring(parts.rightLeg,'x',-s*.34*movingQ,5.0);
-    if(parts.leftArm) spring(parts.leftArm,'x',-s*.16*movingQ,4.2);
-    if(parts.rightArm) spring(parts.rightArm,'x',s*.16*movingQ,4.2);
-    if(player.flying){
-      if(parts.leftArm) spring(parts.leftArm,'z',-.12,3.5);
-      if(parts.rightArm) spring(parts.rightArm,'z',.12,3.5);
-    }
-  } else if(id==='echo_echo'){
-    // Echo Echo is small and springy: short steps, quick head correction, and a tiny rebound
-    // after impacts/landings to make the body feel lighter than the heavy aliens.
-    const bounce=movingQ?Math.abs(s):Math.max(0,Math.sin(B.t*1.7+B.phase));
-    if(parts.pelvis) spring(parts.pelvis,'z',s*.065*movingQ,8.5);
-    if(parts.torso){spring(parts.torso,'x',-bounce*.055*movingQ,8);spring(parts.torso,'z',s*.10*movingQ,8.5);}
-    if(parts.head){spring(parts.head,'z',-s*.075*movingQ,10);spring(parts.head,'y',c*.045*movingQ,9);}
-    if(parts.leftLeg) spring(parts.leftLeg,'x',s*.58*movingQ,12);
-    if(parts.rightLeg) spring(parts.rightLeg,'x',-s*.58*movingQ,12);
-    if(parts.leftArm) spring(parts.leftArm,'x',-s*.38*movingQ,10);
-    if(parts.rightArm) spring(parts.rightArm,'x',s*.38*movingQ,10);
-  } else if(id==='cannonbolt'){
-    // Rolling inertia: the shell builds rotation with speed, compresses into the ground on contact,
-    // then slowly releases instead of instantly snapping upright.
-    B.rollPhase += dt*(3+roll*18);
-    if(roll>0.02){
-      const squash=1+Math.sin(B.rollPhase)*.025*roll;
-      model.scale.y*=Math.max(.001,1-roll*.06);
-      model.scale.x*=squash;
-      model.scale.z*=squash;
-      if(parts.shell) parts.shell.rotation.z += dt*(8+roll*20);
-    } else if(player.onGround){
-      const lk=player.landingT>0?(player.landingT/.18)*player.landingStrength:0;
-      if(parts.shell) parts.shell.scale.y += ((1-lk*.07)-parts.shell.scale.y)*Math.min(1,dt*7);
-    }
-  } else {
-    // Ben stays closest to a natural human baseline: quiet torso counter-sway and head stabilization.
-    if(parts.pelvis) spring(parts.pelvis,'z',-s*.035*movingQ,6);
-    if(parts.torso) spring(parts.torso,'z',s*.045*movingQ,6);
-    if(parts.head) spring(parts.head,'z',-s*.025*movingQ,6);
-  }
-  B.lastSpeed += ((moving?speedRatio:0)-B.lastSpeed)*Math.min(1,dt*5);
-}
-
 function poseExtras(parts,moving,dt){
   const m=player.model; let lean=0;
   player.animT=(player.animT||0)+dt*(player.swimming?5:10);
@@ -2318,20 +2450,14 @@ function poseExtras(parts,moving,dt){
     lean=lv?(moving?-.35:0):(moving?-(Math.PI/2-player.pitch):-.12);
     const up=lv?1.0:(moving?2.9+S*.08:.5);
     if(lv&&(player._cl=(player._cl||0)+dt)>.09){ player._cl=0; debris(player.pos.clone().add(new THREE.Vector3(0,-.95,0)),0x9ffcff,.8,new THREE.Vector3(),1.4,false); }
-    ['leftArm','rightArm'].forEach(k=>{ if(parts[k]) parts[k].rotation.x=up; });
-    if(parts.leftLeg){ parts.leftLeg.rotation.x=.15+S*.1; parts.rightLeg.rotation.x=.15-S*.1; }
     if(player.form.id==='heatblast'&&moving&&(player._fl=(player._fl||0)+dt)>.03){
       player._fl=0; debris(player.pos.clone().add(new THREE.Vector3((Math.random()-.5)*.4,-.4,(Math.random()-.5)*.4)),Math.random()<.5?0xff7a1a:0xffd84a,.45,new THREE.Vector3(),.45,false);
     }
   } else if(player.swimming){
     lean=moving?-(Math.PI/2-player.pitch*.7):-.1;
-    const a=moving?1.5+S*1.5:.6+S*.4, b=moving?1.5-S*1.5:.6-S*.4;
-    if(parts.leftArm) parts.leftArm.rotation.x=a; if(parts.rightArm) parts.rightArm.rotation.x=b;
-    if(parts.leftLeg){ parts.leftLeg.rotation.x=Math.sin(A*2)*.4; parts.rightLeg.rotation.x=-Math.sin(A*2)*.4; }
   }
-  if(carried) ['leftArm','rightArm','leftArm2','rightArm2'].forEach(k=>{ if(parts[k]) parts[k].rotation.x=3; });
   // (the old per-frame debris() blue trail was removed: it allocated a new material every frame; speed trails are now pooled in updateSpeedEffects)
-  if((player.superT||0)>0.2&&!player.flying&&!player.swimming){ lean=-.6*player.superT; ['leftArm','rightArm'].forEach(k=>{ if(parts[k]) parts[k].rotation.x=-1.3; }); }
+  if((player.superT||0)>0.2&&!player.flying&&!player.swimming){ lean=-.6*player.superT; }
   m.rotation.x+=(lean-m.rotation.x)*.18;
 }
 const raycaster = new THREE.Raycaster();
@@ -2384,7 +2510,7 @@ function meleeAttack(){
   // updatePlayer), so comboStep resets to 0 there rather than here.
   // Lock-on: snap to face the locked target (if it's close enough to be a melee target), so the swing and
   // its hit cone both point at it even if the camera assist hasn't finished turning yet.
-  faceLockedTarget(player.form.atkRange + 4.5, 2.4);
+  faceLockedTarget(player.form.atkRange*CHARACTER_SCALE + 4.5, 2.4);
   const step = player.comboStep;
   const isHeavy = step === 2;
   const punchKind = step===0 ? 'left' : step===1 ? 'right' : 'heavy';
@@ -2392,8 +2518,6 @@ function meleeAttack(){
 
   player.atkTimer = player.form.atkCooldown * (isHeavy ? 1.4 : 1) / tuning.speed;
   player.attacking = animDur;
-  player.impactKick = 0.18 + (isHeavy ? 0.10 : 0);
-  player.impactLean = isHeavy ? 0.18 : 0.10;
   player.punchKind = punchKind;
   player.punchAnimDur = animDur;
   player.punchAnimT = animDur;
@@ -2417,14 +2541,14 @@ function meleeAttack(){
     // front of that line, so enemies behind the player remain safe.
     if(swingLockEn && lockValid(swingLockEn)){
       const lv=swingLockEn.mesh.position.clone().sub(originPos); lv.y=0;
-      if(lv.length()<player.form.atkRange+1.2 && lv.lengthSq()>0.0001) forward = lv.normalize();
+      if(lv.length()<player.form.atkRange*CHARACTER_SCALE+1.2 && lv.lengthSq()>0.0001) forward = lv.normalize();
     }
     const dmg = player.form.atkDamage * tuning.comboMul[step];
     const knock = tuning.knock[step];
     // Combo hits 2 and 3 get a small range buffer: a real combo flurry involves stepping into the
     // target, and without this, a hit's own knockback can push the enemy just outside the range of
     // the very next hit in the same combo, silently breaking combos on a stationary target.
-    const effectiveRange = player.form.atkRange + (step>0 ? 0.35 : 0);
+    const effectiveRange = player.form.atkRange*CHARACTER_SCALE + (step>0 ? 0.45 : 0);
     let hitSomething = false;
     enemies.forEach(en=>{
       if(!en.alive) return;
@@ -2433,16 +2557,18 @@ function meleeAttack(){
       if(dist < effectiveRange){
         const angle = forward.angleTo(toEnemy.normalize());
         if(angle < 0.6){ // narrow frontal cone (~34 degrees each side) - enemies behind or well to the side are not hit
-          const hitDir = toEnemy.normalize();
-          damageEnemy(en, dmg, hitDir, { heavy:isHeavy, knock });
-          player.impactKick = isHeavy ? 1 : 0.7;
-          // A tiny forward body commitment makes melee feel physical without changing collision.
-          if(player.onGround){ player.pos.x += hitDir.x * (isHeavy?0.055:0.025); player.pos.z += hitDir.z * (isHeavy?0.055:0.025); }
+          damageEnemy(en, dmg, toEnemy.normalize(), { heavy:isHeavy, knock });
           alienMeleeFx(player.form.id, en.mesh.position.clone(), isHeavy);
           hitSomething = true;
         }
       }
     });
+    // Stage 8: punches dent cars; Four Arms shoves them hard and his finisher flips them; Heatblast sets them alight.
+    props.forEach(pr=>{ if(!pr.veh||pr.driver||pr.wreck) return; const tv=pr.mesh.position.clone().sub(originPos); tv.y=0; const dd=tv.length();
+      if(dd<effectiveRange+1.6 && forward.angleTo(tv.normalize())<0.9){
+        const id=player.form.id, fa=id==='four_arms';
+        vehicleHit(pr, forward.clone(), fa?(isHeavy?60:30):(isHeavy?22:12), fa?(isHeavy?22:12):(isHeavy?9:5), id==='heatblast'?'fire':(fa&&isHeavy?'flip':'punch'));
+        alienMeleeFx(id, pr.mesh.position.clone(), isHeavy); hitSomething=true; } });
     if(!hitSomething && player.form.id==='four_arms') tryBreakBlock();
   }, hitDelay*1000);
 }
@@ -2488,7 +2614,7 @@ function useSpecial(){
 ========================================================================= */
 const moveInput = {x:0,y:0};
 const keys = {};
-addEventListener('keydown', e=>{ keys[e.code]=true; if(e.code==='KeyF') meleeAttack(); if(e.code==='KeyE') useSpecial(); {const ai={KeyE:0,KeyR:1,KeyT:2,KeyY:3,KeyU:4}[e.code], A=player.form.actions; if(ai!==undefined&&A&&A[ai]) useAction(A[ai],ai);} if(e.code==='KeyQ') revertToBen(); if(e.code==='KeyL'||e.code==='Tab'){ if(e.code==='Tab') e.preventDefault(); lockButton(); } if(e.code==='KeyG') tryPlaceBlock(); });
+addEventListener('keydown', e=>{ keys[e.code]=true; if(e.code==='KeyF') meleeAttack(); if(e.code==='KeyE') useSpecial(); {const ai={KeyE:0,KeyR:1,KeyT:2,KeyY:3,KeyU:4}[e.code], A=player.form.actions; if(ai!==undefined&&A&&A[ai]) useAction(A[ai],ai);} if(e.code==='KeyQ') revertToBen(); if(e.code==='KeyL'||e.code==='Tab'){ if(e.code==='Tab') e.preventDefault(); lockButton(); } if(e.code==='KeyG') tryPlaceBlock(); if(e.code==='KeyV') vehicleButton(); });
 addEventListener('keyup', e=>{ keys[e.code]=false; const ai={KeyE:0,KeyR:1,KeyT:2,KeyY:3,KeyU:4}[e.code], A=player.form.actions; if(ai!==undefined&&A&&A[ai]&&A[ai].hold) A[ai].hold(false); });
 addEventListener('mousedown', e=>{ Audio_.resume(); if(!isTouch){ if(e.button===0) meleeAttack(); if(e.button===2) tryPlaceBlock(); } });
 addEventListener('contextmenu', e=> e.preventDefault());
@@ -2548,7 +2674,7 @@ joyZone.addEventListener('touchcancel', joyEnd,{passive:false});
 // its own dedicated small zone for movement; everything else is look.
 function isUiElement(el){
   while(el && el !== document.body){
-    if(el.id==='joystick-zone' || el.id==='lock-btn' || el.tagName==='BUTTON') return true;
+    if(el.id==='joystick-zone' || el.id==='lock-btn' || el.id==='veh-btn' || el.tagName==='BUTTON') return true;
     if(el.classList && (el.classList.contains('menu-btn') || el.classList.contains('act-btn'))) return true;
     el = el.parentElement;
   }
@@ -2613,7 +2739,7 @@ function bindBtn(id, downFn, upFn){
   el.addEventListener('mouseup', end); el.addEventListener('touchcancel', end,{passive:false}); el.addEventListener('mouseleave', end);
 }
 bindBtn('btn-attack', ()=>{ player.atkHeld=true; }, ()=>{ player.atkHeld=false; });
-bindBtn('btn-jump', doJump);
+bindBtn('btn-jump', ()=>{ player.jumpHeld=true; doJump(); }, ()=>{ player.jumpHeld=false; });
 bindBtn('btn-special', useSpecial);
 bindBtn('lock-btn', lockButton);
 
@@ -2645,6 +2771,11 @@ document.getElementById('btn-attack').addEventListener('touchend', ()=> clearTim
 ========================================================================= */
 function doJump(){
   if(!player.alive) return;
+  if(player.driving) return; // BRAKE while driving (see driveTick)
+  if(player.onLadder){ // hop off a ladder, away from the wall
+    const N=player.onLadder.ladder; player.onLadder=null; player.ladderCd=0.4;
+    player.pos.x+=N.nx*0.7; player.pos.z+=N.nz*0.7; player.vel.y=player.form.jump*0.8; player.onGround=false; return;
+  }
   if(player.swimming){ player.vel.y=7; return; }
   if(player.form.flies){
     if(!player.flying){
@@ -2662,7 +2793,250 @@ const GRAVITY = -18;
 const WORLD_LIMIT = HALF - 1;
 function flySpeedOf(p){ return (p.form.flySpeed||8) * 0.6; }
 
+/* =========================================================================
+   STAGE 8 - VEHICLES
+   Cars are the existing parked-car props (makeBoulder(...,car=true)). Each one carries arcade vehicle state:
+   v (signed forward speed), yaw, hp, push (shove/knock velocity), by (base height), flip/wreck/burn flags.
+   Arcade model only: speed target + accel/brake, speed-scaled steering, 5-point wall probe, circle car-vs-car.
+   No suspension or tyre simulation, so it stays cheap on phones.
+========================================================================= */
+var CAR_H=.95, CAR_HP=100, CAR_MAX_FWD=24, CAR_MAX_REV=8; // var: initVeh() can run during first chunk generation, before this line
+var TRAFFIC_MAX={LOW:2,MEDIUM:4,HIGH:6};
+var vehNear=null, vehHornCd=0, vehTick=0, trafficT=0;
+function initVeh(p){ p.veh=true; p.hp=CAR_HP; p.v=0; p.yaw=p.mesh.rotation.y; p.by=Math.max(0,p.mesh.position.y-CAR_H); p.vy=0; p.push=new THREE.Vector3(); p.flipT=0; p.flipped=false; p.roll=0; p.burnT=0; p.fxT=0; p.hitCd=0; p.driver=null; p.traffic=false; return p; }
+function removeVehicle(p){
+  if(player.driving===p) exitCar(true);
+  const i=props.indexOf(p); if(i>=0) props.splice(i,1);
+  scene.remove(p.mesh); p.mesh.traverse(o=>{ if(o.material) o.material.dispose(); });
+}
+function carBody(p){ return p.mesh.children[0]; }
+function damageVehicle(p,dmg,kind){
+  if(!p.veh||p.wreck) return;
+  p.hp-=dmg; const b=carBody(p); if(b){ b.material.emissive.set(0x663311); p.flashT=.14; }
+  if(p.hp<=0) wreckVehicle(p);
+}
+function wreckVehicle(p){
+  p.hp=0; p.wreck=true; p.v=0; p.burnT=Math.max(p.burnT,7); p.wreckT=16; p.traffic=false;
+  const b=carBody(p); if(b){ b.material.color.set(0x1b1b1b); b.material.emissive.set(0); }
+  const m=p.mesh.position.clone(); Audio_.crash(); shakeCamera(.4);
+  for(let i=0;i<14;i++) debris(m.clone(),Math.random()<.5?0xff6a1e:0xffd84a,.5+Math.random()*.5,new THREE.Vector3((Math.random()-.5)*9,2+Math.random()*7,(Math.random()-.5)*9),.8,true);
+  shockwaveAt(m,4.5,26,false);
+  if(p.driver){ exitCar(true); if(player.invuln<=0){ player.health-=28; player.invuln=.6; flashDamage(); } }
+  else if(!player.driving && m.distanceTo(player.pos)<4.2 && player.invuln<=0){ player.health-=16; player.invuln=.5; flashDamage(); }
+}
+function shoveVehicle(p,dir,force){ if(!p.veh||p.wreck||p.driver) return; p.traffic=p.traffic&&false; p.push.x+=dir.x*force; p.push.z+=dir.z*force; const m=Math.hypot(p.push.x,p.push.z); if(m>34){ p.push.x*=34/m; p.push.z*=34/m; } }
+function flipVehicle(p,dir){
+  if(!p.veh||p.driver||p.flipT>0) return;
+  p.flipTarget = p.flipped ? 0 : (dir&&dir.x<0?-1:1)*Math.PI; p.flipStart=p.roll; p.flipT=.9; p.v=0; if(!p.flipped) damageVehicle(p,30,'flip'); p.flipped=!p.flipped; p.traffic=false;
+  if(dir) shoveVehicle(p,dir,5); shakeCamera(.3); Audio_.heavyHit();
+}
+// One entry point for every alien/attack that touches a car. kind: punch | fire | flip | ram
+function vehicleHit(p,dir,dmg,shove,kind){
+  if(!p.veh||p.wreck||p.driver) return;
+  p.traffic=false;
+  if(kind==='fire'){ p.burnT=Math.max(p.burnT,5); damageVehicle(p,dmg,'fire'); if(shove) shoveVehicle(p,dir,shove*.4); return; }
+  damageVehicle(p,dmg,kind); if(p.wreck) return;
+  shoveVehicle(p,dir,shove);
+  if(kind==='flip') flipVehicle(p,dir);
+  if(kind==='ram' && shove>18 && Math.random()<.5) flipVehicle(p,dir);
+  Audio_.heavyHit();
+}
+function carProbeBlocked(p,x,z){
+  const c=Math.cos(p.yaw), sn=Math.sin(p.yaw), fx=-sn, fz=-c, rx=c, rz=-sn, by=p.by;
+  const P=[[0,2.0],[.85,1.7],[-.85,1.7],[.85,-1.7],[-.85,-1.7],[0,-2.0]];
+  for(const q of P){ const px=x+rx*q[0]+fx*q[1], pz=z+rz*q[0]+fz*q[1];
+    if(blockedAt(px,pz,by+.05)) return true;
+    if(groundTopAt(px,pz,by)-by>.5) return true;
+    if(Math.abs(px)>WORLD_LIMIT||Math.abs(pz)>WORLD_LIMIT) return true; }
+  return false;
+}
+function carCrash(p,speed){
+  if(speed>5){ damageVehicle(p,speed*1.7,'crash'); Audio_.crash(); if(p.driver||p===player.driving) shakeCamera(Math.min(.5,speed*.02)); else if(p.mesh.position.distanceTo(player.pos)<30) shakeCamera(.12);
+    const m=p.mesh.position; for(let i=0;i<5;i++) debris(m.clone().add(new THREE.Vector3(0,.8,0)),0xffd84a,.16,new THREE.Vector3((Math.random()-.5)*6,Math.random()*4,(Math.random()-.5)*6),.4,true); }
+}
+function moveCar(p,dt){
+  const m=p.mesh.position;
+  const fx=-Math.sin(p.yaw), fz=-Math.cos(p.yaw);
+  const dx=(fx*p.v+p.push.x)*dt, dz=(fz*p.v+p.push.z)*dt;
+  if(Math.abs(dx)+Math.abs(dz)<1e-5) return;
+  const sp=Math.hypot(p.v,Math.hypot(p.push.x,p.push.z));
+  if(!carProbeBlocked(p,m.x+dx,m.z+dz)){ m.x+=dx; m.z+=dz; }
+  else if(!carProbeBlocked(p,m.x+dx,m.z)){ m.x+=dx; p.v*=.985; carCrash(p,sp*.25); }
+  else if(!carProbeBlocked(p,m.x,m.z+dz)){ m.z+=dz; p.v*=.985; carCrash(p,sp*.25); }
+  else { carCrash(p,sp); p.v=-p.v*.25; p.push.multiplyScalar(-.3); if(p.traffic) p.tBlocked=(p.tBlocked||0)+1; }
+}
+function nearestCar(maxD){
+  let best=null,bd=maxD;
+  for(const p of props){ if(!p.veh||p.wreck||p.flipped||p.flipT>0||p.driver||p===carried||p.state!=='rest') continue;
+    const d=Math.hypot(p.mesh.position.x-player.pos.x,p.mesh.position.z-player.pos.z);
+    if(d<bd && Math.abs(p.mesh.position.y-player.pos.y)<3){ best=p; bd=d; } }
+  return best;
+}
+function enterCar(p){
+  if(!player.alive||player.driving||carried||player.swimming) return;
+  player.driving=p; p.driver='player'; p.traffic=false; p.tBlocked=0; p.push.set(0,0,0); p.by=p.mesh.position.y-CAR_H; p.yaw=p.mesh.rotation.y; p.roll=0; p.mesh.rotation.z=0;
+  player.flying=false; player.onLadder=null; player.gvel.set(0,0,0); player.rolling=false; player.rollHeld=false; player.superSpeed=0; player.superHeld=false; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.vel.set(0,0,0);
+  document.body.classList.add('driving'); bannerText('DRIVING'); statusText('STICK: THROTTLE + STEER   -   BRAKE / REVERSE: PULL BACK');
+}
+function exitCar(forced){
+  const p=player.driving; if(!p) return;
+  player.driving=null; p.driver=null; document.body.classList.remove('driving');
+  const c=Math.cos(p.yaw), sn=Math.sin(p.yaw), m=p.mesh.position;
+  const tries=[[-2.5,0],[2.5,0],[0,-3.2],[0,3.2],[-2.5,3],[2.5,3]]; let ex=m.x, ez=m.z, ok=false;
+  for(const t of tries){ const x=m.x+c*t[0]+(-sn)*t[1], z=m.z-sn*t[0]+(-c)*t[1]; if(!blockedAt(x,z,p.by+.1)&&groundTopAt(x,z,p.by)-p.by<.6){ ex=x; ez=z; ok=true; break; } }
+  if(!ok){ ex=m.x; ez=m.z; }
+  player.pos.set(ex, (ok?groundTopAt(ex,ez,p.by):p.by+2.2)+1, ez); player.vel.set(0,0,0); player.gvel.set(0,0,0); player.onGround=ok; player.invuln=Math.max(player.invuln,.5);
+  player.model.visible=true; player.jumpHeld=false;
+}
+function vehicleButton(){ if(player.driving) exitCar(); else { const c=nearestCar(3.8); if(c) enterCar(c); } }
+function driveTick(dt){
+  const p=player.driving;
+  updateKeyboardMove();
+  player.invuln=Math.max(0,player.invuln-dt); player.specialTimer=Math.max(0,player.specialTimer-dt); for(const k in actCd) actCd[k]=Math.max(0,actCd[k]-dt);
+  player.energy=Math.min(player.form.maxEnergy,player.energy+dt*4);
+  player.model.visible=false;
+  vehHornCd=Math.max(0,vehHornCd-dt);
+  if(player.atkHeld && vehHornCd<=0){ vehHornCd=.4; Audio_.horn(); }
+  let thr=moveInput.y, str=moveInput.x; if(Math.abs(thr)<.12) thr=0; if(Math.abs(str)<.12) str=0;
+  const brake=player.jumpHeld||keys['Space'];
+  const tgt = thr>0 ? thr*CAR_MAX_FWD : thr*CAR_MAX_REV;
+  if(brake) p.v -= Math.sign(p.v)*Math.min(Math.abs(p.v),38*dt);
+  else if(thr===0) p.v -= Math.sign(p.v)*Math.min(Math.abs(p.v),5*dt);
+  else if((tgt>p.v && thr>0) || (tgt<p.v && thr<0)){ const a=(p.v*thr<0)?32:(thr>0?13:9); p.v += Math.sign(tgt-p.v)*Math.min(Math.abs(tgt-p.v),a*dt); }
+  else p.v -= Math.sign(p.v-tgt)*Math.min(Math.abs(p.v-tgt),6*dt);
+  const av=Math.abs(p.v), grip=Math.min(1,av/5)*(1-Math.min(.55,av/48));
+  p.yaw -= str*2.1*grip*dt*(p.v>=0?1:-1)*(brake&&av>8?1.45:1);
+  // camera swings around behind the car unless the player is actively looking around
+  if(performance.now()-lastUserLookT>1400 && av>2){ let d=p.yaw-player.yaw; d=Math.atan2(Math.sin(d),Math.cos(d)); player.yaw+=d*Math.min(1,dt*(p.v>=0?2.4:0)); }
+  p.push.multiplyScalar(Math.max(0,1-4*dt));
+  moveCar(p,dt);
+  player.pos.set(p.mesh.position.x,p.by+1.6,p.mesh.position.z);
+  if(player.health<=0 || props.indexOf(p)<0){ exitCar(true); updatePlayerOnFoot(dt); return; }
+}
+// Running things over: driven cars, shoved cars and (harmlessly slow) traffic. Returns nothing; damages enemies/NPCs.
+function vehicleRunover(p){
+  const sp=Math.hypot(p.v,Math.hypot(p.push.x,p.push.z)); if(sp<5||!(p.driver||p.pushSp>6)) return;
+  const fx=p.v>=0?-Math.sin(p.yaw):Math.sin(p.yaw), fz=p.v>=0?-Math.cos(p.yaw):Math.cos(p.yaw), nx=p.mesh.position.x+fx*1.6, nz=p.mesh.position.z+fz*1.6, now=performance.now();
+  enemies.forEach(en=>{ if(!en.alive) return; if(en.carHitUntil&&now<en.carHitUntil) return;
+    const q=en.mesh.position; if(Math.abs(q.y-p.mesh.position.y)>3||Math.hypot(q.x-nx,q.z-nz)>1.9) return;
+    en.carHitUntil=now+450; const d=new THREE.Vector3(fx+(q.x-nx)*.3,0,fz+(q.z-nz)*.3).normalize();
+    damageEnemy(en,sp*1.9,d,{heavy:true,knock:sp*.5}); damageVehicle(p,2.5,'hit'); if(p.driver) shakeCamera(.15); });
+  if(!p.driver && !player.driving && player.invuln<=0 && Math.hypot(player.pos.x-nx,player.pos.z-nz)<1.9 && Math.abs(player.pos.y-PLAYER_FEET-p.by)<2.2){ player.health-=10; player.invuln=.6; flashDamage(); player.vel.x+=fx*4; player.vel.z+=fz*4; }
+}
+function pickTrafficSpot(){
+  for(let t=0;t<8;t++){
+    const axisZ=Math.random()<.5, lane=Math.random()<.5?0.5:2.5, sgn=lane<1?1:-1;
+    const along=(Math.random()<.5?-1:1)*(28+Math.random()*30);
+    let x,z,yaw;
+    if(axisZ){ x=Math.round((player.pos.x+(Math.random()-.5)*60-1.5)/16)*16+lane; z=player.pos.z+along; yaw=sgn>0?0:Math.PI; }
+    else { z=Math.round((player.pos.z+(Math.random()-.5)*60-1.5)/16)*16+lane; x=player.pos.x+along; yaw=sgn>0?Math.PI/2:-Math.PI/2; }
+    if(Math.abs(x)>WORLD_LIMIT-8||Math.abs(z)>WORLD_LIMIT-8) continue;
+    const gx=Math.round(x), gz=Math.round(z); if(columnHeight[colKey(gx,gz)]===undefined) continue;
+    if(props.some(q=>q.veh&&Math.hypot(q.mesh.position.x-x,q.mesh.position.z-z)<9)) continue;
+    if(blockedAt(x,z,GY)) continue;
+    return {x,z,yaw};
+  }
+  return null;
+}
+function spawnTraffic(){
+  const sp=pickTrafficSpot(); if(!sp) return;
+  const car=makeBoulder(sp.x,GY+CAR_H,sp.z,1.9,CARCOL[Math.floor(Math.random()*6)],true);
+  car.yaw=sp.yaw; car.by=groundTopAt(sp.x,sp.z); car.mesh.position.y=car.by+CAR_H; car.mesh.rotation.y=sp.yaw;
+  car.traffic=true; car.cruise=8+Math.random()*5; car.v=car.cruise*.7; car.tBlocked=0;
+}
+function trafficAI(p,dt){
+  // Keep to the lane, slow for anything in front (player, replicas, enemies, other cars), despawn if stuck.
+  const fx=-Math.sin(p.yaw), fz=-Math.cos(p.yaw), m=p.mesh.position; let want=p.cruise;
+  const chk=(x,z,y)=>{ const dx=x-m.x, dz=z-m.z, f=dx*fx+dz*fz, sd=Math.abs(dx*fz-dz*fx); if(f>1&&f<9&&sd<1.7&&Math.abs(y-m.y)<3) want=Math.min(want,Math.max(0,(f-3.4)*1.3)); };
+  chk(player.pos.x,player.pos.z,player.pos.y);
+  for(const en of enemies) if(en.alive) chk(en.mesh.position.x,en.mesh.position.z,en.mesh.position.y);
+  for(const q of props) if(q!==p&&q.veh&&q.mesh.position.distanceTo(m)<12) chk(q.mesh.position.x,q.mesh.position.z,q.mesh.position.y);
+  if(carried) chk(carried.mesh.position.x,carried.mesh.position.z,m.y);
+  const a=want<p.v?26:5; p.v+=Math.sign(want-p.v)*Math.min(Math.abs(want-p.v),a*dt);
+  if(p.v<.3 && want<.3) p.stuckT=(p.stuckT||0)+dt; else p.stuckT=0;
+  if(p.stuckT>10||p.tBlocked>3){ p.despawn=true; }
+}
+function updateVehicles(dt){
+  vehTick+=dt; vehHornCd=Math.max(0,vehHornCd);
+  const list=props.filter(q=>q.veh);
+  const nowMs=performance.now();
+  for(const p of list){
+    const m=p.mesh.position, dist=Math.hypot(m.x-player.pos.x,m.z-player.pos.z);
+    if(p.hitCd>0) p.hitCd-=dt;
+    if(p.flashT>0){ p.flashT-=dt; if(p.flashT<=0){ const b=carBody(p); if(b&&!p.wreck) b.material.emissive.set(0); } }
+    if(p.driver||p===carried||p.state!=='rest'){ /* driven by driveTick / held / thrown by updateProps */ if(p.state==='rest'&&!p.driver) {} }
+    const active = p.driver || p.traffic || Math.abs(p.v)>.05 || p.push.lengthSq()>.01 || p.flipT>0 || p.burnT>0 || m.y>p.by+CAR_H+.02;
+    if(!active||dist>110) { if(dist>115 && !p.driver && p!==carried && p.state==='rest') p.despawn=true; if(!active) continue; }
+    if(p.state!=='rest'||p===carried) continue;
+    if(dist>70 && !p.driver && !p.traffic && p.burnT<=0){ continue; } // asleep: far, quiet cars are not simulated
+    if(p.traffic && !p.driver) trafficAI(p,dt);
+    else if(!p.driver){ p.v-=Math.sign(p.v)*Math.min(Math.abs(p.v),7*dt); } // unattended: coast to a stop
+    p.pushSp=Math.hypot(p.push.x,p.push.z);
+    if(!p.driver){ p.push.multiplyScalar(Math.max(0,1-3*dt)); }
+    if(p.flipped||p.flipT>0||p.wreck){ p.v*=.9; }
+    if(!p.driver) moveCar(p,dt);
+    vehicleRunover(p);
+    // gravity / ramps / drop-offs
+    const sf=groundTopAt(m.x,m.z,p.by);
+    if(sf>=p.by-.02){ p.by=sf; p.vy=0; } else { p.vy=(p.vy||0)+GRAVITY*dt; p.by=Math.max(sf,p.by+p.vy*dt); if(p.by===sf){ if(p.vy<-12) damageVehicle(p,(-p.vy-10)*2.2,'fall'); p.vy=0; } }
+    // flip animation (hop while rolling over, then stays upside-down until flipped back)
+    let hop=0;
+    if(p.flipT>0){ p.flipT-=dt; const u=1-Math.max(0,p.flipT)/.9; p.roll=p.flipStart+(p.flipTarget-p.flipStart)*u; hop=Math.sin(u*Math.PI)*2.2; }
+    m.y=p.by+(p.flipped?.62:CAR_H)+hop;
+    p.mesh.rotation.y=p.yaw; p.mesh.rotation.z=p.roll;
+    // car vs car: simple circle bump
+    if(Math.abs(p.v)>2||p.pushSp>3){
+      for(const q of list){ if(q===p||q.wreck&&false||q.state!=='rest'||q===carried) continue; const dx=q.mesh.position.x-m.x, dz=q.mesh.position.z-m.z, d=Math.hypot(dx,dz);
+        if(d<2.7&&d>.01&&Math.abs(q.mesh.position.y-m.y)<2){
+          const nx=dx/d, nz=dz/d, rel=Math.max(0,(p.v*-Math.sin(p.yaw)+p.push.x-(q.v*-Math.sin(q.yaw)+q.push.x))*nx+(p.v*-Math.cos(p.yaw)+p.push.z-(q.v*-Math.cos(q.yaw)+q.push.z))*nz);
+          m.x-=nx*(2.7-d)*.5; m.z-=nz*(2.7-d)*.5; if(!q.driver){ q.mesh.position.x+=nx*(2.7-d)*.5; q.mesh.position.z+=nz*(2.7-d)*.5; }
+          if(rel>3){ if(!q.driver) { q.traffic=false; shoveVehicle(q,new THREE.Vector3(nx,0,nz),rel*.7); } damageVehicle(q,rel*1.3,'crash'); damageVehicle(p,rel*.9,'crash'); p.v*=-.3; carCrash(p,rel*.2); if(!p.driver) p.traffic=false; }
+        } }
+    }
+    // smoke / fire
+    if(p.hp<45||p.burnT>0){
+      p.fxT-=dt; const burning=p.burnT>0;
+      if(p.fxT<=0 && dist<55){ p.fxT=burning?.09:.18;
+        debris(m.clone().add(new THREE.Vector3((Math.random()-.5)*1.2,.9,(Math.random()-.5)*1.4)),burning?(Math.random()<.5?0xff5a1e:0xffd84a):0x3a3a3a,burning?.45:.55,new THREE.Vector3((Math.random()-.5),2+Math.random()*2,(Math.random()-.5)),burning?.5:.9,false); }
+      if(burning){ p.burnT-=dt; if(!p.wreck) damageVehicle(p,4.5*dt,'burn'); }
+    }
+    if(p.wreck){ p.wreckT-=dt; if(p.wreckT<=0) p.despawn=true; }
+  }
+  // cull
+  for(const p of list) if(p.despawn && !p.driver && p!==carried){ p.despawn=false; removeVehicle(p); }
+  // traffic population
+  trafficT-=dt;
+  if(trafficT<=0){ trafficT=1.6;
+    let n=0; for(const q of props) if(q.veh&&q.traffic){ n++; if(Math.hypot(q.mesh.position.x-player.pos.x,q.mesh.position.z-player.pos.z)>85) q.despawn=true; }
+    if(n<(TRAFFIC_MAX[QUALITY.level]||4) && !player.flying) spawnTraffic();
+  }
+  // contextual ENTER / EXIT button + drive HUD
+  vehNear = player.driving ? null : (player.alive&&!carried&&!player.flying&&!player.swimming ? nearestCar(3.8) : null);
+  const btn=document.getElementById('veh-btn'), hud=document.getElementById('veh-hud');
+  const showBtn = !!player.driving || !!vehNear;
+  if(btn.style.display!==(showBtn?'flex':'none')) btn.style.display=showBtn?'flex':'none';
+  if(showBtn){ const t=player.driving?'EXIT':'ENTER VEHICLE'; const te=document.getElementById('veh-btn-t'); if(te.textContent!==t){ te.textContent=t; } btn.classList.toggle('exit',!!player.driving); }
+  if(hud.style.display!==(player.driving?'flex':'none')) hud.style.display=player.driving?'flex':'none';
+  if(player.driving){ const c=player.driving; document.getElementById('veh-spd').textContent=Math.round(Math.abs(c.v)*3.6)+' KM/H';
+    const f=document.getElementById('veh-hp'); f.style.width=Math.max(0,c.hp)+'%'; f.style.background=c.hp<30?'#ff4a4a':c.hp<60?'#ffc04a':'#39ff8a'; }
+}
+(function(){ const b=document.getElementById('veh-btn'); const go=e=>{ e.preventDefault(); e.stopPropagation(); Audio_.resume&&Audio_.resume(); b.classList.add('active'); vehicleButton(); };
+  b.addEventListener('touchstart',go,{passive:false}); b.addEventListener('mousedown',go);
+  const up=()=>b.classList.remove('active'); b.addEventListener('touchend',up); b.addEventListener('touchcancel',up); addEventListener('mouseup',up); })();
+
 function updatePlayer(dt){
+  if(player.driving && player.alive){ driveTick(dt); return; }
+  if(player.driving) exitCar(true);
+  updatePlayerOnFoot(dt);
+}
+function playerAnimate(parts,dt,moving){
+  const ry=player.model.rotation.y, id=player.form.id, fwd={x:-Math.sin(ry),z:-Math.cos(ry)};
+  const atk = player.punchAnimT>0 ? atkInput(player.punchKind,player.punchAnimT,player.punchAnimDur||.25,{side:player.punchSide,id,amp:id==='echo_echo'?.85:1}) : null;
+  const climb=!!player.onLadder;
+  animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb,vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
+    swimming:player.swimming,carrying:!!carried,id,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y)});
+}
+function updatePlayerOnFoot(dt){
   updateKeyboardMove();
   player.atkTimer = Math.max(0, player.atkTimer - dt);
   player.comboResetTimer = Math.max(0, (player.comboResetTimer||0) - dt);
@@ -2671,6 +3045,7 @@ function updatePlayer(dt){
   player.boostT = Math.max(0,(player.boostT||0)-dt); for(const k in actCd) actCd[k]=Math.max(0,actCd[k]-dt);
   player.specialTimer = Math.max(0, player.specialTimer - dt);
   player.invuln = Math.max(0, player.invuln - dt);
+  player.hurtT = Math.max(0,(player.hurtT||0) - dt);
   player.attacking = Math.max(0, player.attacking - dt);
   if(player.atkHeld && !(player.rolling && player.form.id==='cannonbolt')) meleeAttack();
   // XLR8 true super speed: holding the button builds momentum through tiers instead of snapping to a
@@ -2733,29 +3108,70 @@ function updatePlayer(dt){
   else if(player.rolling && Math.hypot(moveX,moveZ)<0.05){ moveX=forward.x; moveZ=forward.z; }
   const moving = Math.hypot(moveX,moveZ) > 0.05;
 
-  if(player.alive){
+  // Stage 7: ladders. Face one and push forward to climb, push back to descend, JUMP to hop off.
+  player.ladderCd = Math.max(0,(player.ladderCd||0)-dt);
+  let climbing = false;
+  if(player.alive && !player.flying && !player.swimming){
+    const lad = player.ladderCd<=0 ? ladderAt(player.pos.x,player.pos.z,player.pos.y-PLAYER_FEET) : null;
+    if(lad){
+      const N=lad.ladder;
+      if(!player.onLadder){
+        const face = -(N.nx*forward.x + N.nz*forward.z);
+        if(my>0.3 && face>0.3 && player.pos.y-PLAYER_FEET < lad.top-0.3) player.onLadder = lad;
+        else if(!player.ladderHintT || performance.now()-player.ladderHintT>9000){ player.ladderHintT=performance.now(); statusText('LADDER - FACE IT AND PUSH FORWARD'); }
+      }
+    } else if(player.ladderCd<=0) player.onLadder = null;
+    if(player.onLadder){
+      const L=player.onLadder, N=L.ladder; climbing=true;
+      const vy = my>0.2 ? 3.6 : my<-0.2 ? -3.6 : 0;
+      player.vel.y=vy; player.pos.y+=vy*dt; player.onGround=false;
+      if(N.nx) player.pos.x += (((N.nx>0?L.x0:L.x1)+N.nx*0.45)-player.pos.x)*Math.min(1,dt*10);
+      if(N.nz) player.pos.z += (((N.nz>0?L.z0:L.z1)+N.nz*0.45)-player.pos.z)*Math.min(1,dt*10);
+      const feet=player.pos.y-PLAYER_FEET;
+      if(feet>=L.top){ // over the top: step onto the roof
+        player.pos.x-=N.nx*0.8; player.pos.z-=N.nz*0.8; player.pos.y=L.top+PLAYER_FEET+0.05; player.vel.y=0; player.onLadder=null; player.ladderCd=0.35;
+      } else if(vy<0 && feet<=groundTopAt(player.pos.x,player.pos.z,feet)+0.05){ player.onLadder=null; player.ladderCd=0.3; player.onGround=true; }
+    }
+  } else player.onLadder = null;
+
+  if(player.alive && !climbing){
     const flySpeed = player.flying ? (player.form.flySpeed||speed)*(player.boostT>0?1.7:1) : speed;
-    const nx = player.pos.x + moveX*flySpeed*dt;
-    const nz = player.pos.z + moveZ*flySpeed*dt;
+    const desiredVX=moveX*flySpeed, desiredVZ=moveZ*flySpeed;
+    const response = player.flying ? 7.5 : (player.form.id==='four_arms'||player.form.id==='diamondhead'?5.2:(player.form.id==='xlr8'?11:8.5));
+    const braking = moving ? response : response*1.7;
+    player.gvel.x += (desiredVX-player.gvel.x)*Math.min(1,dt*(moving?response:braking));
+    player.gvel.z += (desiredVZ-player.gvel.z)*Math.min(1,dt*(moving?response:braking));
+    if(Math.hypot(player.gvel.x,player.gvel.z)<.025) player.gvel.set(0,0,0);
+    const nx = player.pos.x + player.gvel.x*dt;
+    const nz = player.pos.z + player.gvel.z*dt;
     if(player.flying){
-      // Flying: no wall-height restriction, freely traverse.
-      const fy=player.pos.y-1;
+      const fy=player.pos.y-PLAYER_FEET;
       if(!blockedAt(nx,player.pos.z,fy)) player.pos.x = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nx));
+      else player.gvel.x*=.15;
       if(!blockedAt(player.pos.x,nz,fy)) player.pos.z = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nz));
+      else player.gvel.z*=.15;
     } else {
       // simple wall collision: block axis if destination column is much higher than current
       const curTop = groundTopAt(player.pos.x, player.pos.z);
       const topX = groundTopAt(nx, player.pos.z);
       const topZ = groundTopAt(player.pos.x, nz);
-      if(topX - curTop <= 1.05 && !blockedAt(nx,player.pos.z,player.pos.y-1)) player.pos.x = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nx));
-      if(topZ - curTop <= 1.05 && !blockedAt(player.pos.x,nz,player.pos.y-1)) player.pos.z = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nz));
+      const fyM = player.pos.y-PLAYER_FEET;
+      const bX = blockedAt(nx,player.pos.z,fyM);
+      if(topX - curTop <= 1.05 && !bX) player.pos.x = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nx)); else player.gvel.x*=.08;
+      const bZ = blockedAt(player.pos.x,nz,fyM);
+      if(topZ - curTop <= 1.05 && !bZ) player.pos.z = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nz)); else player.gvel.z*=.08;
+      // Mantle: jump into a ledge that is within arm's reach and haul up onto it (garage roofs, eaves, crates, shop roofs).
+      if((bX||bZ) && !player.onGround && player.vel.y<4){
+        const lt = ledgeAt(bX?nx:player.pos.x, bZ?nz:player.pos.z, fyM);
+        if(lt!==null){ if(bX) player.pos.x=nx; if(bZ) player.pos.z=nz; player.pos.y=lt+PLAYER_FEET; player.vel.y=0; player.onGround=true; Audio_.land(); }
+      }
     }
   }
 
   if(!player.flying) props.forEach(p=>{
     if(p===carried||p.state!=='rest') return;
     const dx=player.pos.x-p.mesh.position.x, dz=player.pos.z-p.mesh.position.z, d=Math.hypot(dx,dz), r=p.s*.6+.4;
-    if(d<r&&d>.001&&player.pos.y-1<p.mesh.position.y+p.s*.5-.1){ player.pos.x+=dx/d*(r-d); player.pos.z+=dz/d*(r-d); }
+    if(d<r&&d>.001&&player.pos.y-PLAYER_FEET<p.mesh.position.y+p.s*.5-.1){ player.pos.x+=dx/d*(r-d); player.pos.z+=dz/d*(r-d); }
   });
 
   // Cannonbolt ram: while curled and moving fast, colliding with an enemy deals damage scaled by roll speed.
@@ -2770,6 +3186,8 @@ function updatePlayer(dt){
         player.ramCd = 0.35;
       }
     });
+    props.forEach(pr=>{ if(!pr.veh||pr.driver||pr.wreck) return; const q=pr.mesh.position, dx=q.x-player.pos.x, dz=q.z-player.pos.z, d=Math.hypot(dx,dz);
+      if(d<2.6 && (pr.hitCd||0)<=0){ pr.hitCd=.5; vehicleHit(pr,new THREE.Vector3(dx/d,0,dz/d),35+player.rollT*70,14+player.rollT*16,'ram'); shakeCamera(.3); } });
   }
   // XLR8 tackle: running into enemies at real speed hurts them and throws them aside. Uses a per-enemy
   // cooldown (not one shared timer) so a sprint through a group can clip several enemies, but the same
@@ -2788,39 +3206,62 @@ function updatePlayer(dt){
         if(s > 0.6) shakeCamera(0.25);
       }
     });
+    props.forEach(pr=>{ if(!pr.veh||pr.driver||pr.wreck||(pr.hitCd||0)>0) return; const q=pr.mesh.position, dx=q.x-player.pos.x, dz=q.z-player.pos.z, d=Math.hypot(dx,dz);
+      if(d<(pr===lockedTarget()?3:2.5)){ pr.hitCd=.6; const dir=new THREE.Vector3(dx/d,0,dz/d); vehicleHit(pr,dir,10+s*70,8+s*22,s>0.85?'flip':'ram'); shakeCamera(.3); } });
   }
-  const groundY = groundTopAt(player.pos.x, player.pos.z);
+  const feetNow = player.pos.y-PLAYER_FEET;
+  const groundY = climbing ? feetNow : groundTopAt(player.pos.x, player.pos.z, feetNow);
+  const wasGround = player.onGround;
+  if(wasGround) player.rampVy = (groundY-(player._lastGround===undefined?groundY:player._lastGround))/Math.max(dt,0.001);
+  player._lastGround = groundY;
 
-  if(player.flying){
+  if(climbing){ /* ladder physics already applied above */ }
+  else if(player.flying){
     // Vertical steering: look up/down + move forward to climb/descend; hover when still.
     let cl = moving ? Math.sin(player.pitch) : 0; if(Math.abs(cl)<0.1) cl=0; else cl-=Math.sign(cl)*0.1;
     player.vel.y = cl*1.25*(player.form.flySpeed||8)*(player.boostT>0?1.7:1);
     player.pos.y += player.vel.y*dt;
     const ceiling = 70; player.swimming=false;
-    player.pos.y = Math.max(groundY + 1.2, Math.min(ceiling, player.pos.y));
+    player.pos.y = Math.max(groundY + PLAYER_FEET + 0.20, Math.min(ceiling, player.pos.y));
     player.onGround = false;
   } else {
     const WS=WATER_LEVEL+0.4;
-    player.swimming = (WS-groundY>1.3) && (player.pos.y-1 < WS-0.5);
+    player.swimming = (WS-groundY>1.3) && (player.pos.y-PLAYER_FEET < WS-0.5);
     if(player.swimming){
       const want = moving ? Math.sin(player.pitch)*player.form.speed*0.9 : (WS+0.1-player.pos.y)*2.5;
       player.vel.y += (want-player.vel.y)*Math.min(1,dt*4);
     } else player.vel.y += GRAVITY*dt;
+    if(player.vel.y < -38) player.vel.y = -38;
     player.pos.y += player.vel.y*dt;
-    if(player.pos.y <= groundY + 1){
+    // Walking down stairs/ramps: stay glued to the surface instead of hopping down it.
+    if(wasGround && !player.swimming && player.vel.y<=0 && feetNow-groundY>0.001 && feetNow-groundY<=0.6) player.pos.y = groundY+PLAYER_FEET;
+    if(player.pos.y <= groundY + PLAYER_FEET){
       if(!player.onGround && player.vel.y < -6) Audio_.land();
-      player.pos.y = groundY + 1;
+      player.pos.y = groundY + PLAYER_FEET;
       player.vel.y = 0;
       player.onGround = true;
-    } else player.onGround = false;
+    } else {
+      player.onGround = false;
+      // Ramp launch: running off the top of a ramp at speed (XLR8, roll) carries the climb into the air.
+      if(wasGround && (player.rampVy||0)>4 && player.vel.y<=0 && !player.swimming){ player.vel.y=Math.min(10,player.rampVy*0.9); player.rampVy=0; }
+    }
   }
 
-  if(player.onGround&&!player.lastGrounded){player.landingT=.18;player.landingStrength=Math.min(1,Math.max(0,-(player.vel.y||0)/9));shakeCamera(Math.min(.12,player.landingStrength*.08));}
-  player.lastGrounded=player.onGround; player.landingT=Math.max(0,(player.landingT||0)-dt);
-  // Smooth facing gives the hips time to lead the torso instead of snapping the whole body.
-  const facing=moving?Math.atan2(-moveX,-moveZ):player.yaw; let faceDelta=facing-player.model.rotation.y; faceDelta=Math.atan2(Math.sin(faceDelta),Math.cos(faceDelta)); player.model.rotation.y+=faceDelta*Math.min(1,dt*(moving?10:5));
+  // Stateful locomotion: transitions are tracked so animation can react to start/run/brake/stop instead of binary moving.
+  const hs=Math.hypot(player.gvel.x,player.gvel.z);
+  const targetState = player.flying ? (hs>.4?'fly':'hover') : player.swimming ? 'swim' : !player.onGround ? (player.vel.y>0?'jump':'fall') : hs<.18 ? 'idle' : (hs>player.form.speed*1.15?'run':'walk');
+  const prevState=player.locomotion;
+  if(targetState!==prevState){ player.locomotionT=0; player.locomotion=targetState; if(prevState!=='idle'&&targetState==='idle') player.locomotion='stop'; }
+  player.locomotionT += dt;
+  if(player.locomotion==='stop' && player.locomotionT>.16) player.locomotion='idle';
+
+  // face movement direction (model rotates toward camera-relative move dir, else camera yaw)
+  const actualMoving=hs>.12;
+  const faceX=actualMoving?player.gvel.x:moveX, faceZ=actualMoving?player.gvel.z:moveZ;
+  const facing = player.onLadder ? Math.atan2(player.onLadder.ladder.nx, player.onLadder.ladder.nz) : (actualMoving ? Math.atan2(-faceX,-faceZ) : player.yaw);
+  player.model.rotation.y = THREE.MathUtils.lerp(player.model.rotation.y, facing, 0.25);
   const formScale = PS * (player.form.modelScale||1);
-  player.model.position.set(player.pos.x, player.pos.y-1+0.9*formScale, player.pos.z); player.model.scale.setScalar(formScale);
+  player.model.position.set(player.pos.x, player.pos.y-PLAYER_FEET+0.045*formScale, player.pos.z); player.model.scale.setScalar(formScale);
 
   // procedural walk animation
   const parts = player.model.userData.parts;
@@ -2829,50 +3270,15 @@ function updatePlayer(dt){
     // fully cover it, so the silhouette actually reads as a ball rather than a person with tucked limbs.
     const curl = player.rollT||0;
     const bodyScale = 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
-    [parts.leftLeg,parts.rightLeg,parts.leftArm,parts.rightArm,parts.head,parts.torso].forEach(p=>{ if(p) p.scale.setScalar(Math.max(0.001,bodyScale)); });
+    if(parts.hips) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
+    if(curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
     if(parts.shell){ parts.shell.scale.setScalar(Math.max(0.001, curl)); parts.shell.position.y = parts.shellBaseY; }
     if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
     else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
   } else {
-  if(moving && player.onGround){
-    player.walkT += dt*8*speedMult;
-    Math.floor(player.walkT*2)%20===0 && null; // (keep hook point, footsteps handled below by timer)
-  }
-  const swing = moving ? Math.sin(player.walkT)*0.5 : 0;
-  if(parts.leftLeg) parts.leftLeg.rotation.x = swing;
-  if(parts.rightLeg) parts.rightLeg.rotation.x = -swing;
-  if(parts.leftArm) parts.leftArm.rotation.x = -swing*0.8;
-  if(parts.rightArm) parts.rightArm.rotation.x = swing*0.8;
-  if(parts.leftArm2) parts.leftArm2.rotation.x = -swing*0.6;
-  if(parts.rightArm2) parts.rightArm2.rotation.x = swing*0.6;
-  if(!player.onGround){ if(parts.leftLeg) parts.leftLeg.rotation.x = -0.3; if(parts.rightLeg) parts.rightLeg.rotation.x = 0.3; }
-  if(player.attacking > 0){
-    // progress goes 0 -> 1 -> 0 across the punch's own duration (not a fixed 0.25s), so faster
-    // alien combos (XLR8) and slower heavy hits (the finisher) each animate at their own correct speed.
-    const dur = player.punchAnimDur || 0.25;
-    const t = 1 - Math.max(0, Math.min(1, player.punchAnimT / dur));
-    const k = Math.sin(Math.min(1,t)*Math.PI);
-    const wind = Math.max(0, Math.min(1, t/0.28));
-    const strike = Math.max(0, Math.min(1, (t-0.20)/0.80));
-    if(player.punchKind === 'heavy'){
-      // Two-handed heavy finisher: both arms drive forward together, torso dips into the hit.
-      ['leftArm','rightArm','leftArm2','rightArm2'].forEach(n=>{ if(parts[n]) parts[n].rotation.x = 2.1*k - 0.55*(1-wind); });
-      player.model.userData.twist = 0;
-      if(parts.torso) parts.torso.rotation.x = 0.25*k - 0.16*(1-wind);
-    } else {
-      // Single alternating punch: one arm drives forward, torso twists into the punch.
-      const side = player.punchSide ? ['rightArm','rightArm2'] : ['leftArm','leftArm2'];
-      side.forEach(n=>{ if(parts[n]) parts[n].rotation.x = 1.7*k - 0.45*(1-wind); });
-      player.model.userData.twist = (player.punchSide?-1:1)*(0.35*k + 0.12*(1-wind));
-      if(parts.torso) parts.torso.rotation.x = 0;
-    }
-  } else if(parts.torso){ parts.torso.rotation.x = 0; }
+  if(moving && player.onGround) player.walkT += dt*8*speedMult;
+  playerAnimate(parts, dt, moving);
   poseExtras(parts, moving, dt);
-  applyCombatBodyLanguage(player.model, parts, dt, player);
-  animateCharacterLife(player.model, parts, moving, dt, player.form.id, Math.max(.7, speedMult));
-  applyAlienBiomechanics(player.model, parts, moving, dt, Math.max(.7, speedMult));
-  player.impactKick = Math.max(0,(player.impactKick||0)-dt*3.8);
-  if(player.landingT>0){const lk=(player.landingT/.18)*player.landingStrength;player.model.scale.set(formScale*(1+lk*.035),formScale*(1-lk*.055),formScale*(1+lk*.035));} else player.model.scale.setScalar(formScale);
 
   // footstep sound throttling
   player._stepT = (player._stepT||0) + dt;
@@ -2934,8 +3340,9 @@ function loop(){
   water.position.x = player.pos.x; water.position.z = player.pos.z;
   updateDayNight(wdt);
   updatePlayer(dt);
-  updateEnemySpawning(wdt); updateEnemies(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
+  updateEnemySpawning(wdt); updateEnemies(wdt); animateEnemies(wdt); updateDyingRigs(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
   updateLockOn(dt);
+  updateVehicles(wdt);
   updateCamera();
   updateSpeedEffects(dt);
   const under = camera.position.y < WATER_LEVEL+0.4;
@@ -2953,8 +3360,8 @@ const menuPanel = document.getElementById('menu-panel');
 function showPanel(html){ menuPanel.innerHTML = html; menuPanel.classList.add('show'); }
 document.getElementById('btn-controls').addEventListener('click', ()=> showPanel(
   isTouch
-  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.<br>LOCK-ON: tap an enemy to lock it (tap again to release), or use the reticle button above the joystick. The camera assists toward it and attacks/abilities face it; you can still swipe to look freely.'
-  : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben. L / Tab / middle-click = Lock-on. Fly/swim: look up or down while moving.'
+  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.<br>VEHICLES: walk up to a car and tap ENTER VEHICLE (left side). Stick = throttle/steer (pull back to brake, then reverse), BRAKE = handbrake, HORN = attack button, EXIT to get out. Keyboard: V enter/exit.<br>LOCK-ON: tap an enemy to lock it (tap again to release), or use the reticle button above the joystick. The camera assists toward it and attacks/abilities face it; you can still swipe to look freely.'
+  : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben, V = enter/exit vehicle (Space = handbrake). L / Tab / middle-click = Lock-on. Fly/swim: look up or down while moving.'
 ));
 document.getElementById('btn-about').addEventListener('click', ()=> showPanel(
   'OMNITRIX: VOXEL PROTOCOL — an original fan-made prototype blending a Minecraft-style voxel world with Ben 10 Alien Force-inspired transformation and combat mechanics. All characters, names and visuals here are original interpretations.'
