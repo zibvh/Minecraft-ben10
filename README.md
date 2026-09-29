@@ -51,56 +51,12 @@ never need Android Studio or a local Android SDK.
   Sonic Doom targets it, and XLR8 sprints bend gently toward it so a tackle can be aimed.
 - The lock breaks automatically if the target dies or gets more than ~44 units away.
 
-## Gameplay notes: Vertical city (Stage 7)
+## Character Life / Jointed Animation Pass
 
-Buildings are now places, not just blocks. Everything is generated per chunk and deterministic, so streaming a chunk
-back in gives the identical building, and nothing needs the network.
+The current build includes a procedural character-animation pass layered onto the existing character/combat architecture. Player aliens now use segmented upper/lower limbs with visible joint pivots, wrists/elbows/hips/neck/shoulder details, gait counter-motion, idle breathing, subtle head tracking, pelvis movement, and joint follow-through. NPCs and hostile enemies use the same lightweight jointed approach. Existing combat animation code remains the primary action driver, with the life layer providing secondary motion rather than replacing attacks.
 
-- Rooftops are walkable. Any solid building top, roof slab, balcony, landing or crate can be stood on, fought on and
-  landed on. Heatblast / Diamondhead can fly up, then press their FLY/LEVITATE button again to land on a roof.
-- Apartments and towers have zig-zag exterior fire escapes (with landings) up to the roof, plus balconies.
-  Towers reach 6-12 flights: a good long XLR8 run. Running off the top of a ramp at speed launches you into the air.
-- Houses have a walkable pitched roof, a side ladder to the eave, a garage annex and porch deck to hop up from.
-  Shops have a rear ladder and rooftop AC units/crates. The school has a fire escape and a ladder up its bell tower.
-- Ladders: face one and push the stick forward to climb, back to descend, JUMP to hop off. A hint appears when near one.
-- Mantling: jump into a ledge within arm's reach and you haul yourself up. Four Arms now jumps much higher, so he can
-  leap onto garages, eaves and shop roofs directly.
-- Echo Echo replicas hop up to ledges the controlled Echo stands on, and warp up beside you if the roof is too high.
-- Roughly 1 in 3 enemy spawns is a rooftop ambusher (normal/ranged) within 12-38 units; enemies stand on whatever
-  surface is under them and drop down when they walk off an edge.
-- Fixes: unloaded chunks now actually remove their buildings/textures (cityGroup children were never detached).
+The animation is procedural and offline-friendly; it does not require a skeletal animation asset pipeline or network service.
 
-Technical: colliders carry optional `bot` (vertical extent), and flags `nb` (non-blocking), `ramp`, `pyr`, `ladder`.
-`groundTopAt(x,z)` is unchanged; `groundTopAt(x,z,feetY)` returns the highest surface within a step of the feet.
 
-## Gameplay notes: Vehicles (Stage 8)
-
-- Parked cars are now drivable. Walk close and tap ENTER VEHICLE (left side, above the lock button); it becomes EXIT while
-  seated. While driving the alien ability buttons, lock and hotbar hide; the attack button is HORN and jump is BRAKE
-  (handbrake). Stick up/down = throttle / brake-then-reverse, left/right = steer. Keyboard: WASD, V enter/exit, Space brake.
-- Arcade model: speed-scaled steering, wall probes with sliding, crash damage, car-vs-car bumps, ramps/drop-offs.
-  Cars have 100 HP: smoke below 45, explode at 0 (the wreck burns, hurts nearby enemies/you, then clears after ~16 s).
-  A driver ejected by an explosion takes damage. Enemy hits on a driver mostly damage the car.
-- Running enemies/NPCs over hurts them and throws them. Cars you shove or ram also hit things while sliding.
-- NPC traffic (LOW 2 / MEDIUM 4 / HIGH 6 cars) drives the road lanes, brakes for people/cars ahead, despawns when far or
-  stuck. You can take any traffic car. Cars asleep beyond ~70 units are not simulated.
-- Aliens: Four Arms punches shove/dent cars, his finisher and SLAM flip them (flip again to right them), SMASH heavily
-  damages them, and he can still lift and throw one. Heatblast fireballs/flame/melee set cars burning. XLR8 tackles cars
-  (a flip at near-max speed) and easily outruns traffic. Cannonbolt ramming smashes/flips them. Ice Diamondhead spray still works.
-- Parked cars are unloaded with their chunk unless someone is in them.
-
-## Side quest: character animation rebuild
-
-Every character (Ben, all aliens, Echo replicas, civilians, gang members, hostile enemies) now uses one jointed rig
-(`buildRig`) driven by one procedural animator (`animateRig`) instead of rigid single-box limbs.
-
-- Joints: hips, chest twist, neck/head, shoulder -> elbow -> hand, hip -> knee -> foot. Four Arms has two full arm chains per side.
-- Locomotion: idle (breathing, weight shift, head scan), walk, run and XLR8 sprint blend by real speed; opposite arm/leg swing,
-  knee flex, pelvis/chest counter-twist, hip bob, forward lean, backpedal when moving away from facing, landing squash,
-  rising/falling jump poses, ladder climbing, flying/levitating/swimming, carrying, panic run.
-- Punching: coil -> accelerating strike -> hold -> recover, with the hit landing at the same point the damage is applied
-  (40% / 45% of the swing). Torso and hips rotate into the punch, the opposite foot steps forward, the free hand guards.
-  The heavy finisher is a two-handed overhead slam with a full-body lunge. Four Arms hooks with the diagonal lower arm.
-- Enemies: hit flinch, melee swings (brute overhead slam, speed jabs), aimed pistol pose with recoil, a crumple-and-fall death
-  that clears after ~2 s. Also fixed: respawned enemies no longer register twice in the enemy list.
-- `player.hurtT` drives the player's own hit flinch. Standing Cannonbolt now walks and punches; curling still swaps to the ball.
+## GALVAN-inspired presentation / scale pass
+The current build preserves the streamed 4096x4096 world and existing gameplay systems while increasing hero/NPC/enemy character scale, camera framing, city-prop proportions, locomotion weight, acceleration/deceleration transitions, head stabilization, joint follow-through, landing compression, and hit reactions. The city is visually expanded through a deterministic 1.16 presentation scale applied to generated structures and walkable vertical surfaces; logical chunk/world coordinates remain unchanged for compatibility.
