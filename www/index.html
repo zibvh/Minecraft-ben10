@@ -360,11 +360,6 @@ const props=[], fx=[], actCd={}; let carried=null, timeScale=1, tornado=null, ac
 const DEB=new THREE.BoxGeometry(1,1,1);
 
 /* =========================================================================
-   STAGE 7 — VERTICAL CITY
-   Rooftops, balconies, fire escapes and deterministic stair access are layered onto the existing
-   streamed city. The original chunk lifecycle remains authoritative; these surfaces are chunk-owned.
-========================================================================= */
-/* =========================================================================
    WORLD / VOXEL TERRAIN  —  CHUNK STREAMING
    The world is logically WORLD x WORLD columns, but nothing is generated
    or held in memory until the player gets near it. Chunks are CHUNK x CHUNK
@@ -472,102 +467,24 @@ function chunkAtColumn(x,z){ const [cx,cz]=chunkCoordOf(x,z); return chunks.get(
 // ---- city props (buildings/roads/trees/cars), scoped per chunk ----
 const colliders=[], cityGroup=new THREE.Group(); scene.add(cityGroup);
 const UB=new THREE.BoxGeometry(1,1,1), GY=1.5;
-// Stage 7: walkable vertical-city surfaces. These are kept separate from wall colliders so
-// rooftops can be real gameplay spaces without turning the whole building into a solid block.
-const walkSurfaces=[];
-function blockedAt(x,z,fy){
-  for(let i=colliders.length-1;i>=0;i--){
-    const c=colliders[i];
-    if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1){
-      // Once the player is at/above the roof access height, the roof itself is the walkable
-      // surface; the building's old volume collider must not prevent stepping onto it.
-      const accessY = c.roofAccessY===undefined ? c.top : c.roofAccessY;
-      if(fy < accessY-0.3) return true;
-    }
-  }
-  return false;
-}
-function cbox(cx,by,cz,w,h,d,mat,solid,ownerList,opts){
+// Stage 7 collider model. A collider is an AABB {x0,x1,z0,z1,top,bot?}. Extra flags:
+//   nb     - never blocks sideways (ramps, roof pitch, ladder zones) but can still be stood on
+//   ramp   - sloped walking surface  {ax:'x'|'z', s, e, y0, y1}
+//   pyr    - pitched roof surface     {cx,cz,hw,y0,h}
+//   ladder - climb zone               {nx,nz} (outward wall normal)
+// Blocking is "body overlaps the box vertically and the feet are more than a step below the top", so thin
+// balconies/landings can be walked under, and stairs/low ledges can be walked up.
+const STEP_UP = 0.55, BODY_H = 1.7, REACH_UP = 1.6;
+function blockedAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy<c.top-STEP_UP&&(c.bot===undefined||fy+BODY_H>c.bot)) return true; } return false; }
+// Highest solid ledge top (within arm's reach above the feet) at this point, for mantling. null if none.
+function ledgeAt(x,z,fy){ let best=null; for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&c.top>fy+STEP_UP&&c.top<=fy+REACH_UP&&(c.bot===undefined||c.bot<fy+BODY_H)){ if(best===null||c.top>best) best=c.top; } } return best; }
+function ladderAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.ladder&&x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy>=c.bot-0.6&&fy<=c.top+0.2) return c; } return null; }
+function addCol(owner,c){ colliders.push(c); owner.colliders.push(c); return c; }
+function cbox(cx,by,cz,w,h,d,mat,solid,ownerList){
   const m=new THREE.Mesh(UB,mat); m.scale.set(w,h,d); m.position.set(cx,by+h/2,cz); m.castShadow=true; cityGroup.add(m);
   ownerList.meshes.push(m);
-  if(solid){
-    const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h,
-      roofAccessY:opts&&opts.roofAccessY!==undefined?opts.roofAccessY:by+h};
-    colliders.push(c); ownerList.colliders.push(c);
-  }
+  if(solid){ const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h,bot:by}; colliders.push(c); ownerList.colliders.push(c); }
   return m;
-}
-function addWalkSurface(x0,x1,z0,z1,top,ownerList){
-  const s={x0,x1,z0,z1,top};
-  walkSurfaces.push(s);
-  ownerList.platforms.push(s);
-  return s;
-}
-function roofDeck(cx,cz,w,d,top,ownerList,style){
-  addWalkSurface(cx-w/2+0.12,cx+w/2-0.12,cz-d/2+0.12,cz+d/2-0.12,top,ownerList);
-  const deck=cbox(cx,top-0.08,cz,w,.16,d,flat(style||0x3d4248),false,ownerList);
-  deck.receiveShadow=true;
-  // Small rooftop service units make the roof a usable space rather than an empty box.
-  const unitMat=flat(0x555b62);
-  [[-w*.22,-d*.18],[w*.18,-d*.2],[w*.22,d*.18]].forEach(([ox,oz],i)=>{
-    cbox(cx+ox,top+.02,cz+oz,.9+.15*(i%2),.65,.65,unitMat,false,ownerList);
-  });
-}
-function rooftopProps(cx,cz,w,d,top,ownerList,rng,style){
-  roofDeck(cx,cz,w,d,top,ownerList,style);
-  // Low parapet sections leave an obvious entry/exit gap at the stair side.
-  const pm=flat(0x4b5056), gapZ=cz+d/2-.35;
-  cbox(cx-w/2+.08,top+.1,cz,.16,.7,d-.8,pm,false,ownerList);
-  cbox(cx+w/2-.08,top+.1,cz,.16,.7,d-.8,pm,false,ownerList);
-  cbox(cx,top+.1,cz-d/2+.08,w-.8,.7,.16,pm,false,ownerList);
-  // Balcony/roof vegetation or antenna variety.
-  if(rng()<0.5) cbox(cx+1.4,top+.45,cz-1.1,.55,.8,.55,flat(0x2f7d4a),false,ownerList);
-}
-function accessStairs(cx,cz,roofTop,ownerList,side){
-  const sx=cx + (side==='east' ? 4.9 : side==='west' ? -4.9 : 0);
-  const sz=cz + (side==='south' ? 4.9 : side==='north' ? -4.9 : 0);
-  const vertical = side==='east'||side==='west';
-  const dir = vertical ? (side==='east'?1:-1) : (side==='south'?1:-1);
-  const steps=Math.max(5,Math.min(12,Math.ceil((roofTop-(GY+.55))/0.72)));
-  const run=Math.min(5.2,Math.max(3.8,steps*.45));
-  const stepMat=flat(0x666b70);
-  // Stairs sit outside the building footprint. Each step is both visible geometry and a
-  // walkable surface, so normal movement code can climb them without special-case controls.
-  for(let i=0;i<steps;i++){
-    const t=(i+1)/steps, h=GY+.5+t*(roofTop-(GY+.5));
-    // Start at street level outside the building and finish at the building wall,
-    // so the final tread meets the roof deck instead of stopping beside it.
-    const along=(1-t)*run;
-    const x=vertical?sx+along*dir:cx;
-    const z=vertical?cz:sz+along*dir;
-    const w=vertical?1.8:.9, d=vertical?.9:1.8;
-    cbox(x,h-.16,z,w,.32,d,stepMat,false,ownerList);
-    addWalkSurface(x-w/2,x+w/2,z-d/2,z+d/2,h,ownerList);
-  }
-  // A simple handrail communicates the route visually.
-  const railMat=flat(0x777d82);
-  const railX=vertical?sx+dir*run/2:cx;
-  const railZ=vertical?cz:sz+dir*run/2;
-  cbox(railX, GY+.9, railZ, vertical? .12:1.4, 1.4, vertical?1.4:.12, railMat,false,ownerList);
-}
-function accessRamp(cx,cz,roofTop,ownerList){
-  const h=roofTop-(GY+.5), run=6.0, rampMat=flat(0x5a6067);
-  // Visual ramp alongside the stepped route. Collision still uses the light stair-tread
-  // surfaces above, avoiding expensive per-triangle physics on mobile.
-  const ramp=new THREE.Mesh(new THREE.BoxGeometry(1.9,.28,run),rampMat);
-  ramp.rotation.x=-Math.atan2(h,run); ramp.position.set(cx+4.9,(GY+.5)+h*.5,cz);
-  ramp.castShadow=true; cityGroup.add(ramp); ownerList.meshes.push(ramp);
-}
-function fireEscape(cx,cz,roofTop,ownerList){
-  const z=cz-4.15, fm=flat(0x3f464d);
-  const levels=Math.max(1,Math.floor((roofTop-GY)/4));
-  for(let i=0;i<levels;i++){
-    const y=GY+1.2+i*4;
-    cbox(cx+4.25,y,z,1.5,.18,2.2,fm,false,ownerList);
-    addWalkSurface(cx+3.5,cx+5.0,z-1.0,z+1.0,y+.1,ownerList);
-    cbox(cx+4.25,y,z-1.0,1.5,1.1,.08,fm,false,ownerList);
-  }
-  cbox(cx+4.25,GY,z, .12, roofTop-GY+1.0,.12,fm,false,ownerList);
 }
 function wallMat(base,win,cols,rows){
   const cv=document.createElement('canvas'); cv.width=cv.height=32; const g=cv.getContext('2d');
@@ -585,59 +502,109 @@ const rnd=n=>Math.floor(Math.random()*n); // global RNG helper used by NPCs/debr
 const PAST=['#e8d5b0','#d9a8a0','#b7d3c2','#c9c3e0','#f0e2a0'];
 const CARCOL=[0xd63a3a,0x2f6fd6,0xe8c33a,0xf0f0f0,0x2a2a2e,0x3aa860];
 
-function house(cx,cz,rnd,ownerList){
-  const h=3.2;
-  cbox(cx,GY,cz,6,h,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true,ownerList);
-  const r=new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4),flat(0x8a3b2a)); r.rotation.y=Math.PI/4; r.position.set(cx,GY+4.3,cz); r.castShadow=true; cityGroup.add(r); ownerList.meshes.push(r);
-  cbox(cx,GY,cz+3.02,1.1,2,.1,flat(0x5a3a22),false,ownerList); cbox(cx+2,GY+3.2,cz-1,.8,2,.8,flat(0x7a4a3a),false,ownerList);
-  // A low rear balcony gives low-rise structures a playable perch without pretending the pitched roof is flat.
-  const top=GY+h; cbox(cx-1.7,top,cz-3.35,3.0,.16,1.6,flat(0x6a4a34),false,ownerList);
-  addWalkSurface(cx-3.0,cx-.4,cz-4.0,cz-2.8,top+.08,ownerList);
-  cbox(cx-1.7,top+.1,cz-4.0,3,.9,.1,flat(0x555a5e),false,ownerList);
-  ownerList.treeSpots.push([cx-4,cz-4],[cx+4,cz-4]);
+// ---- Stage 7: vertical-city building blocks --------------------------------------------------------
+// Instanced box batch (one draw call for many small parts: treads, rails, rungs).
+function instBoxes(list,color,owner){
+  const m=new THREE.InstancedMesh(UB,flat(color),list.length);
+  list.forEach((q,i)=>{ dummy.position.set(q.x,q.y,q.z); dummy.rotation.set(q.rx||0,0,0); dummy.scale.set(q.sx,q.sy,q.sz); dummy.updateMatrix(); m.setMatrixAt(i,dummy.matrix); });
+  dummy.rotation.set(0,0,0); m.count=list.length; m.frustumCulled=false; cityGroup.add(m); owner.meshes.push(m); return m;
 }
-function shop(cx,cz,rnd,ownerList){
-  const h=4, top=GY+h;
-  cbox(cx,GY,cz,8,h,7,wallMat('#cfcfd6','#bfe6f5',4,1),true,ownerList);
-  cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),false,ownerList);
-  cbox(cx,GY+2.6,cz+3.9,8,.5,1.4,flat([0xd85a4a,0x4a7bd8,0xd8b84a][rnd(3)]),false,ownerList);
-  cbox(cx,GY+3.3,cz+3.6,5,.9,.2,signMat(['CAFE','MARKET','PIZZA','BOOKS'][rnd(4)],'#222'),false,ownerList);
-  rooftopProps(cx,cz,8,7,top,ownerList,rnd,0x555560); accessStairs(cx,cz,top,ownerList,'south');
+// Zig-zag exterior fire escape on a building's +X face. n flights, each rising H, alternating lanes/directions,
+// with a landing at every turn. Flights are smooth ramp colliders (nb) so walking, XLR8 sprinting and replica
+// following are all simple; the visible treads are cosmetic steps along the same line.
+function fireEscape(fx,zA,zB,n,H,y0,owner){
+  const W=1.2, NS=7, L=zB-zA, tr=[], rl=[], lanes=[fx+0.75,fx+2.05], run=L/NS;
+  for(let k=0;k<n;k++){
+    const ln=k%2, xc=lanes[ln], ya=y0+k*H, yb=ya+H;
+    const zs=ln===0?zA:zB, ze=ln===0?zB:zA, sg=Math.sign(ze-zs);
+    addCol(owner,{x0:xc-W/2,x1:xc+W/2,z0:zA,z1:zB,top:yb,bot:ya,nb:true,ramp:{ax:'z',s:zs,e:ze,y0:ya,y1:yb}});
+    for(let i=0;i<NS;i++){ const t=(i+.5)/NS; tr.push({x:xc,y:ya+H*(i+1)/NS-0.06,z:zs+(ze-zs)*t,sx:W,sy:.12,sz:Math.abs(run)+.04}); }
+    const ang=-Math.atan2(H,L)*sg, len=Math.hypot(H,L), zc=(zA+zB)/2;
+    [-1,1].forEach(sd=>rl.push({x:xc+sd*(W/2-.03),y:ya+H/2+.95,z:zc,sx:.05,sy:.05,sz:len,rx:ang}));
+    const lz0 = ze===zB ? zB : zA-1.2, lx0=fx+0.1, lx1=fx+2.7;
+    addCol(owner,{x0:lx0,x1:lx1,z0:lz0,z1:lz0+1.2,bot:yb-0.2,top:yb});
+    tr.push({x:(lx0+lx1)/2,y:yb-0.1,z:lz0+.6,sx:lx1-lx0,sy:.2,sz:1.2});
+    rl.push({x:lx1-.03,y:yb+.9,z:lz0+.6,sx:.05,sy:.05,sz:1.2});
+    rl.push({x:(lx0+lx1)/2,y:yb+.9,z:ze===zB?lz0+1.17:lz0+.03,sx:lx1-lx0,sy:.05,sz:.05});
+  }
+  instBoxes(tr,0x4a4f57,owner); instBoxes(rl,0xc9ced6,owner);
 }
-function apartment(cx,cz,rnd,ownerList){
-  const h=6+rnd(3)*3, top=GY+h;
-  cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList);
-  cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),false,ownerList);
-  rooftopProps(cx,cz,7,7,top,ownerList,rnd,0x444444);
-  accessStairs(cx,cz,top,ownerList,'east'); fireEscape(cx,cz,top,ownerList);
-  // Balconies on alternating sides create intermediate fighting/landing points.
-  for(let i=0;i<Math.max(1,Math.floor(h/3));i++){
-    const y=GY+2.2+i*3;
-    cbox(cx-3.8,y,cz,1.5,.16,2.0,flat(0x5d4634),false,ownerList);
-    cbox(cx-4.45,y+.1,cz,0.1,.9,2.0,flat(0x555a5e),false,ownerList);
-    addWalkSurface(cx-4.55,cx-3.7,cz-1,cz+1,y+.08,ownerList);
+// Wall ladder. (x,z) is the point on the wall face, (nx,nz) the outward normal. Face it and push forward to climb.
+function ladder(x,z,nx,nz,y0,y1,owner){
+  const dep=0.9, hw=0.6;
+  addCol(owner,{ bot:y0, top:y1, nb:true, ladder:{nx,nz},
+    x0:nx?Math.min(x,x+nx*dep):x-hw, x1:nx?Math.max(x,x+nx*dep):x+hw,
+    z0:nz?Math.min(z,z+nz*dep):z-hw, z1:nz?Math.max(z,z+nz*dep):z+hw });
+  const px=x+nx*0.08, pz=z+nz*0.08, len=y1-y0, tx=nz?1:0, tz=nx?1:0, q=[];
+  [-1,1].forEach(sd=>q.push({x:px+tx*.3*sd,y:(y0+y1)/2,z:pz+tz*.3*sd,sx:.06,sy:len,sz:.06}));
+  for(let y=y0+.3;y<y1;y+=.45) q.push({x:px,y,z:pz,sx:tx?.66:.05,sy:.05,sz:tz?.66:.05});
+  instBoxes(q,0xd8b24a,owner);
+}
+const railMat = new THREE.MeshLambertMaterial({color:0x9aa0a8,transparent:true,opacity:.55});
+// Balcony slab sticking out of a wall (solid, thin: walk under it, land on it). faceX = wall x, dir = -1 west / +1 east.
+function balcony(faceX,dir,cz,level,owner){
+  const cxp=faceX+dir*0.65;
+  cbox(cxp,level-0.2,cz,1.3,0.2,3,flat(0x55575e),true,owner);
+  const r1=cbox(faceX+dir*1.27,level,cz,.06,.85,3,railMat,false,owner);
+  cbox(cxp,level,cz-1.47,1.3,.85,.06,railMat,false,owner); cbox(cxp,level,cz+1.47,1.3,.85,.06,railMat,false,owner);
+}
+// Solid rooftop clutter (crates, AC units, vents). keepEast leaves the fire-escape arrival side clear.
+function roofProps(cx,cz,roofY,hw,hd,owner,keepEast){
+  const vr=owner.vr, T=[[1.3,1.0,1.3,0x8a8f96],[1.0,1.0,1.0,0x9a6b3a],[1.7,0.75,0.9,0xb9c0c8],[0.9,1.5,0.9,0x707880]];
+  const n=2+Math.floor(vr()*3);
+  for(let i=0;i<n;i++){
+    const t=T[Math.floor(vr()*4)], spanX=2*hw-2.4-(keepEast?2.4:0);
+    if(spanX<=0) continue;
+    const px=cx-hw+1.2+vr()*spanX, pz=cz-hd+1.2+vr()*(2*hd-2.4);
+    cbox(px,roofY,pz,t[0],t[1],t[2],flat(t[3]),true,owner);
   }
 }
+
+function house(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz,6,3.2,6,wallMat(PAST[rnd(5)],'#6ab0d8',3,1),true,ownerList);
+  const r=new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4),flat(0x8a3b2a)); r.rotation.y=Math.PI/4; r.position.set(cx,GY+4.3,cz); r.castShadow=true; cityGroup.add(r); ownerList.meshes.push(r);
+  cbox(cx,GY,cz+3.02,1.1,2,.1,flat(0x5a3a22),false,ownerList); cbox(cx+2,GY+3.2,cz-1,.8,2,.8,flat(0x7a4a3a),true,ownerList);
+  ownerList.treeSpots.push([cx-4,cz-4],[cx+4,cz-4]);
+  // walkable pitched roof, a side ladder up to the eave, a garage annex and a porch deck to hop up from
+  addCol(ownerList,{x0:cx-3.54,x1:cx+3.54,z0:cz-3.54,z1:cz+3.54,top:GY+3.2,bot:GY+3.2,nb:true,pyr:{cx,cz,hw:3.54,y0:GY+3.2,h:2.2}});
+  ladder(cx+1.2,cz-3,0,-1,GY,GY+3.2,ownerList);
+  cbox(cx+4.4,GY,cz+.5,2.8,1.5,3.6,flat(0xb8b0a0),true,ownerList);
+  cbox(cx,GY,cz+3.9,2.6,.45,1.7,flat(0x8a8a8a),true,ownerList);
+}
+function shop(cx,cz,rnd,ownerList){
+  cbox(cx,GY,cz,8,4,7,wallMat('#cfcfd6','#bfe6f5',4,1),true,ownerList); cbox(cx,GY+4,cz,8.3,.4,7.3,flat(0x555560),true,ownerList);
+  cbox(cx,GY+2.6,cz+3.9,8,.5,1.4,flat([0xd85a4a,0x4a7bd8,0xd8b84a][rnd(3)]),false,ownerList);
+  cbox(cx,GY+3.3,cz+3.6,5,.9,.2,signMat(['CAFE','MARKET','PIZZA','BOOKS'][rnd(4)],'#222'),false,ownerList);
+  ladder(cx-4,cz,-1,0,GY,GY+4,ownerList);
+  roofProps(cx,cz,GY+4.4,4,3.5,ownerList,false);
+  ownerList.roofSpots.push([cx+1,cz,GY+4.4]);
+}
+function apartment(cx,cz,rnd,ownerList){
+  const h=6+rnd(3)*3, n=h/3, vr=ownerList.vr;
+  cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList); cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),true,ownerList);
+  fireEscape(cx+3.5,cz-2.6,cz+2.6,n,3,GY,ownerList);
+  for(let k=1;k<n;k++) if(vr()<.6) balcony(cx-3.5,-1,cz+(vr()-.5)*2,GY+k*3,ownerList);
+  roofProps(cx,cz,GY+h+.4,3.5,3.5,ownerList,true);
+  ownerList.roofSpots.push([cx-1,cz,GY+h+.4]);
+}
 function tower(cx,cz,rnd,ownerList){
-  const h=18+rnd(4)*5, top=GY+h;
-  cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList);
-  cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),false,ownerList);
-  cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList);
-  rooftopProps(cx,cz,8,8,top,ownerList,rnd,0x333a44); accessStairs(cx,cz,top,ownerList,'west'); fireEscape(cx,cz,top,ownerList);
-  // Deep balconies at two heights make towers useful traversal points for flying and jumping.
-  [Math.max(GY+5,top*.38), Math.max(GY+10,top*.68)].forEach((y,i)=>{
-    cbox(cx+(i?4.2:-4.2),y,cz,1.6,.18,3.0,flat(0x4a4f58),false,ownerList);
-    addWalkSurface(cx+(i?3.7:-5.0),cx+(i?5.0:-3.7),cz-1.5,cz+1.5,y+.09,ownerList);
-  });
+  const h=18+rnd(4)*5, n=Math.min(12,Math.round(h/3)), vr=ownerList.vr;
+  cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList); cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),true,ownerList); cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList);
+  fireEscape(cx+4,cz-3.2,cz+3.2,n,h/n,GY,ownerList);
+  for(let k=2;k<n;k+=2) if(vr()<.45) balcony(cx-4,-1,cz+(vr()-.5)*3,GY+k*(h/n),ownerList);
+  cbox(cx-2,GY+h+.5,cz-2.2,1.8,2.2,1.8,flat(0x8a5a3a),true,ownerList); // water tank
+  roofProps(cx,cz,GY+h+.5,4,4,ownerList,true);
+  ownerList.roofSpots.push([cx+.5,cz+1.5,GY+h+.5]);
 }
 function school(cx,cz,rnd,ownerList){
-  cbox(cx,GY,cz-2.5,9.4,5.5,4,wallMat('#c9553a','#cfe8f5',6,2),true,ownerList); cbox(cx,GY+5.5,cz-2.5,9.8,.5,4.4,flat(0x333333),false,ownerList);
-  cbox(cx,GY+6,cz-2.5,2.6,3.5,2.6,wallMat('#c9553a','#ffe28a',1,1),false,ownerList);
+  cbox(cx,GY,cz-2.5,9.4,5.5,4,wallMat('#c9553a','#cfe8f5',6,2),true,ownerList); cbox(cx,GY+5.5,cz-2.5,9.8,.5,4.4,flat(0x333333),true,ownerList);
+  cbox(cx,GY+6,cz-2.5,2.6,3.5,2.6,wallMat('#c9553a','#ffe28a',1,1),true,ownerList);
   cbox(cx,GY+3.4,cz-.4,6,1,.3,signMat('SCHOOL','#1a4b8c'),false,ownerList);
   cbox(cx-3.5,GY,cz+3,.15,7,.15,flat(0xdddddd),false,ownerList); cbox(cx-3.1,GY+6,cz+3,.9,.6,.05,flat(0xdd3333),false,ownerList);
   [-1,1].forEach(s=>cbox(cx+s*3.5,GY,cz+3.6,.2,2,2.5,flat(0xffffff),false,ownerList));
-  rooftopProps(cx,cz-2.5,9.4,4, GY+5.5, ownerList, rnd, 0x333333);
-  accessStairs(cx,cz-2.5,GY+5.5,ownerList,'east'); accessRamp(cx,cz-2.5,GY+5.5,ownerList);
+  fireEscape(cx+4.7,cz-4.3,cz+1.2,2,2.75,GY,ownerList);
+  ladder(cx+1.3,cz-2.5,1,0,GY+6,GY+9.5,ownerList);
+  ownerList.roofSpots.push([cx-3,cz-2.5,GY+6]);
 }
 function park(cx,cz,rnd,ownerList){
   cbox(cx,GY,cz,3,.4,3,flat(0x4aa8e0),false,ownerList); cbox(cx,GY+.4,cz,.6,1.2,.6,flat(0xbbbbbb),false,ownerList); cbox(cx,GY,cz+4.3,2.2,.5,.6,flat(0x6b4a2d),false,ownerList);
@@ -652,7 +619,7 @@ const leafMat = new THREE.MeshLambertMaterial({color:0x2e8b3d});
 function generateChunk(cx, cz){
   const key = chunkKeyOf(cx,cz);
   const meshes = newChunkMeshes();
-  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[], platforms:[] } };
+  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[], roofSpots:[] } };
   // freeSlots/usedCount for each block type are created lazily in getOrCreateMesh, only when that chunk actually uses that type
   chunks.set(key, chunk);
 
@@ -677,6 +644,7 @@ function generateChunk(cx, cz){
   // city cell: one building/park per chunk, deterministic by chunk coord (special-cases mirror the old fixed 8x8 map at the origin, then repeats the pattern outward so it tiles forever)
   const rnd = seededRng(chunkSeed(cx,cz));
   const rndInt = n => Math.floor(rnd()*n);
+  chunk.props.vr = seededRng((chunkSeed(cx,cz) ^ 0x5bd1e995) || 12345); // vertical-city extras use their own stream
   const centerCx = x0 + CHUNK/2 - 0.5, centerCz = z0 + CHUNK/2 - 0.5;
   const kindPick = (cx===128&&cz===128) ? park : (cx===128&&cz===127) ? school : KINDS[(((cx%8)+8)%8*3 + ((cz%8)+8)%8*5 + cx*cz)%8];
   kindPick(centerCx, centerCz, rndInt, chunk.props);
@@ -726,9 +694,8 @@ function disposeChunk(chunk){
   // Only remove the InstancedMesh from the scene — geometry and material are shared across
   // every chunk now (see blockMaterials/sharedBoxGeo above), so they must never be disposed here.
   Object.values(chunk.meshes).forEach(m=>{ scene.remove(m); });
-  chunk.props.meshes.forEach(m=>{ scene.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)) m.material.dispose(); });
+  chunk.props.meshes.forEach(m=>{ if(m.parent) m.parent.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)&&m.material!==railMat){ if(m.material.map) m.material.map.dispose(); m.material.dispose(); } });
   chunk.props.colliders.forEach(c=>{ const i=colliders.indexOf(c); if(i>=0) colliders.splice(i,1); });
-  chunk.props.platforms.forEach(s=>{ const i=walkSurfaces.indexOf(s); if(i>=0) walkSurfaces.splice(i,1); });
   if(chunk.props.carRef){ const i=props.indexOf(chunk.props.carRef); if(i>=0) props.splice(i,1); }
   // clear this chunk's block registry entries (terrain memory is freed; columnHeight persists so ground queries outside load radius still resolve sanely)
   const x0 = chunk.cx*CHUNK - HALF, z0 = chunk.cz*CHUNK - HALF;
@@ -856,15 +823,21 @@ water.rotation.x = -Math.PI/2; water.position.y = WATER_LEVEL + 0.4;
 water.visible=false; scene.add(water);
 
 // Returns the Y of the walkable surface (top face of the highest solid block).
-function groundTopAt(x,z){
+// Y of the walkable surface. With no feet height it is the terrain top (old behaviour, every existing caller).
+// With fy it is the highest surface - terrain, roof, landing, ramp, pitched roof - that is at most a step above fy.
+function groundTopAt(x,z,fy){
   const gx = Math.round(x), gz = Math.round(z);
   const t = columnHeight[colKey(gx,gz)];
   let best = Math.max(t===undefined ? -3 : t, -14) + 0.5;
-  // Walkable roofs, balconies and individual stair treads override the voxel ground when
-  // the player is inside their small footprint.
-  for(let i=walkSurfaces.length-1;i>=0;i--){
-    const s=walkSurfaces[i];
-    if(gx>=s.x0&&gx<=s.x1&&gz>=s.z0&&gz<=s.z1 && s.top>best) best=s.top;
+  if(fy===undefined) return best;
+  const lim = fy + STEP_UP;
+  for(let i=colliders.length-1;i>=0;i--){
+    const c=colliders[i];
+    if(c.ladder||x<=c.x0||x>=c.x1||z<=c.z0||z>=c.z1) continue;
+    let h=c.top;
+    if(c.ramp){ const r=c.ramp, u=Math.max(0,Math.min(1,((r.ax==='z'?z:x)-r.s)/(r.e-r.s))); h=r.y0+(r.y1-r.y0)*u; }
+    else if(c.pyr){ const q=c.pyr, m=Math.max(Math.abs(x-q.cx),Math.abs(z-q.cz)); h=q.y0+q.h*Math.max(0,1-m/q.hw); }
+    if(h<=lim && h>best) best=h;
   }
   return best;
 }
@@ -895,18 +868,7 @@ function updateDayNight(dt){
 function buildCharacter(kind){
   const g = new THREE.Group();
   const parts = {};
-  function mat(color){ return new THREE.MeshLambertMaterial({color}); }
-  function box(w,h,d,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color)); m.castShadow=true; return m; }
-  function joint(radius,color){ const m=new THREE.Mesh(new THREE.SphereGeometry(radius,8,6),mat(color)); m.castShadow=true; return m; }
-  function limb(side, upperW, upperH, lowerW, lowerH, color, jointColor, kindName){
-    const root=new THREE.Group();
-    const upper=box(upperW,upperH,upperW,color); upper.geometry.translate(0,-upperH/2,0); root.add(upper);
-    const elbow=joint(Math.max(.075,Math.min(upperW,.14)),jointColor); elbow.position.y=-upperH; root.add(elbow);
-    const lower=box(lowerW,lowerH,lowerW,color); lower.geometry.translate(0,-lowerH/2,0); lower.position.y=-upperH; root.add(lower);
-    const wrist=joint(Math.max(.06,Math.min(lowerW,.11)),jointColor); wrist.position.y=-(upperH+lowerH); root.add(wrist);
-    root.userData.life={upper,lower,elbow,wrist,baseX:0,side,kind:kindName};
-    return root;
-  }
+  function box(w,h,d,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({color})); m.castShadow=true; return m; }
 
   let scaleY = 1, palette;
   switch(kind){
@@ -918,58 +880,78 @@ function buildCharacter(kind){
     case 'cannonbolt': palette = {skin:0xd8862e, torso:0x8a4a12, accent:0xf2c14e}; scaleY=0.8; break;
     default: palette = {skin:0xe0a878, torso:0x2c7a3d, accent:0x111111}; kind='ben';
   }
+  // Per-kind body proportions: bulk vs slender build.
   const torsoWidth = kind==='four_arms' ? 1.35 : kind==='cannonbolt' ? 1.4 : 0.68;
   const torsoDepth = kind==='four_arms' ? 0.68 : kind==='cannonbolt' ? 1.25 : 0.38;
   const legWidth   = kind==='four_arms' ? 0.2  : kind==='cannonbolt' ? 0.4 : 0.24;
+
+  // Vertical layout, built bottom-up from the group root (which sits at ground/feet level):
   const legH = 1.0, torsoH = 1.15, headH = 0.55;
-  const hipY = legH * scaleY;
+  const hipY = legH * scaleY;                 // top of legs / bottom of torso
   const torsoCenterY = hipY + (torsoH/2) * scaleY;
   const shoulderY = hipY + torsoH * 0.82 * scaleY;
   const headCenterY = hipY + (torsoH + headH/2) * scaleY;
 
-  const pelvis=box(torsoWidth*.78,.16,torsoDepth*.82,palette.accent); pelvis.position.y=hipY+.02; g.add(pelvis); parts.pelvis=pelvis;
-  const hipL=joint(legWidth*.62,palette.accent), hipR=joint(legWidth*.62,palette.accent); hipL.position.set(-0.26,hipY,0); hipR.position.set(0.26,hipY,0); g.add(hipL,hipR); parts.hipL=hipL; parts.hipR=hipR;
-
-  const head = box(0.52,0.55,0.52, kind==='diamondhead'?palette.accent:palette.skin); head.position.y=headCenterY;
+  const head = box(0.52,0.55,0.52, kind==='diamondhead'?palette.accent:palette.skin);
+  head.position.y = headCenterY;
   if(kind==='echo_echo'){ const vz=box(0.5,0.14,0.06,0x111111); vz.position.set(0,headCenterY+0.05,-0.36); g.add(vz); }
   if(kind==='diamondhead'){ head.geometry = new THREE.OctahedronGeometry(0.42); }
   if(kind==='cannonbolt'){ head.geometry = new THREE.SphereGeometry(0.38,10,8); }
-  g.add(head); parts.head=head; parts.neck=joint(.16,palette.skin); parts.neck.position.set(0,headCenterY-headH/2-.02,0); g.add(parts.neck);
-
+  g.add(head); parts.head = head;
   if(kind==='cannonbolt'){
-    const shell = new THREE.Group(); const shellCenterY=torsoCenterY-.05;
-    const core=new THREE.Mesh(new THREE.SphereGeometry(.62,14,10),mat(palette.skin)); core.castShadow=true; shell.add(core);
-    for(let i=0;i<4;i++){ const band=new THREE.Mesh(new THREE.TorusGeometry(.63,.045,6,16),mat(palette.accent)); band.rotation.x=Math.PI/2; band.position.y=-.35+i*.24; band.castShadow=true; shell.add(band); }
-    shell.position.y=shellCenterY; shell.scale.setScalar(.001); g.add(shell); parts.shell=shell; parts.shellBaseY=shellCenterY;
+    // Full enclosing shell: hidden (scale 0) while standing, grows to fully cover the body when curled.
+    // Segmented bands are purely cosmetic detail on the shell surface, not separate hittable geometry.
+    const shell = new THREE.Group();
+    const shellCenterY = torsoCenterY - 0.05;
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.62,14,10), new THREE.MeshLambertMaterial({color:palette.skin}));
+    core.castShadow = true; shell.add(core);
+    for(let i=0;i<4;i++){
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.63,0.045,6,16), new THREE.MeshLambertMaterial({color:palette.accent}));
+      band.rotation.x = Math.PI/2; band.position.y = -0.35 + i*0.24; band.castShadow = true; shell.add(band);
+    }
+    shell.position.y = shellCenterY;
+    shell.scale.setScalar(0.001); // hidden until curled — see the roll animation, which scales this up
+    g.add(shell); parts.shell = shell; parts.shellBaseY = shellCenterY;
   }
 
-  const torso=box(torsoWidth,torsoH,torsoDepth,palette.torso); torso.position.y=torsoCenterY; g.add(torso); parts.torso=torso;
-  if(kind==='echo_echo'){ [-.27,.27].forEach(x=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(.17,.17,.08,10),mat(0x111111)); c.rotation.x=Math.PI/2; c.position.set(x,torsoCenterY+.12,-torsoDepth/2-.03); g.add(c); }); }
+  const torso = box(torsoWidth,torsoH,torsoDepth, palette.torso);
+  torso.position.y = torsoCenterY;
+  g.add(torso); parts.torso = torso;
+  if(kind==='echo_echo'){ [-0.27,0.27].forEach(x=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.08,10),new THREE.MeshLambertMaterial({color:0x111111})); c.rotation.x=Math.PI/2; c.position.set(x,torsoCenterY+0.12,-torsoDepth/2-0.03); g.add(c); }); }
 
-  const armGeo=kind==='four_arms'?[.3,.95,.3]:[.19,.85,.19];
-  const armSpacing=kind==='four_arms'?torsoWidth/2+.18:.46;
-  function makeArm(x,extra,lowerBias=0){
-    const arm=limb(x<0?'left':'right',armGeo[0],armGeo[1]*.54,armGeo[0]*.92,armGeo[1]*.46,extra?palette.accent:palette.skin,palette.skin,kind);
-    arm.position.set(x,shoulderY+lowerBias,0); arm.userData.life.baseY=arm.position.y; g.add(arm); return arm;
+  const armGeo = kind==='four_arms' ? [0.3,0.95,0.3] : [0.19,0.85,0.19];
+  const armSpacing = kind==='four_arms' ? torsoWidth/2 + 0.18 : 0.46;
+  function makeArm(x, extra){
+    const arm = box(armGeo[0],armGeo[1],armGeo[2], extra? palette.accent : palette.skin);
+    arm.geometry.translate(0,-armGeo[1]/2,0);   // pivot at shoulder (top of arm)
+    arm.position.set(x, shoulderY, 0);
+    g.add(arm); return arm;
   }
-  parts.leftArm=makeArm(-armSpacing); parts.rightArm=makeArm(armSpacing);
-  parts.shoulderL=joint(armGeo[0]*.58,palette.skin); parts.shoulderR=joint(armGeo[0]*.58,palette.skin); parts.shoulderL.position.set(-armSpacing,shoulderY,0); parts.shoulderR.position.set(armSpacing,shoulderY,0); g.add(parts.shoulderL,parts.shoulderR);
+  parts.leftArm = makeArm(-armSpacing);
+  parts.rightArm = makeArm(armSpacing);
   if(kind==='four_arms'){
-    parts.leftArm2=makeArm(-armSpacing*.68,true,-.25); parts.rightArm2=makeArm(armSpacing*.68,true,-.25);
-    parts.shoulderL2=joint(armGeo[0]*.5,palette.skin); parts.shoulderR2=joint(armGeo[0]*.5,palette.skin); parts.shoulderL2.position.set(-armSpacing*.68,shoulderY-.25,0); parts.shoulderR2.position.set(armSpacing*.68,shoulderY-.25,0); g.add(parts.shoulderL2,parts.shoulderR2);
+    // second, slightly lower pair of arms for the classic four-armed silhouette
+    parts.leftArm2 = makeArm(-armSpacing*0.68, true);
+    parts.rightArm2 = makeArm(armSpacing*0.68, true);
+    parts.leftArm2.position.y -= 0.25;
+    parts.rightArm2.position.y -= 0.25;
   }
 
   function makeLeg(x){
-    const leg=limb(x<0?'left':'right',legWidth,legH*.52,legWidth*.96,legH*.48,palette.accent,palette.accent,kind);
-    leg.position.set(x,hipY,0); leg.userData.life.baseY=hipY; g.add(leg); return leg;
+    const leg = box(legWidth,legH,legWidth, palette.accent);
+    leg.geometry.translate(0,-legH/2,0);        // pivot at hip (top of leg); bottom reaches y=0 (feet)
+    leg.position.set(x, hipY, 0);
+    g.add(leg); return leg;
   }
-  const legSpacing=kind==='four_arms'?.18:.26; parts.leftLeg=makeLeg(-legSpacing); parts.rightLeg=makeLeg(legSpacing);
-  const footL=box(legWidth*1.35,.12,legWidth*1.7,palette.accent), footR=box(legWidth*1.35,.12,legWidth*1.7,palette.accent);
-  footL.position.set(-legSpacing,-.02,-.07); footR.position.set(legSpacing,-.02,-.07); g.add(footL,footR); parts.footL=footL; parts.footR=footR;
+  const legSpacing = kind==='four_arms' ? 0.18 : 0.26;
+  parts.leftLeg = makeLeg(-legSpacing);
+  parts.rightLeg = makeLeg(legSpacing);
 
-  const o=new THREE.Group(); g.position.y=-.9; o.add(g); o.rotation.order='YXZ'; o.userData.parts=parts; o.userData.kind=kind; o.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28,breath:Math.random()*6.28};
+  const o = new THREE.Group(); g.position.y = -0.9; o.add(g); o.rotation.order = 'YXZ';
+  o.userData.parts = parts; o.userData.kind = kind;
   return o;
 }
+
 // tiny portrait renderer (renders each alien to a mini canvas for the HUD)
 function renderPortrait(kind){
   const size = 92;
@@ -1015,7 +997,7 @@ const ACT={
  roll:{label:()=>player.rolling?'UNROLL':'ROLL',hold:v=>{player.rollHeld=v;},cost:0,cd:0}
 };
 const ALIENS = [
-  { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:6.6,
+  { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:10.5,
     atkDamage:22, atkRange:2.4, atkCooldown:0.7, modelScale:1.18,
     special:{ name:'GROUND SLAM', cost:35, cooldown:5,
       run(ctx){ shockwaveAt(ctx.player.pos, 4.5, 40, true); shakeCamera(0.3); } } },
@@ -1243,19 +1225,15 @@ const ENEMY_STATS = {
   speed:   { hp:30,  speed:9.0, damage:6,  color:0xd8a020, size:[0.65,0.95,0.65], yOff:0.48, retreatHpFrac:0.2,  ranged:false, chaseRange:16, loseRange:22 },
   elite:   { hp:110, speed:2.4, damage:11, color:0x1a1a2e, size:[0.95,1.35,0.95], yOff:0.68, retreatHpFrac:0.15, ranged:true,  chaseRange:16, loseRange:20, preferredDist:6, projSpeed:20 },
 };
-function makeEnemy(type, x, z){
+function makeEnemy(type, x, z, y0){
   const stats = ENEMY_STATS[type] || ENEMY_STATS.normal;
-  const root=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.BoxGeometry(...stats.size),new THREE.MeshLambertMaterial({color:stats.color})); body.castShadow=true; body.position.y=stats.yOff; root.add(body);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(Math.max(.22,stats.size[0]*.34),8,6),new THREE.MeshLambertMaterial({color:stats.color})); head.position.y=stats.yOff+stats.size[1]*.58; head.castShadow=true; root.add(head);
-  const shoulderL=new THREE.Mesh(new THREE.SphereGeometry(.12,7,5),new THREE.MeshLambertMaterial({color:stats.color})); shoulderL.position.set(-stats.size[0]*.58,stats.yOff+stats.size[1]*.32,0); root.add(shoulderL);
-  const shoulderR=shoulderL.clone(); shoulderR.position.x=-shoulderL.position.x; root.add(shoulderR);
-  const limb=(x)=>{ const g=new THREE.Group(); const up=new THREE.Mesh(new THREE.BoxGeometry(.16,stats.size[1]*.32,.16),new THREE.MeshLambertMaterial({color:stats.color})); up.geometry.translate(0,-stats.size[1]*.16,0); g.add(up); const e=new THREE.Mesh(new THREE.SphereGeometry(.09,7,5),new THREE.MeshLambertMaterial({color:stats.size[0]>1?.1:stats.color})); e.position.y=-stats.size[1]*.32; g.add(e); const lo=new THREE.Mesh(new THREE.BoxGeometry(.15,stats.size[1]*.28,.15),new THREE.MeshLambertMaterial({color:stats.color})); lo.geometry.translate(0,-stats.size[1]*.14,0); lo.position.y=-stats.size[1]*.32; g.add(lo); g.position.set(x,stats.yOff+stats.size[1]*.32,0); root.add(g); return g; };
-  const parts={torso:body,head,leftArm:limb(-stats.size[0]*.62),rightArm:limb(stats.size[0]*.62),leftLeg:limb(-stats.size[0]*.28),rightLeg:limb(stats.size[0]*.28)};
-  root.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28};
-  const y=groundTopAt(x,z); root.position.set(x,y,z); scene.add(root);
-  const en={
-    mesh: root, parts, type, hp: stats.hp, maxHp: stats.hp,
+  const body = new THREE.Mesh(new THREE.BoxGeometry(...stats.size), new THREE.MeshLambertMaterial({color:stats.color}));
+  body.castShadow = true;
+  const y = y0!==undefined ? y0 : groundTopAt(x,z);
+  body.position.set(x, y + stats.yOff, z);
+  scene.add(body);
+  const en = {
+    mesh: body, type, hp: stats.hp, maxHp: stats.hp,
     speed: stats.speed, damage: stats.damage, atkCd:0, alive:true,
     state:'wander', target:new THREE.Vector3(x,0,z), wanderT:0, home:new THREE.Vector3(x,0,z),
     staggerT:0, knockVel:new THREE.Vector3(),
@@ -1275,6 +1253,20 @@ function pickEnemyType(){
   for(const [type,w] of ENEMY_TYPE_WEIGHTS){ if(r<w) return type; r-=w; }
   return 'normal';
 }
+// Enemies stand on whatever surface is under them (rooftops, landings, ramps) and drop down when they walk off.
+function enemyGroundY(en,yOff,dt){
+  const p=en.mesh.position, feet=p.y-yOff, sf=groundTopAt(p.x,p.z,feet+0.05);
+  return (sf>=feet ? sf : Math.max(sf, feet-16*dt)) + yOff;
+}
+// A rooftop within reach of the player (12-38 units away) to ambush from, so rooftops become fighting spaces.
+function roofSpawnPoint(){
+  const cc=chunkCoordOf(player.pos.x,player.pos.z), cand=[];
+  for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++){
+    const ch=chunks.get(chunkKeyOf(cc[0]+dx,cc[1]+dz)); if(!ch||!ch.props.roofSpots) continue;
+    ch.props.roofSpots.forEach(q=>{ const d=Math.hypot(q[0]-player.pos.x,q[1]-player.pos.z); if(d>12&&d<38&&!blockedAt(q[0],q[1],q[2])) cand.push(q); });
+  }
+  return cand.length ? cand[Math.floor(Math.random()*cand.length)] : null;
+}
 const MAX_ENEMIES = 10;
 let enemySpawnT = 0;
 function updateEnemySpawning(dt){
@@ -1285,6 +1277,10 @@ function updateEnemySpawning(dt){
   if(active >= MAX_ENEMIES) return;
   // Spawn somewhere in a ring around the player - far enough not to appear on top of them, close enough
   // to matter, and never inside a solid block.
+  if(Math.random()<0.3){ // ~1 in 3 spawns is an ambusher on a nearby rooftop (only the weaker archetypes)
+    const rs=roofSpawnPoint();
+    if(rs){ makeEnemy(Math.random()<0.6?'ranged':'normal', rs[0], rs[1], rs[2]); return; }
+  }
   for(let tries=0; tries<6; tries++){
     const ang = Math.random()*Math.PI*2, dist = 18 + Math.random()*22;
     const x = Math.round(player.pos.x + Math.cos(ang)*dist), z = Math.round(player.pos.z + Math.sin(ang)*dist);
@@ -1344,7 +1340,7 @@ function updateEnemies(dt){
     }
     const stats = ENEMY_STATS[en.type] || ENEMY_STATS.normal;
     en.staggerT = Math.max(0, (en.staggerT||0) - dt);
-    if(en.staggerT > 0){ p.y = groundTopAt(p.x,p.z) + stats.yOff; return; } // hit-reaction pause: skip normal AI this frame
+    if(en.staggerT > 0){ p.y = enemyGroundY(en,stats.yOff,dt); return; } // hit-reaction pause: skip normal AI this frame
 
     en.alertedT = Math.max(0, (en.alertedT||0) - dt);
 
@@ -1368,7 +1364,7 @@ function updateEnemies(dt){
       const away = p.clone().sub(tpos); away.y=0;
       if(away.lengthSq() > 0.01){ away.normalize(); const nx=p.x+away.x*en.speed*1.3*dt, nz=p.z+away.z*en.speed*1.3*dt;
         if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
-      p.y = groundTopAt(p.x,p.z) + stats.yOff;
+      p.y = enemyGroundY(en,stats.yOff,dt);
       en.mesh.lookAt(tpos.x, p.y, tpos.z);
       // Recover enough to stop fleeing after a little distance/time, so retreat doesn't become permanent.
       if(distToTarget > stats.loseRange*0.9) en.state = 'wander';
@@ -1379,9 +1375,9 @@ function updateEnemies(dt){
         const dir = tpos.clone().sub(p); dir.y = 0; const dist = dir.length(); dir.normalize();
         const pref = stats.preferredDist || 8;
         if(dist > pref + 1.5){
-          p.addScaledVector(dir, en.speed*dt);
+          { const nx=p.x+dir.x*en.speed*dt, nz=p.z+dir.z*en.speed*dt; if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
         } else if(dist < pref - 1.5){
-          p.addScaledVector(dir, -en.speed*0.8*dt);
+          { const nx=p.x-dir.x*en.speed*0.8*dt, nz=p.z-dir.z*en.speed*0.8*dt; if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
         } else {
           // strafe: perpendicular to the target direction, flipping occasionally so it doesn't look robotic
           en.repositionT -= dt;
@@ -1401,7 +1397,7 @@ function updateEnemies(dt){
           en.atkCd = 0.9;
           if(player.alive && (tu.unit || player.invuln<=0)) hurtTarget(tu, en.damage*1.4);
         }
-        p.y = groundTopAt(p.x,p.z) + stats.yOff;
+        p.y = enemyGroundY(en,stats.yOff,dt);
         en.mesh.lookAt(tpos.x, p.y, tpos.z);
       } else {
         // Melee archetypes (normal, brute, speed): straightforward close-and-hit, same shared pattern,
@@ -1414,7 +1410,7 @@ function updateEnemies(dt){
           hurtTarget(tu, en.damage);
           en.atkCd = en.type==='brute' ? 1.6 : en.type==='speed' ? 0.9 : 1.2;
         }
-        p.y = groundTopAt(p.x,p.z) + stats.yOff;
+        p.y = enemyGroundY(en,stats.yOff,dt);
         en.mesh.lookAt(tpos.x, p.y, tpos.z);
       }
     } else {
@@ -1426,7 +1422,7 @@ function updateEnemies(dt){
       const dir = en.target.clone().sub(p); dir.y=0;
       if(dir.length()>0.3){ dir.normalize(); const nx=p.x+dir.x*en.speed*0.4*dt, nz=p.z+dir.z*en.speed*0.4*dt;
         if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz; }
-      p.y = groundTopAt(p.x,p.z) + stats.yOff;
+      p.y = enemyGroundY(en,stats.yOff,dt);
     }
   });
 }
@@ -1585,7 +1581,7 @@ function updateFx(dt){
     const f=fx[i]; f.life-=dt; const m=f.mesh.position;
     if(f.grav){ f.vel.y+=GRAVITY*dt; }
     m.addScaledVector(f.vel,dt); if(f.grow) f.mesh.scale.multiplyScalar(1+f.grow*dt);
-    if(f.grav){ const g=groundTopAt(m.x,m.z); if(m.y<g){ m.y=g; f.vel.set(0,0,0); } }
+    if(f.grav){ const g=groundTopAt(m.x,m.z,m.y+0.2); if(m.y<g){ m.y=g; f.vel.set(0,0,0); } }
     f.mesh.material.opacity=Math.max(0,f.life/f.max);
     if(f.life<=0){ scene.remove(f.mesh); f.mesh.material.dispose(); fx.splice(i,1); }
   }
@@ -1650,7 +1646,7 @@ function updateSpeedEffects(dt){
       const d = dustPuffs[dustIdx]; dustIdx = (dustIdx+1)%DUST_COUNT;
       d.life = d.max = 0.35 + Math.random()*0.25;
       d.mesh.visible = true;
-      d.mesh.position.set(player.pos.x + (Math.random()-0.5)*0.6, groundTopAt(player.pos.x,player.pos.z)+0.15, player.pos.z + (Math.random()-0.5)*0.6);
+      d.mesh.position.set(player.pos.x + (Math.random()-0.5)*0.6, groundTopAt(player.pos.x,player.pos.z,player.pos.y-1)+0.15, player.pos.z + (Math.random()-0.5)*0.6);
       d.mesh.scale.setScalar(0.25 + s*0.35);
     }
   }
@@ -1762,7 +1758,7 @@ function crystalWall(){
   const f={x:-Math.sin(player.yaw),z:-Math.cos(player.yaw)}, r={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)};
   const mt=new THREE.MeshLambertMaterial({color:0x7ff5ee,transparent:true,opacity:.75,emissive:0x1a6b6b});
   for(let i=-3;i<=3;i++){
-    const x=player.pos.x+f.x*3.5+r.x*i*1.1, z=player.pos.z+f.z*3.5+r.z*i*1.1, gy=groundTopAt(x,z);
+    const x=player.pos.x+f.x*3.5+r.x*i*1.1, z=player.pos.z+f.z*3.5+r.z*i*1.1, gy=groundTopAt(x,z,player.pos.y-1);
     const m=new THREE.Mesh(UB,mt); m.scale.set(1.2,.01,1.2); m.position.set(x,gy,z); m.castShadow=true; scene.add(m);
     const col={x0:x-.6,x1:x+.6,z0:z-.6,z1:z+.6,top:gy+3.6}; colliders.push(col); crystals.push({m,col,gy,life:12,age:0});
   }
@@ -1849,6 +1845,21 @@ function renderSquad(){
   add('chip mode'+(squadMode==='follow'?' on':''),'👣',()=>{ squadMode='follow'; renderSquad(); });
   add('chip mode'+(squadMode==='bot'?' on':''),'🤖',()=>{ squadMode='bot'; renderSquad(); });
 }
+// Replica vertical motion: stand on rooftops/landings/ramps, hop up to ledges the leader is standing on, and if the
+// leader is somewhere a hop can't reach (a tall roof) the replica warps up beside them after a moment.
+function unitVertical(u,goalFeet,gd,dt){
+  const feet=u.pos.y-1; u.vy=u.vy||0;
+  const sf=groundTopAt(u.pos.x,u.pos.z,feet+0.05);
+  let nf;
+  if(u.vy<=0 && feet-sf<=0.6){
+    nf=sf; u.vy=0; u.leapCd=Math.max(0,(u.leapCd||0)-dt);
+    const dh=goalFeet-sf;
+    if(dh>0.9 && dh<6.3 && gd<12 && u.leapCd<=0){ u.vy=Math.sqrt(2*18*(Math.min(dh,4.6)+0.9)); u.leapCd=1.2; nf=sf+0.01; u.warpT=0; }
+    else if(dh>=6.3 && gd<30){ u.warpT=(u.warpT||0)+dt; if(u.warpT>1.6){ u.warpT=0; u.pos.set(player.pos.x+((u.n||1)%2?1.4:-1.4),player.pos.y,player.pos.z+0.6); nf=u.pos.y-1; for(let i=0;i<6;i++) debris(u.pos.clone().add(new THREE.Vector3(0,1,0)),0xcfefff,.25,new THREE.Vector3((Math.random()-.5)*4,Math.random()*3,(Math.random()-.5)*4),.5,false); } }
+    else u.warpT=0;
+  } else { u.vy=Math.max(-38,u.vy+GRAVITY*dt); nf=feet+u.vy*dt; if(nf<=sf && u.vy<=0){ nf=sf; u.vy=0; } }
+  u.pos.y=nf+1;
+}
 function updateSquad(dt){
   if(!squad.length) return;
   const act=squad.find(u=>u.active); if(act){ act.health=player.health; act.energy=player.energy; act.yaw=player.yaw; }
@@ -1865,9 +1876,10 @@ function updateSquad(dt){
     if(tgt){ goal=tgt.mesh.position; stop=1.6; } else { const a=idx*2.1+Math.PI; goal=player.pos.clone().add(new THREE.Vector3(Math.cos(a)*2.6,0,Math.sin(a)*2.6)); stop=squadMode==='follow'?.6:2.5; }
     const dx=goal.x-u.pos.x, dz=goal.z-u.pos.z, d=Math.hypot(dx,dz); let moving=false;
     if(d>stop){ const sp=(d>10?9:5.4)*dt, nx=u.pos.x+dx/d*sp, nz=u.pos.z+dz/d*sp, fy=u.pos.y-1;
-      if(!blockedAt(nx,u.pos.z,fy)) u.pos.x=nx; if(!blockedAt(u.pos.x,nz,fy)) u.pos.z=nz; moving=true; u.yaw=Math.atan2(-dx,-dz); }
+      const bx=blockedAt(nx,u.pos.z,fy); if(!bx) u.pos.x=nx; const bz=blockedAt(u.pos.x,nz,fy); if(!bz) u.pos.z=nz; moving=true; u.yaw=Math.atan2(-dx,-dz);
+      if((bx||bz) && (u.vy||0)!==0){ const lt=ledgeAt(bx?nx:u.pos.x,bz?nz:u.pos.z,fy); if(lt!==null){ if(bx) u.pos.x=nx; if(bz) u.pos.z=nz; u.pos.y=lt+1; u.vy=0; } } }
     if(d>28) u.pos.set(player.pos.x+2,player.pos.y,player.pos.z);
-    u.pos.y=groundTopAt(u.pos.x,u.pos.z)+1;
+    unitVertical(u, tgt ? tgt.mesh.position.y-0.6 : player.pos.y-1, d, dt);
     if(tgt){ const ed=tgt.mesh.position.distanceTo(u.pos);
       if(ed<2.1&&u.cd<=0){ damageEnemy(tgt,9,new THREE.Vector3(dx,0,dz).normalize()); u.cd=.5; u.atkT=.25; u.punch=!u.punch; }
       else if(ed>=3&&ed<11&&u.energy>=20&&u.cd<=0){ u.energy-=20; u.cd=1.6; u.yaw=Math.atan2(-dx,-dz); sonicBlast(u.pos,flatFwd(u.yaw),22,11); } }
@@ -1967,14 +1979,12 @@ const SKINS=[0xf1c8a0,0xd9a577,0xa8744a,0x6e4a2e], SHIRTS=[0x3a6ea8,0xc25a8a,0x8
 const GANGS=[{name:'RED',col:0xb32222,home:[-30.5,17.5]},{name:'PURPLE',col:0x7a2fb3,home:[33.5,-14.5]},{name:'YELLOW',col:0xd8b81a,home:[1.5,-46.5]}].map(g=>({...g,size:4,members:[],respT:0}));
 function makeNpcModel(skin,shirt,pants,cap){
   const g=new THREE.Group(), parts={};
-  const mk=(geo,c,x,y,z)=>{ const m=new THREE.Mesh(geo,nm(c)); m.position.set(x,y,z); m.castShadow=true; g.add(m); return m; };
-  const j=(c,x,y,z)=>mk(new THREE.SphereGeometry(.09,7,5),c,x,y,z);
-  const limb=(x,y,color)=>{ const r=new THREE.Group(); const up=mk(new THREE.BoxGeometry(.16,.28,.16),color,0,0,0); up.geometry.translate(0,-.14,0); r.add(up); const e=new THREE.Mesh(new THREE.SphereGeometry(.08,7,5),nm(skin)); e.position.y=-.28; r.add(e); const lo=new THREE.Mesh(NG.arm,color===shirt?nm(shirt):nm(color)); lo.position.y=-.55; lo.geometry.translate(0,-.135,0); r.add(lo); r.userData.life={upper:up,lower:lo}; r.position.set(x,y,0); g.add(r); return r; };
-  parts.torso=mk(NG.torso,shirt,0,.95,0); parts.head=mk(NG.head,skin,0,1.45,0); parts.neck=j(skin,0,1.22,0);
-  parts.leftLeg=limb(-.13,.65,pants); parts.rightLeg=limb(.13,.65,pants);
-  parts.leftArm=limb(-.37,1.22,shirt); parts.rightArm=limb(.37,1.22,shirt);
+  const mk=(geo,c,x,y,z)=>{ const m=new THREE.Mesh(geo,nm(c)); m.position.set(x,y,z); g.add(m); return m; };
+  parts.torso=mk(NG.torso,shirt,0,.95,0); parts.head=mk(NG.head,skin,0,1.45,0);
+  parts.leftLeg=mk(NG.leg,pants,-.13,.65,0); parts.rightLeg=mk(NG.leg,pants,.13,.65,0);
+  parts.leftArm=mk(NG.arm,shirt,-.37,1.22,0); parts.rightArm=mk(NG.arm,shirt,.37,1.22,0);
   if(cap) mk(NG.cap,cap,0,1.68,0);
-  g.position.y=-.95; g.userData.life={t:Math.random()*6.28,phase:Math.random()*6.28}; return {g,parts,shirt};
+  g.position.y=-.95; return {g,parts,shirt};
 }
 function spawnNpc(gang,x,z){
   const gy=groundTopAt(x,z), gg=!!gang;
@@ -2078,13 +2088,11 @@ function updateNpcs(dt){
     }
     p.y=groundTopAt(p.x,p.z)+.95;
     let dy=en.yaw-en.mesh.rotation.y; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); en.mesh.rotation.y+=dy*Math.min(1,dt*10);
-    animateCharacterLife(en.mesh,en.parts,moving,dt,en.type==='speed'?'speed':'enemy',Math.max(.8,en.speed/2.5));
     en.walkT+=moving?dt*(speed>3?11:7):0; const sw=moving?Math.sin(en.walkT)*.6:0, P=en.parts;
     P.leftLeg.rotation.x=sw; P.rightLeg.rotation.x=-sw; P.leftArm.rotation.x=-sw*.8; P.rightArm.rotation.x=sw*.8;
     if(en.state==='flee'){ P.leftArm.rotation.x=P.rightArm.rotation.x=2.6; }
     if(aim) P.rightArm.rotation.x=1.55;
     if(en.atk>0) (en.punch?P.rightArm:P.leftArm).rotation.x=1.7*Math.sin(Math.min(1,en.atk/.25)*Math.PI);
-    animateCharacterLife(en.mesh, P, moving, dt, 'npc', Math.max(.8,speed/2.5));
   }
 }
 function useAction(a,k){
@@ -2102,32 +2110,6 @@ function buildActions(){
     if(a.hold){ const up=e=>{ a.hold(false); e.preventDefault(); }; ['touchend','touchcancel'].forEach(n=>b.addEventListener(n,up,{passive:false})); ['mouseup','mouseleave'].forEach(n=>b.addEventListener(n,up)); }
   });
 }
-function animateCharacterLife(model,parts,moving,dt,style='humanoid',speedFactor=1){
-  if(!model||!parts) return;
-  const L=model.userData.life||(model.userData.life={t:0,phase:0,breath:0});
-  L.t+=dt*(moving?8*speedFactor:1.8);
-  L.breath+=dt*(moving?2.5:1.2);
-  const gait=Math.sin(L.t), gait2=Math.sin(L.t*2), idle=Math.sin(L.breath+L.phase);
-  const lerp=(obj,key,target,k)=>{ if(obj) obj.rotation[key]+= (target-obj.rotation[key])*Math.min(1,dt*k); };
-  const arms=['leftArm','rightArm','leftArm2','rightArm2'];
-  const legs=['leftLeg','rightLeg'];
-  if(style==='cannonbolt') return;
-  if(moving){
-    if(parts.leftLeg){ parts.leftLeg.userData.life.lower.rotation.x += (-gait*.16-parts.leftLeg.userData.life.lower.rotation.x)*Math.min(1,dt*8); }
-    if(parts.rightLeg){ parts.rightLeg.userData.life.lower.rotation.x += (gait*.16-parts.rightLeg.userData.life.lower.rotation.x)*Math.min(1,dt*8); }
-    arms.forEach((n,i)=>{ const a=parts[n]; if(!a?.userData?.life) return; const sign=(i%2?1:-1); a.userData.life.lower.rotation.x += (sign*Math.max(0,gait)*.22-a.userData.life.lower.rotation.x)*Math.min(1,dt*7); });
-    if(parts.torso) lerp(parts.torso,'z',-gait*.035,7);
-  } else {
-    arms.forEach(n=>{ const a=parts[n]; if(a?.userData?.life) a.userData.life.lower.rotation.x += (0-a.userData.life.lower.rotation.x)*Math.min(1,dt*5); });
-    if(parts.torso) parts.torso.rotation.z += (idle*.018-parts.torso.rotation.z)*Math.min(1,dt*3);
-  }
-  if(parts.head) parts.head.rotation.y += ((moving?gait*.025:idle*.045)-parts.head.rotation.y)*Math.min(1,dt*3);
-  if(parts.neck) parts.neck.rotation.y=parts.head?parts.head.rotation.y:0;
-  if(parts.pelvis) parts.pelvis.rotation.z += ((moving?-gait*.025:idle*.012)-parts.pelvis.rotation.z)*Math.min(1,dt*4);
-  // Tiny shoulder lag makes acceleration/deceleration feel muscular rather than robotic.
-  ['shoulderL','shoulderR','shoulderL2','shoulderR2'].forEach((n,i)=>{ const j=parts[n]; if(j) j.rotation.z += ((moving?(i%2?-.025:.025):idle*.01)-j.rotation.z)*Math.min(1,dt*4); });
-}
-
 function poseExtras(parts,moving,dt){
   const m=player.model; let lean=0;
   player.animT=(player.animT||0)+dt*(player.swimming?5:10);
@@ -2458,6 +2440,10 @@ document.getElementById('btn-attack').addEventListener('touchend', ()=> clearTim
 ========================================================================= */
 function doJump(){
   if(!player.alive) return;
+  if(player.onLadder){ // hop off a ladder, away from the wall
+    const N=player.onLadder.ladder; player.onLadder=null; player.ladderCd=0.4;
+    player.pos.x+=N.nx*0.7; player.pos.z+=N.nz*0.7; player.vel.y=player.form.jump*0.8; player.onGround=false; return;
+  }
   if(player.swimming){ player.vel.y=7; return; }
   if(player.form.flies){
     if(!player.flying){
@@ -2546,7 +2532,33 @@ function updatePlayer(dt){
   else if(player.rolling && Math.hypot(moveX,moveZ)<0.05){ moveX=forward.x; moveZ=forward.z; }
   const moving = Math.hypot(moveX,moveZ) > 0.05;
 
-  if(player.alive){
+  // Stage 7: ladders. Face one and push forward to climb, push back to descend, JUMP to hop off.
+  player.ladderCd = Math.max(0,(player.ladderCd||0)-dt);
+  let climbing = false;
+  if(player.alive && !player.flying && !player.swimming){
+    const lad = player.ladderCd<=0 ? ladderAt(player.pos.x,player.pos.z,player.pos.y-1) : null;
+    if(lad){
+      const N=lad.ladder;
+      if(!player.onLadder){
+        const face = -(N.nx*forward.x + N.nz*forward.z);
+        if(my>0.3 && face>0.3 && player.pos.y-1 < lad.top-0.3) player.onLadder = lad;
+        else if(!player.ladderHintT || performance.now()-player.ladderHintT>9000){ player.ladderHintT=performance.now(); statusText('LADDER - FACE IT AND PUSH FORWARD'); }
+      }
+    } else if(player.ladderCd<=0) player.onLadder = null;
+    if(player.onLadder){
+      const L=player.onLadder, N=L.ladder; climbing=true;
+      const vy = my>0.2 ? 3.6 : my<-0.2 ? -3.6 : 0;
+      player.vel.y=vy; player.pos.y+=vy*dt; player.onGround=false;
+      if(N.nx) player.pos.x += (((N.nx>0?L.x0:L.x1)+N.nx*0.45)-player.pos.x)*Math.min(1,dt*10);
+      if(N.nz) player.pos.z += (((N.nz>0?L.z0:L.z1)+N.nz*0.45)-player.pos.z)*Math.min(1,dt*10);
+      const feet=player.pos.y-1;
+      if(feet>=L.top){ // over the top: step onto the roof
+        player.pos.x-=N.nx*0.8; player.pos.z-=N.nz*0.8; player.pos.y=L.top+1.05; player.vel.y=0; player.onLadder=null; player.ladderCd=0.35;
+      } else if(vy<0 && feet<=groundTopAt(player.pos.x,player.pos.z,feet)+0.05){ player.onLadder=null; player.ladderCd=0.3; player.onGround=true; }
+    }
+  } else player.onLadder = null;
+
+  if(player.alive && !climbing){
     const flySpeed = player.flying ? (player.form.flySpeed||speed)*(player.boostT>0?1.7:1) : speed;
     const nx = player.pos.x + moveX*flySpeed*dt;
     const nz = player.pos.z + moveZ*flySpeed*dt;
@@ -2560,8 +2572,16 @@ function updatePlayer(dt){
       const curTop = groundTopAt(player.pos.x, player.pos.z);
       const topX = groundTopAt(nx, player.pos.z);
       const topZ = groundTopAt(player.pos.x, nz);
-      if(topX - curTop <= 1.05 && !blockedAt(nx,player.pos.z,player.pos.y-1)) player.pos.x = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nx));
-      if(topZ - curTop <= 1.05 && !blockedAt(player.pos.x,nz,player.pos.y-1)) player.pos.z = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nz));
+      const fyM = player.pos.y-1;
+      const bX = blockedAt(nx,player.pos.z,fyM);
+      if(topX - curTop <= 1.05 && !bX) player.pos.x = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nx));
+      const bZ = blockedAt(player.pos.x,nz,fyM);
+      if(topZ - curTop <= 1.05 && !bZ) player.pos.z = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, nz));
+      // Mantle: jump into a ledge that is within arm's reach and haul up onto it (garage roofs, eaves, crates, shop roofs).
+      if((bX||bZ) && !player.onGround && player.vel.y<4){
+        const lt = ledgeAt(bX?nx:player.pos.x, bZ?nz:player.pos.z, fyM);
+        if(lt!==null){ if(bX) player.pos.x=nx; if(bZ) player.pos.z=nz; player.pos.y=lt+1; player.vel.y=0; player.onGround=true; Audio_.land(); }
+      }
     }
   }
 
@@ -2602,9 +2622,14 @@ function updatePlayer(dt){
       }
     });
   }
-  const groundY = groundTopAt(player.pos.x, player.pos.z);
+  const feetNow = player.pos.y-1;
+  const groundY = climbing ? feetNow : groundTopAt(player.pos.x, player.pos.z, feetNow);
+  const wasGround = player.onGround;
+  if(wasGround) player.rampVy = (groundY-(player._lastGround===undefined?groundY:player._lastGround))/Math.max(dt,0.001);
+  player._lastGround = groundY;
 
-  if(player.flying){
+  if(climbing){ /* ladder physics already applied above */ }
+  else if(player.flying){
     // Vertical steering: look up/down + move forward to climb/descend; hover when still.
     let cl = moving ? Math.sin(player.pitch) : 0; if(Math.abs(cl)<0.1) cl=0; else cl-=Math.sign(cl)*0.1;
     player.vel.y = cl*1.25*(player.form.flySpeed||8)*(player.boostT>0?1.7:1);
@@ -2619,17 +2644,24 @@ function updatePlayer(dt){
       const want = moving ? Math.sin(player.pitch)*player.form.speed*0.9 : (WS+0.1-player.pos.y)*2.5;
       player.vel.y += (want-player.vel.y)*Math.min(1,dt*4);
     } else player.vel.y += GRAVITY*dt;
+    if(player.vel.y < -38) player.vel.y = -38;
     player.pos.y += player.vel.y*dt;
+    // Walking down stairs/ramps: stay glued to the surface instead of hopping down it.
+    if(wasGround && !player.swimming && player.vel.y<=0 && feetNow-groundY>0.001 && feetNow-groundY<=0.6) player.pos.y = groundY+1;
     if(player.pos.y <= groundY + 1){
       if(!player.onGround && player.vel.y < -6) Audio_.land();
       player.pos.y = groundY + 1;
       player.vel.y = 0;
       player.onGround = true;
-    } else player.onGround = false;
+    } else {
+      player.onGround = false;
+      // Ramp launch: running off the top of a ramp at speed (XLR8, roll) carries the climb into the air.
+      if(wasGround && (player.rampVy||0)>4 && player.vel.y<=0 && !player.swimming){ player.vel.y=Math.min(10,player.rampVy*0.9); player.rampVy=0; }
+    }
   }
 
   // face movement direction (model rotates toward camera-relative move dir, else camera yaw)
-  const facing = moving ? Math.atan2(-moveX,-moveZ) : player.yaw;
+  const facing = player.onLadder ? Math.atan2(player.onLadder.ladder.nx, player.onLadder.ladder.nz) : (moving ? Math.atan2(-moveX,-moveZ) : player.yaw);
   player.model.rotation.y = THREE.MathUtils.lerp(player.model.rotation.y, facing, 0.25);
   const formScale = PS * (player.form.modelScale||1);
   player.model.position.set(player.pos.x, player.pos.y-1+0.9*formScale, player.pos.z); player.model.scale.setScalar(formScale);
@@ -2678,7 +2710,6 @@ function updatePlayer(dt){
     }
   } else if(parts.torso){ parts.torso.rotation.x = 0; }
   poseExtras(parts, moving, dt);
-  animateCharacterLife(player.model, parts, moving, dt, player.form.id, Math.max(.7, speedMult));
 
   // footstep sound throttling
   player._stepT = (player._stepT||0) + dt;

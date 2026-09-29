@@ -51,8 +51,24 @@ never need Android Studio or a local Android SDK.
   Sonic Doom targets it, and XLR8 sprints bend gently toward it so a tackle can be aimed.
 - The lock breaks automatically if the target dies or gets more than ~44 units away.
 
-## Character Life / Jointed Animation Pass
+## Gameplay notes: Vertical city (Stage 7)
 
-The current build includes a procedural character-animation pass layered onto the existing character/combat architecture. Player aliens now use segmented upper/lower limbs with visible joint pivots, wrists/elbows/hips/neck/shoulder details, gait counter-motion, idle breathing, subtle head tracking, pelvis movement, and joint follow-through. NPCs and hostile enemies use the same lightweight jointed approach. Existing combat animation code remains the primary action driver, with the life layer providing secondary motion rather than replacing attacks.
+Buildings are now places, not just blocks. Everything is generated per chunk and deterministic, so streaming a chunk
+back in gives the identical building, and nothing needs the network.
 
-The animation is procedural and offline-friendly; it does not require a skeletal animation asset pipeline or network service.
+- Rooftops are walkable. Any solid building top, roof slab, balcony, landing or crate can be stood on, fought on and
+  landed on. Heatblast / Diamondhead can fly up, then press their FLY/LEVITATE button again to land on a roof.
+- Apartments and towers have zig-zag exterior fire escapes (with landings) up to the roof, plus balconies.
+  Towers reach 6-12 flights: a good long XLR8 run. Running off the top of a ramp at speed launches you into the air.
+- Houses have a walkable pitched roof, a side ladder to the eave, a garage annex and porch deck to hop up from.
+  Shops have a rear ladder and rooftop AC units/crates. The school has a fire escape and a ladder up its bell tower.
+- Ladders: face one and push the stick forward to climb, back to descend, JUMP to hop off. A hint appears when near one.
+- Mantling: jump into a ledge within arm's reach and you haul yourself up. Four Arms now jumps much higher, so he can
+  leap onto garages, eaves and shop roofs directly.
+- Echo Echo replicas hop up to ledges the controlled Echo stands on, and warp up beside you if the roof is too high.
+- Roughly 1 in 3 enemy spawns is a rooftop ambusher (normal/ranged) within 12-38 units; enemies stand on whatever
+  surface is under them and drop down when they walk off an edge.
+- Fixes: unloaded chunks now actually remove their buildings/textures (cityGroup children were never detached).
+
+Technical: colliders carry optional `bot` (vertical extent), and flags `nb` (non-blocking), `ramp`, `pyr`, `ladder`.
+`groundTopAt(x,z)` is unchanged; `groundTopAt(x,z,feetY)` returns the highest surface within a step of the feet.
