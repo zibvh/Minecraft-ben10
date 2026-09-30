@@ -177,3 +177,12 @@ Glowing parts survive hit-flashes. See alien-preview.png; tests/render_models.js
 - **Anatomy:** every alien's mannequin boxes are replaced with tapered, multi-block anatomy on the same joints (animation/physics untouched):
   deltoids, biceps, forearms, fingered fists/claws, knees, calves, boots; digitigrade zig-zag legs for XLR8; V-taper pecs/traps/lats for Four Arms;
   faceted crystals for Diamondhead; speaker hands and joint rings for Echo Echo; plated armour for Cannonbolt; lava plates and flames for Heatblast.
+
+
+## HUD fix (device screenshot feedback)
+- **Action buttons were missing:** the right-hand button containers had collapsed to 0x0 (inset + auto sizes), so every absolutely-positioned button
+  (attack, jump, powers, special) sat off-screen. Both are now full-screen layers. tests/t_hudlayout.js guards this.
+- Profile card 232px -> 176px wide, bar labels now light-coloured and readable; RUN marker 54px -> 38px and 40px clear of the stick (was touching);
+  LOCK moved off the minimap; minimap 80px.
+- Portraits were showing the model's BACK (rig faces -Z, portrait camera sits at +Z) and cropping heads. Now 3/4 front view framed from the real
+  bounding box (hair, flames, crystal crowns fit). Also removed a NaN crystal mesh on Diamondhead.

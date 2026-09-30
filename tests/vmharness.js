@@ -22,7 +22,7 @@ function boot(opts={}){
   let html=fs.readFileSync(SRC,'utf8');
   const scripts=[...html.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   let main=scripts[scripts.length-1];
-  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,jumpPress,jumpRelease,startDash,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_,buildCharacter};\n`;
+  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,jumpPress,jumpRelease,startDash,portraitFraming,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_,buildCharacter};\n`;
   assert(main.includes('// initial portrait render for Ben'));
   main=main.replace('// initial portrait render for Ben',bridge+'// initial portrait render for Ben');
   const els={}; const errors=[]; let T=0; const raf=[];

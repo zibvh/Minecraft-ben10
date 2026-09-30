@@ -225,27 +225,28 @@
   .menu-btn:active{background:linear-gradient(180deg,#2a8a58,#0c3a24);color:#fff;}
   #start-screen .foot{position:relative;margin-top:16px;font-size:10px;letter-spacing:4px;opacity:.55;}
 
-  #hud #alien-card{width:232px;padding:6px 12px 8px 8px;background:linear-gradient(135deg,rgba(5,26,18,.93),rgba(3,14,10,.82));border:1px solid var(--theme);cursor:pointer;}
-  #hud #alien-portrait-wrap{gap:10px;}
-  #hud #alien-portrait{width:58px;height:66px;border:none;background:var(--theme);padding:2px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);}
+  #hud #alien-card{width:176px;padding:5px 9px 6px 6px;background:linear-gradient(135deg,rgba(5,26,18,.93),rgba(3,14,10,.82));border:1px solid var(--theme);cursor:pointer;}
+  #hud #alien-portrait-wrap{gap:7px;}
+  #hud #alien-portrait{width:46px;height:52px;border:none;background:var(--theme);padding:2px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);}
   #hud #alien-portrait canvas{width:100%;height:100%;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:radial-gradient(circle at 50% 40%,#12402c,#04120c);}
-  #hud #alien-name{font-size:15px;letter-spacing:1.5px;color:var(--theme);text-shadow:0 0 8px rgba(0,0,0,.6);}
-  #alien-tag{font-size:8px;letter-spacing:1px;color:#b9e8cf;opacity:.85;margin-top:2px;white-space:nowrap;}
+  #hud #alien-name{font-size:13px;letter-spacing:1px;color:var(--theme);text-shadow:0 0 8px rgba(0,0,0,.6);}
+  #alien-tag{font-size:6.5px;letter-spacing:.6px;color:#b9e8cf;opacity:.85;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:104px;}
   #hud .bar-row{margin-top:4px;}
   #hud .bar-track{height:7px;border-radius:2px;background:rgba(255,255,255,.1);}
-  #hud .bar-label{font-size:8px;width:22px;letter-spacing:.8px;}
+  #hud .bar-label{font-size:7px;width:17px;letter-spacing:.4px;color:#cfeedd;opacity:1;font-weight:700;}
+  #hud .bar-num{font-size:8px;width:20px;color:#e8fff2;opacity:1;}
   #hud .ident{min-width:0;}
 
-  #minimap{position:absolute;right:max(12px,env(safe-area-inset-right,12px));top:max(10px,env(safe-area-inset-top,10px));width:92px;height:92px;border-radius:50%;border:2px solid var(--theme);background:#04120c;box-shadow:0 0 10px rgba(0,0,0,.6);pointer-events:none;}
-  #squad-panel{right:118px !important;top:max(12px,env(safe-area-inset-top,12px)) !important;}
+  #minimap{position:absolute;right:max(12px,env(safe-area-inset-right,12px));top:max(8px,env(safe-area-inset-top,8px));width:80px;height:80px;border-radius:50%;border:2px solid var(--theme);background:#04120c;box-shadow:0 0 10px rgba(0,0,0,.6);pointer-events:none;}
+  #squad-panel{right:104px !important;top:max(12px,env(safe-area-inset-top,12px)) !important;}
 
   /* --- right cluster: attack / jump / powers in an arc around the thumb (CODM style) --- */
-  #hud #action-buttons{position:absolute;inset:0;width:auto;height:auto;right:auto;bottom:auto;pointer-events:none;}
+  #hud #action-buttons{position:absolute;left:0;top:0;width:100%;height:100%;right:auto;bottom:auto;pointer-events:none;}
   #hud #btn-attack{width:84px;height:84px;right:26px;bottom:max(24px,env(safe-area-inset-bottom,24px));}
   #hud #btn-jump{width:64px;height:64px;right:36px;bottom:calc(max(24px,env(safe-area-inset-bottom,24px)) + 104px);}
   #hud #btn-special{width:60px;height:60px;right:124px;bottom:max(24px,env(safe-area-inset-bottom,24px));border-color:var(--theme);}
   #hud #btn-special svg{stroke:var(--theme);}
-  #hud #actions{position:absolute;inset:0;width:auto;right:auto;bottom:auto;display:block;pointer-events:none;flex-wrap:nowrap;}
+  #hud #actions{position:absolute;left:0;top:0;width:100%;height:100%;right:auto;bottom:auto;display:block;pointer-events:none;flex-wrap:nowrap;z-index:20;}
   #hud .act{position:absolute;width:56px;height:56px;border-radius:50%;border:2px solid var(--theme);color:var(--theme);gap:0;justify-content:center;
     background:radial-gradient(circle at 30% 22%,rgba(255,255,255,.3),rgba(255,255,255,0) 46%),linear-gradient(160deg,rgba(12,44,32,.94),rgba(3,12,9,.96));box-shadow:0 0 10px rgba(0,0,0,.55);}
   #hud .act i{display:block;width:26px;height:26px;font-style:normal;}
@@ -258,12 +259,12 @@
   #hud .act:nth-child(4){right:194px;bottom:calc(max(24px,env(safe-area-inset-bottom,24px)) + 24px);}
   #hud .act:nth-child(5){right:194px;bottom:calc(max(24px,env(safe-area-inset-bottom,24px)) + 92px);}
   #hud .act:nth-child(6){right:182px;bottom:calc(max(24px,env(safe-area-inset-bottom,24px)) + 160px);}
-  #hud #lock-btn{left:auto;right:44px;bottom:calc(max(24px,env(safe-area-inset-bottom,24px)) + 182px);width:46px;height:46px;border-color:var(--theme);}
+  #hud #lock-btn{left:auto;right:50px;bottom:calc(max(24px,env(safe-area-inset-bottom,24px)) + 204px);width:40px;height:40px;border-color:var(--theme);}
 
   /* --- left: joystick with RUN above it --- */
-    #hud #btn-run{pointer-events:none !important;opacity:.42;transition:opacity .15s,transform .15s,box-shadow .15s;position:absolute;left:calc(max(20px,env(safe-area-inset-left,20px)) + 38px);bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 128px);width:54px;height:54px;border-color:var(--theme);flex-direction:column;gap:0;pointer-events:auto;}
-  #hud #btn-run svg{width:26px;height:26px;stroke:var(--theme);filter:drop-shadow(0 0 3px var(--theme));}
-  #hud #btn-run b{font-size:6.5px;letter-spacing:.8px;color:#eaffff;margin-top:-2px;}
+    #hud #btn-run{pointer-events:none !important;opacity:.42;transition:opacity .15s,transform .15s,box-shadow .15s;position:absolute;left:calc(max(20px,env(safe-area-inset-left,20px)) + 41px);bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 160px);width:38px;height:38px;border-color:var(--theme);flex-direction:column;gap:0;pointer-events:auto;}
+  #hud #btn-run svg{width:18px;height:18px;stroke:var(--theme);filter:drop-shadow(0 0 3px var(--theme));}
+  #hud #btn-run b{font-size:5.5px;letter-spacing:.5px;color:#eaffff;margin-top:-1px;}
   #hud #joystick-zone.held ~ #btn-run{opacity:.85;}
   #hud #btn-run.on{opacity:1;transform:scale(1.18);background:linear-gradient(160deg,#2f9a62,#0a3a24);box-shadow:0 0 16px var(--theme);}
   #joystick-zone.run #joystick-base{border-color:var(--theme);box-shadow:0 0 18px var(--theme),inset 0 0 14px rgba(57,255,138,.35);}
@@ -1424,7 +1425,7 @@ function buildCharacter(kind){
     const dia=bx(chest,.3,.3,.08,core,0,th*.6,F-.05,0,0,Math.PI/4); fxl.push({k:'pulse',m:dia,f:2.4,ph:0}); omniChest(th*.9,.6);
     [[0,.9,.55,0],[-.16,.75,.4,.2],[.16,.75,.4,-.2],[-.3,.55,.3,.42],[.3,.55,.3,-.42]].forEach(c=>lb(chest,th*c[1],td/2,th*c[1]+c[2]*1.1,td/2+.5*c[2],.12,.12,crys,c[0]));
     armsAll.forEach(([sh,el,sg])=>{ arm(sh,el,sg,1,{dw:1.6,dh:1.4,dm:crys,uw:1.02,ud:1.02,sleeve:body,fw:1.2,fd:1.18,fm:deep,cuff:crys,hand:(e,sgn,at)=>claw(e,sgn,at,body,crys,4)});
-      lb(sh,at=>0,0,0,0,0,0,crys); });
+    });
     armsAll.forEach(([sh,el,sg])=>{ bx(sh,.14,.6,.14,crys,sg*.06,.36,0,0,0,sg*-.35); bx(sh,.1,.42,.1,crys,sg*.2,.26,.03,0,0,sg*-.9); bx(sh,.1,.36,.1,crys,0,.22,-.1,-.7,0,0); lb(el,-fa*.3,.1,-fa*1.0,.5,.08,.06,crys,0); });
     legsAll.forEach(l=>leg(l,{tw:1.05,td:1.05,tm:body,sm:deep,knee:crys,foot:(a,sx)=>{ boot(a,sx,LT*1.15,.6,body,crys,crys); }}));
     bx(head,hs*1.0,hs*.62,hs*.96,body,0,hs*.62,0); bx(head,hs*.84,hs*.34,hs*.86,deep,0,hs*.16,-.02); bx(head,hs*1.08,.1,.1,deep,0,hs*.86,-hs/2-.02);
@@ -1466,6 +1467,14 @@ function buildCharacter(kind){
 
 // tiny portrait renderer (renders each alien to a mini canvas for the HUD)
 const portraitThumb={};
+// Frame head + shoulders from the model's real bounding box so hair, flames and crystal crowns are never cropped.
+function portraitFraming(model,kind){
+  model.updateMatrixWorld(true);
+  const bb=new THREE.Box3().setFromObject(model), top=isFinite(bb.max.y)?bb.max.y:1.9;
+  const big=(kind==='four_arms'||kind==='heatblast'||kind==='diamondhead'), H=big?2.15:1.8;       // visible world height
+  const cy=top-H*.5+.03, dist=(H*.5)/Math.tan(16*Math.PI/180);
+  return {px:.12,py:cy+.1,pz:dist,tx:0,ty:cy-.04,tz:0};
+}
 function renderPortrait(kind){
   const size = 128;
   const pr = new THREE.WebGLRenderer({antialias:true, alpha:true});
@@ -1474,13 +1483,12 @@ function renderPortrait(kind){
   psc.add(new THREE.AmbientLight(0xffffff,0.9));
   const pl = new THREE.DirectionalLight(0xffffff,0.8); pl.position.set(2,3,4); psc.add(pl);
   const model = buildCharacter(kind);
-  model.rotation.y = Math.PI*0.18;
+  model.rotation.y = Math.PI-0.45;          // the rig faces -Z, the portrait camera sits at +Z: turn the model to face it (3/4 view)
   model.position.y = -0.1;
   psc.add(model);
-  const pD = model.userData.parts.dims, hy = model.position.y - 0.9 + pD.total*0.86;   // head height
-  const tall = (kind==='heatblast'||kind==='diamondhead') ? 0.22 : 0;                                 // flames / crown need headroom
-  const pcam = new THREE.PerspectiveCamera(32,1,0.1,10);
-  pcam.position.set(0.15,hy+0.12+tall*.6,1.95+pD.total*0.16+tall); pcam.lookAt(0,hy-0.22+tall*.8,0);
+  const pf = portraitFraming(model,kind);
+  const pcam = new THREE.PerspectiveCamera(32,1,0.1,14);
+  pcam.position.set(pf.px,pf.py,pf.pz); pcam.lookAt(pf.tx,pf.ty,pf.tz);
   pr.render(psc, pcam);
   try{ const c2=document.createElement('canvas'); c2.width=c2.height=size; c2.getContext('2d').drawImage(pr.domElement,0,0); portraitThumb[kind]=c2.toDataURL(); }catch(e){}
   return pr.domElement;

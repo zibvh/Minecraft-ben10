@@ -2,19 +2,21 @@
 const {boot}=require('./vmharness.js'); const zlib=require('zlib'), fs=require('fs'), vm=require('vm');
 const g=boot(); g.start(); g.step(5);
 const kinds=process.argv[2]?process.argv[2].split(','):['ben','four_arms','heatblast','xlr8','diamondhead','echo_echo','cannonbolt'];
-const view=process.argv[3]||'front';   // front | side | back
-const W=340,H=440,SS=2;
-function grab(kind,ph){ return vm.runInContext(`(function(kind){ const m=__d.buildCharacter(kind); const p=m.userData.parts; ${ph?'':''} m.updateMatrixWorld(true); const out=[]; const V=new THREE.Vector3();
+const view=process.argv[3]||'front'; const PORTRAIT=view==='portrait';   // front | side | back
+const W=view_is_portrait()?256:340,H=view_is_portrait()?256:440,SS=2; function view_is_portrait(){ return (process.argv[3]||"")==="portrait"; }
+const pfr={}; function grab(kind,ph){ return vm.runInContext(`(function(kind,PORTRAIT){ const m=__d.buildCharacter(kind); const p=m.userData.parts; if(PORTRAIT){ m.rotation.y=Math.PI-0.5; m.position.y=-0.1; } ${ph?'':''} m.updateMatrixWorld(true); const out=[]; const V=new THREE.Vector3();
   m.traverse(o=>{ if(!o.isMesh) return; const ge=o.geometry, pos=ge.attributes.position, idx=ge.index; const c=o.material.color, e=o.material.emissive, ei=o.material.emissiveIntensity==null?1:o.material.emissiveIntensity;
     const w=[]; for(let i=0;i<pos.count;i++){ V.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld); w.push(V.x,V.y,V.z); }
     const n=idx?idx.count:pos.count; for(let i=0;i<n;i+=3){ const a=idx?idx.getX(i):i,b=idx?idx.getX(i+1):i+1,d=idx?idx.getX(i+2):i+2; out.push([w[a*3],w[a*3+1],w[a*3+2],w[b*3],w[b*3+1],w[b*3+2],w[d*3],w[d*3+1],w[d*3+2],c.r,c.g,c.b,e.r*ei,e.g*ei,e.b*ei]); } });
-  return {tris:out,total:p.dims.total}; })(${JSON.stringify(kind)})`,g.ctx);}
-function render(kind,x0,img){ const {tris,total}=grab(kind); const cy=total*0.5-0.9, dist=total*1.75+1.2;
+  return {tris:out,total:p.dims.total,pf:PORTRAIT?__d.portraitFraming(m,kind):null}; })(${JSON.stringify(kind)},${PORTRAIT})`,g.ctx);}
+function render(kind,x0,img){ const {tris,total,pf}=grab(kind); pfr[kind]=pf; let cy=total*0.5-0.9, dist=total*1.75+1.2;
   const ang=view==='front'?0.6:view==='side'?1.57:3.6; const cam=[Math.sin(ang)*dist,cy+total*.12,-Math.cos(ang)*dist]; // camera looks at (0,cy,0)
   // camera basis
-  const tgt=[0,cy,0]; let f=[tgt[0]-cam[0],tgt[1]-cam[1],tgt[2]-cam[2]]; const fl=Math.hypot(...f); f=f.map(v=>v/fl);
+  let fov=Math.tan(0.30), aspect=W/H; const w2=W*SS, h2=H*SS;
+  let tgt=[0,cy,0];
+  if(PORTRAIT){ const pf=pfr[kind]; cam[0]=pf.px; cam[1]=pf.py; cam[2]=pf.pz; tgt=[pf.tx,pf.ty,pf.tz]; fov=Math.tan(16*Math.PI/180); aspect=1; }
+  let f=[tgt[0]-cam[0],tgt[1]-cam[1],tgt[2]-cam[2]]; const fl=Math.hypot(...f); f=f.map(v=>v/fl);
   let r=[f[2],0,-f[0]]; const rl=Math.hypot(...r); r=r.map(v=>v/rl); const u=[f[1]*r[2]-f[2]*r[1],f[2]*r[0]-f[0]*r[2],f[0]*r[1]-f[1]*r[0]];
-  const fov=Math.tan(0.30), aspect=W/H, w2=W*SS, h2=H*SS;
   const proj=(x,y,z)=>{ const dx=x-cam[0],dy=y-cam[1],dz=z-cam[2]; const zc=dx*f[0]+dy*f[1]+dz*f[2]; const xc=dx*r[0]+dy*r[1]+dz*r[2], yc=dx*u[0]+dy*u[1]+dz*u[2];
     return [(xc/(zc*fov*aspect)*.5+.5)*w2,(1-(yc/(zc*fov)*.5+.5))*h2,zc]; };
   const zb=new Float32Array(w2*h2).fill(1e9), col=new Uint8Array(w2*h2*3); for(let i=0;i<w2*h2;i++){ const yy=Math.floor(i/w2)/h2; col[i*3]=8+yy*10; col[i*3+1]=22+yy*24; col[i*3+2]=18+yy*16; }
