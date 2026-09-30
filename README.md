@@ -164,3 +164,16 @@ Ben (spiky brown hair, green jacket, wrist Omnitrix), Four Arms (red, white/blac
 rock body, flickering lava cracks and flames), XLR8 (swept head, green visor, swaying tail, blades), Diamondhead (crystal spikes,
 glowing core), Echo Echo (white body, black speaker discs, visor), Cannonbolt (yellow plated armour, black stripes, helmet).
 Glowing parts survive hit-flashes. See alien-preview.png; tests/render_models.js re-renders it without a GPU.
+
+
+## Anatomy pass + movement rework
+- **Run is CODM-style:** the RUN marker above the joystick is an indicator, not a button. Drag the stick up onto it (or far past the ring, mostly
+  upward) to lock sprint; it stays locked while the thumb is down and the stick is still pushed, and releases if you ease below ~35% or lift.
+  Ben etc: sprint = 1.5x. **XLR8: RUN is now the true sustained super speed** (progressive ramp, energy drain, gradual slowdown, streaks, chunk preload).
+- **XLR8 DASH is now a burst:** 0.32 s of ~4.6x speed that decays back to normal, 7 energy, 0.45 s cooldown, chainable, with afterimage streaks.
+- **Four Arms:** canonically a huge Tetramand, so his size stays. Jump is stronger (tap = 13 launch, ~4.6 units up). HOLD jump to crouch and charge (ring
+  around the button, coiled pose, dust), RELEASE to leap: up to ~33 units high and ~70 forward, clearing the ~25-unit towers; landing is a ground-pound
+  shockwave (damage + knockback + debris) scaled by fall speed. Keyboard: hold/release Space.
+- **Anatomy:** every alien's mannequin boxes are replaced with tapered, multi-block anatomy on the same joints (animation/physics untouched):
+  deltoids, biceps, forearms, fingered fists/claws, knees, calves, boots; digitigrade zig-zag legs for XLR8; V-taper pecs/traps/lats for Four Arms;
+  faceted crystals for Diamondhead; speaker hands and joint rings for Echo Echo; plated armour for Cannonbolt; lava plates and flames for Heatblast.

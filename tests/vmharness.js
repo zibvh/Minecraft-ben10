@@ -12,7 +12,7 @@ class El{
   addEventListener(t,f){ (this._l[t]=this._l[t]||[]).push(f); } removeEventListener(){}
   fire(t,ev){ (this._l[t]||[]).forEach(f=>f(Object.assign({preventDefault(){},stopPropagation(){},changedTouches:[],touches:[]},ev||{}))); }
   setAttribute(k,v){ this._attrs[k]=v; } getAttribute(k){ return k==='src'?(this.src||null):(this._attrs[k]||null); }
-  getBoundingClientRect(){ return {left:0,top:0,width:800,height:400}; }
+  getBoundingClientRect(){ return this.rect||{left:0,top:0,width:800,height:400}; }
   getContext(){ return anyProxy(); } toDataURL(){ return 'data:image/png;base64,AAA'; }
   querySelector(){ return new El('q'); } querySelectorAll(){ return []; } remove(){} focus(){} cloneNode(){ const e=new El('c'); e.play=()=>Promise.resolve(); return e; }
   play(){ return Promise.resolve(); } pause(){} requestPointerLock(){}
@@ -22,7 +22,7 @@ function boot(opts={}){
   let html=fs.readFileSync(SRC,'utf8');
   const scripts=[...html.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   let main=scripts[scripts.length-1];
-  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_,buildCharacter};\n`;
+  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,jumpPress,jumpRelease,startDash,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_,buildCharacter};\n`;
   assert(main.includes('// initial portrait render for Ben'));
   main=main.replace('// initial portrait render for Ben',bridge+'// initial portrait render for Ben');
   const els={}; const errors=[]; let T=0; const raf=[];
