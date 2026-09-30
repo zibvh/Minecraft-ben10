@@ -134,3 +134,33 @@ camera distance/height were retuned with them. Camera also gained a small veloci
 - Transform animation: the body squashes, bursts past full size and settles, with a ring of light and a small camera nudge.
 - Settings > OMNITRIX TIMER: OFF disables the drain completely for pure sandbox play.
 - Not built yet (skipped per "start from Stage 11"): Stage 9 wanted/heat and Stage 10 missions.
+
+
+## Stage 12 - Health (Ben vs alien) + body inertia
+- Every form has its own HP pool (HP.store): Ben 100, Four Arms 160, etc. Damage taken as an alien never touches Ben; reverting returns Ben
+  with the health he had. A damaged alien stays damaged when you re-transform, and heals in the background at 3%/s while unused.
+- An alien at 0 HP is knocked out: Omnitrix red-out, back to Ben (alive), 3 s lockout, that form returns at 35%. Ben at 0 HP dies:
+  DEFEATED screen, respawn at full HP for every form, 2.5 s spawn protection, nearby enemies stand down (no spawn-camping).
+  (Fixed: the old respawn never restored Ben's health, so Ben could respawn already dead.)
+- Out-of-combat regen after 7 s without damage. HUD: HP number, and a purple BEN bar while transformed.
+- Feedback: camera shake + hurt sound scaled by damage, low-health (<30%) pulsing red edges, flashing bar and a heartbeat that speeds up.
+- Echo Echo replicas keep their independent HP (unchanged).
+- Body inertia: the model pitches forward through a damped spring when speed changes (push-off, braking, sudden stops), per-alien
+  weight profile (Four Arms heavy and slow to settle, XLR8/Echo snappy). Gameplay velocity is untouched.
+
+
+## Redesign pass - HUD, Omnitrix dial, voxel aliens
+**Controls (CODM-style).** Joystick bottom-left with a RUN button above it (hold = sprint, x1.5; Shift on keyboard). Right side: big ATTACK,
+JUMP above it, and the alien's powers in an arc around the thumb; LOCK sits above JUMP; ENTER VEHICLE is a pill at bottom-centre.
+Buttons are themed per alien (fire orange, XLR8 blue, Diamondhead teal...). All ability icons are SVG (no emoji). Layout audited for
+non-overlap at 640x360 up to 932x430.
+**Top-left card.** Hex portrait (bust shot), name, ability tagline, HP / (BEN) / EN / OM bars. **Tap the portrait** (Ben or any alien) to open
+the **radial Omnitrix dial**: Ben/hourglass in the centre, six aliens around the ring; the world slows to a crawl and the Omnitrix timer pauses
+while it is open. Tap an alien to transform, the hourglass to revert, X or the backdrop to close. Swiping the card still cycles aliens.
+**Minimap.** Heading-up radar top-right: hostile enemies red, gang members orange, N marker.
+**Start menu.** New title screen (PLAY / SETTINGS / HOW TO PLAY / ABOUT).
+**Characters.** Every rig box now carries a pixel-noise voxel texture with darker cube edges. Each alien was rebuilt with recognisable detail:
+Ben (spiky brown hair, green jacket, wrist Omnitrix), Four Arms (red, white/black shirt, four red arms, brow, tusks), Heatblast (charred
+rock body, flickering lava cracks and flames), XLR8 (swept head, green visor, swaying tail, blades), Diamondhead (crystal spikes,
+glowing core), Echo Echo (white body, black speaker discs, visor), Cannonbolt (yellow plated armour, black stripes, helmet).
+Glowing parts survive hit-flashes. See alien-preview.png; tests/render_models.js re-renders it without a GPU.

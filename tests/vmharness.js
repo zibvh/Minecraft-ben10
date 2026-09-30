@@ -4,7 +4,7 @@ const SRC=process.env.GAME||''+__dirname+'/../www/index.html';
 const THREE_SRC=fs.readFileSync(''+__dirname+'/../www/three.min.js','utf8');
 function anyProxy(){ const f=function(){}; const p=new Proxy(f,{get(t,k){ if(k===Symbol.toPrimitive) return ()=>0; if(k==='then') return undefined; if(k==='value'||k==='currentTime'||k==='sampleRate') return k==='sampleRate'?44100:0; return p; },set(){return true;},apply(){return p;},construct(){return p;}}); return p; }
 class El{
-  constructor(id){ this.id=id; this.style={}; this.dataset={}; this.children=[]; this._l={}; this._cls=new Set(); this.textContent=''; this._attrs={};
+  constructor(id){ this.id=id; this.style={setProperty(k,v){this[k]=v;}}; this.dataset={}; this.children=[]; this._l={}; this._cls=new Set(); this.textContent=''; this._attrs={};
     const self=this; this.classList={add:(...c)=>c.forEach(x=>self._cls.add(x)),remove:(...c)=>c.forEach(x=>self._cls.delete(x)),toggle:(c,f)=>{ if(f===undefined) f=!self._cls.has(c); f?self._cls.add(c):self._cls.delete(c); },contains:c=>self._cls.has(c)}; }
   set innerHTML(v){ this._ih=v; this.children=[]; } get innerHTML(){ return this._ih||''; }
   get firstChild(){ return this.children[0]||null; } 
@@ -22,7 +22,7 @@ function boot(opts={}){
   let html=fs.readFileSync(SRC,'utf8');
   const scripts=[...html.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   let main=scripts[scripts.length-1];
-  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_};\n`;
+  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_,buildCharacter};\n`;
   assert(main.includes('// initial portrait render for Ben'));
   main=main.replace('// initial portrait render for Ben',bridge+'// initial portrait render for Ben');
   const els={}; const errors=[]; let T=0; const raf=[];

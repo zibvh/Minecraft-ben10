@@ -33,8 +33,11 @@ d.OMNI.charge=10; d.cycleAlien(1); ok(d.player.form.id==='ben','swipe cycle bloc
 d.OMNI.charge=100; d.cycleAlien(1); ok(d.player.form.id!=='ben','swipe cycle works with charge');
 // dial
 d.toggleDial(); g.step(3); const dial=g.els['omni-dial']; ok(dial.children.length===7 && dial.classList.contains('show'),'dial opens with 7 entries (Ben + 6 aliens)');
-g.step(300); ok(!dial.classList.contains('show'),'dial auto-closes');
-d.toggleDial(); dial.children[0].fire('click'); ok(d.player.form.id==='ben' && !dial.classList.contains('show'),'tapping Ben in dial reverts and closes');
+ok(g.els['omni-dim'].classList.contains('show') && g.els['omni-x'].classList.contains('show'),'dim backdrop + close button visible');
+{ d.setForm(d.ALIENS[0],'four_arms'); const c1=d.OMNI.charge; d.updateOmnitrix(5); ok(d.OMNI.open && d.OMNI.charge===c1,'Omnitrix timer pauses while dial is open'); d.setForm(d.BEN,'ben'); }
+g.els['omni-x'].fire('click'); ok(!dial.classList.contains('show') && !g.els['omni-dim'].classList.contains('show'),'X closes the dial');
+d.toggleDial(); g.els['omni-dim'].fire('click'); ok(!dial.classList.contains('show'),'tapping outside closes the dial');
+d.setForm(d.ALIENS[0],'four_arms'); d.toggleDial(); dial.children[0].fire('click'); ok(d.player.form.id==='ben' && !dial.classList.contains('show'),'tapping Ben in dial reverts and closes');
 d.toggleDial(); dial.children[4].fire('click'); ok(d.player.form.id==='diamondhead','tapping an alien in dial transforms (Diamondhead)');
 // death respawn refills
 d.player.health=0; g.step(120); 
