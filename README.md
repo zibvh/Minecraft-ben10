@@ -212,3 +212,10 @@ the player, NPCs beyond 95 u sleep, traffic is lane-accurate per road level and 
 
 **Tools.** Settings > PERFORMANCE STATS (or F3) shows fps, frame ms, chunks/lots/queue, builds/drops/urgent, lot build ms, skyline count, entities, draw calls, heap.
 tests/t_world.js audits the layout (roads vs buildings, widths, determinism); tests/t_stress.js runs the 10-scenario speed test (node --expose-gc t_stress.js 240).
+
+
+## XLR8 speed look (inspired by the reference footage)
+At full speed XLR8 stays small in frame while the world and effects sell the velocity: three additive cyan light-ribbon trails stream off his shoulders/hips/feet
+(distance-sampled, ~70 u long at full speed, cleared when you slow), edge speed-lines overlay, wider FOV (to ~100), and the camera pulls back ~2x, rises and
+looks further ahead, easing with the speed ramp. The camera is also now blocked by buildings (it can no longer sit inside one). Dash gives a short trail.
+tests/t_trails.js covers it.
