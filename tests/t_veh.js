@@ -9,9 +9,9 @@ const kmh=()=>Math.abs(car.v)*3.6;
 // wide-open test: put the car in the sky-free flat spot: ignore walls by teleporting each frame far from buildings? just measure until blocked
 function run(label,secs,inp,brake){ d.moveInput.x=inp.x||0; d.moveInput.y=inp.y||0; d.player.jumpHeld=!!brake; const rec=[]; for(let i=0;i<secs*60;i++){ g.step(1); if(i%30===29) rec.push(kmh().toFixed(0)); } console.log(label,'km/h every .5s:',rec.join(' ')); }
 // clear obstacles by giving car space: move to an open road tile far from colliders if blocked; simplest: teleport periodically
-const reset=()=>{ car.mesh.position.x=2; car.mesh.position.z=55; car.yaw=0; car.v=0; car.push.set(0,0,0); car.by=d.groundTopAt(2,55); d.player.pos.set(2,car.by+1.6,55); };reset();g.step(3);
+const reset=()=>{ car.mesh.position.x=40; car.mesh.position.z=500; car.yaw=0; car.v=0; car.push.set(0,0,0); car.by=d.groundTopAt(40,500); d.player.pos.set(40,car.by+1.6,500); };reset();g.step(3);
 const keepClear=()=>{}; 
-run('full throttle 6s',6,{y:1}); console.log('   distance',(55-m.z).toFixed(0),'units');
+run('full throttle 6s',6,{y:1}); console.log('   distance',(500-m.z).toFixed(0),'units');
 const topSpeed=kmh(); 
 reset();g.step(2);run('accel 4s',4,{y:1});run('release throttle (coast) 6s',6,{y:0});
 reset();g.step(2);run('throttle 4s then brake',4,{y:1}); run('  ...brake 2.5s',2.5,{y:0},true); d.player.jumpHeld=false;

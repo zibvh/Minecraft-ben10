@@ -22,13 +22,13 @@ function boot(opts={}){
   let html=fs.readFileSync(SRC,'utf8');
   const scripts=[...html.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   let main=scripts[scripts.length-1];
-  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,jumpPress,jumpRelease,startDash,portraitFraming,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_,buildCharacter};\n`;
+  const bridge=`window.__d={player,enemies,props,ALIENS,BEN,OMNI,tryTransform,setForm,updateOmnitrix,enterCar,exitCar,nearestCar,moveInput,keys,makeEnemy,camera,scene,QUALITY,GRAVITY,damageEnemy,ATK_SLOTS_MELEE,spawnTraffic,groundTopAt,cycleAlien,toggleDial,closeDial,OMNI_MIN,PS,NPC_SCALE,CHAR_SCALE,ENEMY_STATS,GANGS,spawnNpc,provoke,renderer,jumpPress,jumpRelease,startDash,portraitFraming,lots,chunks,STAT,FB,PERF,SKY,lotSpec,districtOf,nearestLine,lineLevel,zoneType,planLots,generateLot,disposeLot,updateMetropolis,CAR_S,get CAR_H(){return CAR_H;},velVec:()=>[velX,velZ],setVel:(a,b)=>{velX=a;velZ=b;},colGrid,colliders,get CAR_MAX_FWD(){return CAR_MAX_FWD;},camDyn,Audio_,buildCharacter};\n`;
   assert(main.includes('// initial portrait render for Ben'));
   main=main.replace('// initial portrait render for Ben',bridge+'// initial portrait render for Ben');
-  const els={}; const errors=[]; let T=0; const raf=[];
+  const els={}; const errors=[]; let T=0; const raf=[]; let frameStart=Number(process.hrtime.bigint())/1e6;
   const doc={getElementById:id=>els[id]||(els[id]=new El(id)),createElement:t=>new El(t),body:new El('body'),documentElement:new El('html'),addEventListener(){},querySelector:()=>new El('q'),querySelectorAll:()=>[],hidden:false};
   const win={document:doc,innerWidth:800,innerHeight:400,devicePixelRatio:1,navigator:{maxTouchPoints:1,userAgent:'x'},screen:{orientation:{lock:()=>Promise.resolve()}},
-    performance:{now:()=>T},requestAnimationFrame:cb=>{raf.push(cb);return raf.length;},cancelAnimationFrame(){},setTimeout,clearTimeout,setInterval:()=>0,clearInterval(){},
+    performance:{now:()=>T+(Number(process.hrtime.bigint())/1e6-frameStart)},requestAnimationFrame:cb=>{raf.push(cb);return raf.length;},cancelAnimationFrame(){},setTimeout,clearTimeout,setInterval:()=>0,clearInterval(){},
     AudioContext:function(){ return anyProxy(); },Audio:function(){ const e=new El('audio'); e.cloneNode=()=>{const c=new El('a');c.play=()=>Promise.resolve();return c;}; return e; },
     ontouchstart:null,console,Math,Date,JSON,Map,Set,WeakMap,Promise,Float32Array,Uint8Array,Uint16Array,Uint32Array,Int32Array,Float64Array,ArrayBuffer,Symbol,Object,Array,Number,String,Error,isNaN,parseFloat,parseInt,Infinity,NaN,Proxy,Reflect,location:{href:'x'},localStorage:{getItem:()=>null,setItem(){}},
     addEventListener(t,f){ (win._l[t]=win._l[t]||[]).push(f); },_l:{}};
@@ -37,7 +37,7 @@ function boot(opts={}){
   vm.runInContext(THREE_SRC,ctx,{filename:'three.min.js'});
   vm.runInContext(`THREE.WebGLRenderer=function(){return{domElement:document.createElement('canvas'),setSize(){},setPixelRatio(){},setClearColor(){},render(){},dispose(){},shadowMap:{enabled:false,type:0},setAnimationLoop(){},getContext(){return null},capabilities:{},info:{render:{calls:0}}};};`,ctx);
   try{ vm.runInContext(main,ctx,{filename:'game.js'}); }catch(e){ errors.push('LOAD: '+(e.stack||e)); }
-  const step=(n=1,ms=16.67)=>{ for(let i=0;i<n;i++){ T+=ms; const cbs=raf.splice(0); for(const cb of cbs){ try{ cb(T); }catch(e){ errors.push('FRAME: '+(e.stack||e)); } } } };
+  const step=(n=1,ms=16.67)=>{ for(let i=0;i<n;i++){ T+=ms; frameStart=Number(process.hrtime.bigint())/1e6; const cbs=raf.splice(0); for(const cb of cbs){ try{ cb(T); }catch(e){ errors.push('FRAME: '+(e.stack||e)); } } } };
   return {win,ctx,els,errors,step,get d(){return win.__d;},start(){ els['btn-start'].fire('click'); },time:()=>T};
 }
 function assert(c,m){ if(!c) throw new Error('assert '+(m||'')); }

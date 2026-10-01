@@ -186,3 +186,29 @@ Glowing parts survive hit-flashes. See alien-preview.png; tests/render_models.js
   LOCK moved off the minimap; minimap 80px.
 - Portraits were showing the model's BACK (rig faces -Z, portrait camera sits at +Z) and cropping heads. Now 3/4 front view framed from the real
   bounding box (hair, flames, crystal crowns fit). Also removed a NaN crystal mesh on Diamondhead.
+
+
+## METROPOLIS - large-world, city-scale and speedster-streaming upgrade
+**Scale (1 unit ~ 0.73 m; Ben ~2.5 u = ~1.8 m, Four Arms ~4.2 u, ratio ~1.7).**
+World is now 11,264 x 11,264 units (~8 km). Road hierarchy: street 12 wide every 80 u, avenue 24 wide every 320 u, boulevard 32 wide every 1,280 u
+(long straight runs for XLR8). Four lots per block; buildings are scaled 2x with consistent doors/stairs/fire escapes (a scaled house door is 4 u).
+Downtown (centre sector) has skyscrapers up to ~150 u (~110 m); then commercial, mixed, residential, industrial warehouses and parkland sectors
+(8x8-block ~470 m sectors, deterministic from coordinates). Cars are 2.7 x ~6 u (speedometer shows real km/h).
+
+**Detail tiers.** T0 (<80 u): diggable voxel ground, full lots, NPC/vehicle simulation. T1 (<=150-230 u by quality): full lots, merged meshes, spatial-grid
+colliders. T2 (to 420-880 u): skyline = ONE instanced mesh of building volumes + analytic road network (repeating street texture + pooled avenue strips)
+= zero per-chunk cost to the horizon. T3: fog. T4: nothing in memory - the layout is a pure function of coordinates so it regenerates identically.
+
+**Streaming.** Lots are built by a frame-budgeted job queue (adaptive 1.6-5 ms/frame from the measured frame time), nearest/corridor-first.
+Predictive corridor: samples at +0.5 and +1 x horizon (1-3 s, scaled with speed) so lots ahead of XLR8 exist before they are seen. Collision safety:
+any lot within ~58 u that is not built yet is built immediately (max 2/frame), so the player can never outrun collision data. Voxel ground stops
+generating while moving >28 u/s (the ground layers carry the visuals). Skyline rebuilds incrementally in slices and swaps atomically.
+
+**Memory/pooling.** Cached shared materials (walls/signs/flat), static batching (a lot's boxes merge per material: ~25 draw calls -> ~6), pooled chunk
+InstancedMeshes, spatial-grid colliders (O(1) lookups), undisturbed column heights are forgotten on unload (fixed a growth leak). Civilians recycle around
+the player, NPCs beyond 95 u sleep, traffic is lane-accurate per road level and recycled beyond 190 u.
+
+**XLR8.** RUN (drag the stick to the RUN marker / Shift) = sustained super speed, now up to x13 (~96 u/s: edge to edge in ~2 minutes); DASH = burst.
+
+**Tools.** Settings > PERFORMANCE STATS (or F3) shows fps, frame ms, chunks/lots/queue, builds/drops/urgent, lot build ms, skyline count, entities, draw calls, heap.
+tests/t_world.js audits the layout (roads vs buildings, widths, determinism); tests/t_stress.js runs the 10-scenario speed test (node --expose-gc t_stress.js 240).

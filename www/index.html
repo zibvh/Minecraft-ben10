@@ -238,6 +238,7 @@
   #hud .ident{min-width:0;}
 
   #minimap{position:absolute;right:max(12px,env(safe-area-inset-right,12px));top:max(8px,env(safe-area-inset-top,8px));width:80px;height:80px;border-radius:50%;border:2px solid var(--theme);background:#04120c;box-shadow:0 0 10px rgba(0,0,0,.6);pointer-events:none;}
+  #perf-hud{position:absolute;left:14px;top:132px;font:9px/1.25 monospace;color:#9dffc8;background:rgba(0,10,6,.7);padding:4px 6px;border-radius:3px;pointer-events:none;white-space:pre;display:none;z-index:30;}
   #squad-panel{right:104px !important;top:max(12px,env(safe-area-inset-top,12px)) !important;}
 
   /* --- right cluster: attack / jump / powers in an arc around the thumb (CODM style) --- */
@@ -330,6 +331,7 @@
     <div class="bar-row"><span class="bar-label">EN</span><div class="bar-track"><div id="energy-fill" class="bar-fill"></div></div></div>
     <div class="bar-row"><span class="bar-label">OM</span><div class="bar-track"><div id="omni-fill" class="bar-fill"></div></div></div>
   </div>
+  <div id="perf-hud"></div>
   <canvas id="minimap" width="120" height="120"></canvas>
   <div id="omni-dim"></div>
   <div id="omni-dial"></div>
@@ -498,9 +500,9 @@ const Audio_ = (function(){
 ========================================================================= */
 const QUALITY = { level:'MEDIUM',
   presets:{
-    LOW:{shadow:false,shadowSize:512,fogFar:44,pixelRatio:1,renderDist:22},
-    MEDIUM:{shadow:true,shadowSize:1024,fogFar:70,pixelRatio:Math.min(devicePixelRatio,1.5),renderDist:32},
-    HIGH:{shadow:true,shadowSize:2048,fogFar:100,pixelRatio:Math.min(devicePixelRatio,2),renderDist:42}
+    LOW:{shadow:false,shadowSize:512,fogFar:170,pixelRatio:1,renderDist:22,lotR:150,lotMax:34,skyR:420,skyMax:700},
+    MEDIUM:{shadow:true,shadowSize:1024,fogFar:300,pixelRatio:Math.min(devicePixelRatio,1.5),renderDist:32,lotR:190,lotMax:56,skyR:620,skyMax:1200},
+    HIGH:{shadow:true,shadowSize:2048,fogFar:460,pixelRatio:Math.min(devicePixelRatio,2),renderDist:42,lotR:230,lotMax:84,skyR:880,skyMax:1700}
   }
 };
 
@@ -529,7 +531,9 @@ function applyQuality(){
   sun.shadow.camera.left=-45; sun.shadow.camera.right=45;
   sun.shadow.camera.top=45; sun.shadow.camera.bottom=-45;
   sun.shadow.camera.far=120;
-  scene.fog = new THREE.Fog(0x8fc7f2, 14, p.fogFar);
+  scene.fog = new THREE.Fog(0x8fc7f2, Math.max(14,p.fogFar*0.3), p.fogFar);
+  camera.far = p.fogFar*1.25+60; camera.updateProjectionMatrix();
+  skyDirty=true;                                                 // force a skyline rebuild at the new radius
 }
 applyQuality();
 
@@ -552,22 +556,30 @@ const DEB=new THREE.BoxGeometry(1,1,1);
    isSolid, addBlockAt, removeBlockAt) keeps its exact old signature so nothing
    downstream (movement, enemies, props, block editing) needs to change.
 ========================================================================= */
-const WORLD = 4096;                // logical world extent (columns per side) — effectively unbounded for play purposes
+const WORLD = 11264;               // logical world extent in columns per side (~8 km at ~0.73 m/unit). Nothing is held in memory until the player is near it
 const HALF = WORLD/2;
+const WORLD_LIMIT = HALF - 1;
 const WATER_LEVEL = 0;
 const BLOCK_TYPES = ['grass','dirt','stone','sand','wood','leaves','asphalt','concrete'];
 const BLOCK_COLOR = { grass:0x5fae3c, dirt:0x6b4a2d, stone:0x8a8a8a, sand:0xdfd0a0, wood:0x6b4a2d, leaves:0x2e8b3d, asphalt:0x3a3a40, concrete:0xb4b4ac };
 
-const CHUNK = 16;                  // columns per chunk side — matches the old city-cell grid exactly
-const LOAD_RADIUS = 3;             // chunks around the player kept live (3 => 7x7 chunk area, 112 units across)
-const UNLOAD_RADIUS = 4;           // hysteresis: unload only past this, so edge-crossing doesn't thrash
+const CHUNK = 16;                  // voxel-ground chunk (columns per side). Buildings are streamed separately as LOTS, see METROPOLIS below
+const LOAD_RADIUS = 2;             // voxel-ground chunks kept live around the player (5x5 = 80 units): only the immediate gameplay zone needs diggable voxels
+const UNLOAD_RADIUS = 3;           // hysteresis
 
 // Deterministic per-chunk RNG so a chunk regenerates identically every time it streams back in.
 function chunkSeed(cx,cz){ let h = (cx*374761393 + cz*668265263) ^ (cx*2246822519); h = (h ^ (h>>>15)) * 2246822519; h = (h ^ (h>>>13)) >>> 0; return h; }
 function seededRng(seed){ let s = seed>>>0; return function(){ s ^= s<<13; s ^= s>>>17; s ^= s<<5; s>>>=0; return (s>>>0) / 4294967296; }; }
 
 function surfaceHeight(x,z){ return 1; }
-function zoneType(x,z){ const a=((x%16)+16)%16, b=((z%16)+16)%16; if(a<4||b<4) return 'asphalt'; if(a===4||a===15||b===4||b===15) return 'concrete'; return 'grass'; }
+// ---- road hierarchy: STREET every 80 units, AVENUE every 320, BOULEVARD every 1280 (long straight runs for high-speed travel) ----
+const PITCH=80, LINE_OFF=40;                       // road centre-lines sit at 40 + 80n, so the world origin is the middle of a block (a park)
+const ROAD_LV=[null,{a:4,t:6},{a:9,t:12},{a:13,t:16}];   // level -> asphalt half-width, total half-width incl. sidewalks (street 12 / avenue 24 / boulevard 32 wide)
+function lineLevel(n){ return (((n%16)+16)%16===0)?3:((((n%4)+4)%4===0)?2:1); }
+function axisInfo(v){ const n=Math.round((v-LINE_OFF)/PITCH), d=Math.abs(v-(LINE_OFF+n*PITCH)), L=ROAD_LV[lineLevel(n)]; return d<L.a?2:(d<L.t?1:0); }
+function zoneType(x,z){ const m=Math.max(axisInfo(x),axisInfo(z)); return m===2?'asphalt':(m===1?'concrete':'grass'); }
+// nearest road line to coordinate v: {pos, level, a, t}
+function nearestLine(v){ const n=Math.round((v-LINE_OFF)/PITCH), lv=lineLevel(n), L=ROAD_LV[lv]; return {pos:LINE_OFF+n*PITCH,level:lv,a:L.a,t:L.t,n}; }
 
 // block registry: key "x,y,z" -> {type, chunkKey, idx, active}
 const blocks = new Map();
@@ -592,12 +604,17 @@ function newChunkMeshes(){
   // avoids 5-6 unnecessary GPU buffer allocations per chunk — the main cost behind the movement stutter.
   return {};
 }
+const meshPool={};          // type -> reusable InstancedMeshes released by unloaded chunks (no per-chunk GPU buffer churn)
 function getOrCreateMesh(chunk, type){
   let m = chunk.meshes[type];
   if(!m){
-    const cap = CHUNK*CHUNK*3 + 200; // headroom for player-placed blocks within this chunk
-    m = new THREE.InstancedMesh(sharedBoxGeo, blockMaterials[type], cap);
-    m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false;
+    const pool = meshPool[type];
+    if(pool && pool.length){ m = pool.pop(); m.count = 0; }
+    else {
+      const cap = CHUNK*CHUNK*3 + 200; // headroom for player-placed blocks within this chunk
+      m = new THREE.InstancedMesh(sharedBoxGeo, blockMaterials[type], cap);
+      m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false;
+    }
     scene.add(m); chunk.meshes[type] = m; chunk.freeSlots[type] = []; chunk.usedCount[type] = 0;
   }
   return m;
@@ -618,7 +635,7 @@ function setInstance(chunk, type, x, y, z){
   dummy.position.set(x,y,z); dummy.scale.set(1,1,1); dummy.updateMatrix();
   mesh.setMatrixAt(idx, dummy.matrix);
   mesh.instanceMatrix.needsUpdate = true;
-  blocks.set(keyOf(x,y,z), {type, chunkKey:chunk.key, idx, active:true});
+  const bk=keyOf(x,y,z); blocks.set(bk, {type, chunkKey:chunk.key, idx, active:true}); (chunk.bkeys||(chunk.bkeys=[])).push(bk);
   return idx;
 }
 function addBlockAt(type, x, y, z){
@@ -649,7 +666,12 @@ function chunkCoordOf(x,z){ return [Math.floor((x+HALF)/CHUNK), Math.floor((z+HA
 function chunkAtColumn(x,z){ const [cx,cz]=chunkCoordOf(x,z); return chunks.get(chunkKeyOf(cx,cz)) || null; }
 
 // ---- city props (buildings/roads/trees/cars), scoped per chunk ----
-const colliders=[], cityGroup=new THREE.Group(); scene.add(cityGroup);
+const colliders=[], cityGroup=new THREE.Group(); scene.add(cityGroup);   // colliders[] = dynamic ones (ice, crystals); lot colliders live in the grid below
+const GRID=24, colGrid=new Map(), gk=(i,j)=>(i+2048)*4096+(j+2048);
+function gridEach(c,fn){ const i0=Math.floor(c.x0/GRID), i1=Math.floor(c.x1/GRID), j0=Math.floor(c.z0/GRID), j1=Math.floor(c.z1/GRID); for(let i=i0;i<=i1;i++) for(let j=j0;j<=j1;j++) fn(gk(i,j)); }
+function gridAdd(c){ gridEach(c,k=>{ let a=colGrid.get(k); if(!a){ a=[]; colGrid.set(k,a); } a.push(c); }); }
+function gridRemove(c){ gridEach(c,k=>{ const a=colGrid.get(k); if(!a) return; const i=a.indexOf(c); if(i>=0) a.splice(i,1); if(!a.length) colGrid.delete(k); }); }
+const cellList=(x,z)=>colGrid.get(gk(Math.floor(x/GRID),Math.floor(z/GRID)));
 const UB=new THREE.BoxGeometry(1,1,1), GY=1.5;
 // Stage 7 collider model. A collider is an AABB {x0,x1,z0,z1,top,bot?}. Extra flags:
 //   nb     - never blocks sideways (ramps, roof pitch, ladder zones) but can still be stood on
@@ -659,29 +681,32 @@ const UB=new THREE.BoxGeometry(1,1,1), GY=1.5;
 // Blocking is "body overlaps the box vertically and the feet are more than a step below the top", so thin
 // balconies/landings can be walked under, and stairs/low ledges can be walked up.
 const STEP_UP = 0.55, BODY_H = 2.0, REACH_UP = 1.75;
-function blockedAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy<c.top-STEP_UP&&(c.bot===undefined||fy+BODY_H>c.bot)) return true; } return false; }
+function blockedAt(x,z,fy){ for(let p=0;p<2;p++){ const arr=p?colliders:cellList(x,z); if(!arr) continue; for(let i=arr.length-1;i>=0;i--){ const c=arr[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy<c.top-STEP_UP&&(c.bot===undefined||fy+BODY_H>c.bot)) return true; } } return false; }
 // Highest solid ledge top (within arm's reach above the feet) at this point, for mantling. null if none.
-function ledgeAt(x,z,fy){ let best=null; for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&c.top>fy+STEP_UP&&c.top<=fy+REACH_UP&&(c.bot===undefined||c.bot<fy+BODY_H)){ if(best===null||c.top>best) best=c.top; } } return best; }
-function ladderAt(x,z,fy){ for(let i=colliders.length-1;i>=0;i--){ const c=colliders[i]; if(c.ladder&&x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy>=c.bot-0.6&&fy<=c.top+0.2) return c; } return null; }
-function addCol(owner,c){ colliders.push(c); owner.colliders.push(c); return c; }
+function ledgeAt(x,z,fy){ let best=null; for(let p=0;p<2;p++){ const arr=p?colliders:cellList(x,z); if(!arr) continue; for(let i=arr.length-1;i>=0;i--){ const c=arr[i]; if(c.nb) continue; if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&c.top>fy+STEP_UP&&c.top<=fy+REACH_UP&&(c.bot===undefined||c.bot<fy+BODY_H)){ if(best===null||c.top>best) best=c.top; } } } return best; }
+function ladderAt(x,z,fy){ for(let p=0;p<2;p++){ const arr=p?colliders:cellList(x,z); if(!arr) continue; for(let i=arr.length-1;i>=0;i--){ const c=arr[i]; if(c.ladder&&x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&fy>=c.bot-0.6&&fy<=c.top+0.2) return c; } } return null; }
+function addCol(owner,c){ owner.colliders.push(c); return c; }
 function cbox(cx,by,cz,w,h,d,mat,solid,ownerList){
   const m=new THREE.Mesh(UB,mat); m.scale.set(w,h,d); m.position.set(cx,by+h/2,cz); m.castShadow=true; cityGroup.add(m);
   ownerList.meshes.push(m);
-  if(solid){ const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h,bot:by}; colliders.push(c); ownerList.colliders.push(c); }
+  if(solid){ const c={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,top:by+h,bot:by}; ownerList.colliders.push(c); }
   return m;
 }
+const _wallCache=new Map(), _signCache=new Map(), _flatCache=new Map();
 function wallMat(base,win,cols,rows){
+  rows=Math.max(1,Math.round(rows)); const key=base+'|'+win+'|'+cols+'|'+rows; let m=_wallCache.get(key); if(m) return m;
   const cv=document.createElement('canvas'); cv.width=cv.height=32; const g=cv.getContext('2d');
   g.fillStyle=base; g.fillRect(0,0,32,32); g.fillStyle=win; g.fillRect(6,7,20,16); g.fillStyle='rgba(255,255,255,0.35)'; g.fillRect(6,7,20,3);
   const tx=new THREE.CanvasTexture(cv); tx.wrapS=tx.wrapT=THREE.RepeatWrapping; tx.repeat.set(cols,rows); tx.magFilter=THREE.NearestFilter;
-  return new THREE.MeshLambertMaterial({map:tx});
+  m=new THREE.MeshLambertMaterial({map:tx}); m.userData.shared=true; _wallCache.set(key,m); return m;
 }
 function signMat(txt,bg){
+  const key=txt+'|'+bg; let m=_signCache.get(key); if(m) return m;
   const cv=document.createElement('canvas'); cv.width=128; cv.height=32; const g=cv.getContext('2d');
   g.fillStyle=bg; g.fillRect(0,0,128,32); g.fillStyle='#fff'; g.font='bold 22px sans-serif'; g.textAlign='center'; g.fillText(txt,64,24);
-  return new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)});
+  m=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)}); m.userData.shared=true; _signCache.set(key,m); return m;
 }
-const flat=c=>new THREE.MeshLambertMaterial({color:c});
+const flat=c=>{ let m=_flatCache.get(c); if(!m){ m=new THREE.MeshLambertMaterial({color:c}); m.userData.shared=true; _flatCache.set(c,m); } return m; };
 const rnd=n=>Math.floor(Math.random()*n); // global RNG helper used by NPCs/debris/gang spawn elsewhere in the file (distinct from generateChunk's local seeded rnd, which is deterministic per-chunk)
 const PAST=['#e8d5b0','#d9a8a0','#b7d3c2','#c9c3e0','#f0e2a0'];
 const CARCOL=[0xd63a3a,0x2f6fd6,0xe8c33a,0xf0f0f0,0x2a2a2e,0x3aa860];
@@ -764,7 +789,7 @@ function shop(cx,cz,rnd,ownerList){
   ownerList.roofSpots.push([cx+1,cz,GY+4.4]);
 }
 function apartment(cx,cz,rnd,ownerList){
-  const h=6+rnd(3)*3, n=h/3, vr=ownerList.vr;
+  const h=ownerList.hBase||(6+rnd(3)*3), n=h/3, vr=ownerList.vr;
   cbox(cx,GY,cz,7,h,7,wallMat('#b0855f','#f3e39a',3,h/3),true,ownerList); cbox(cx,GY+h,cz,7.4,.4,7.4,flat(0x444444),true,ownerList);
   fireEscape(cx+3.5,cz-2.6,cz+2.6,n,3,GY,ownerList);
   for(let k=1;k<n;k++) if(vr()<.6) balcony(cx-3.5,-1,cz+(vr()-.5)*2,GY+k*3,ownerList);
@@ -772,7 +797,7 @@ function apartment(cx,cz,rnd,ownerList){
   ownerList.roofSpots.push([cx-1,cz,GY+h+.4]);
 }
 function tower(cx,cz,rnd,ownerList){
-  const h=18+rnd(4)*5, n=Math.min(12,Math.round(h/3)), vr=ownerList.vr;
+  const h=(ownerList.hBase||(18+rnd(4)*5))*(ownerList.hm||1), n=Math.min(24,Math.round(h/3)), vr=ownerList.vr;
   cbox(cx,GY,cz,8,h,8,wallMat('#2a3f5a','#7fc4ee',4,h/3),true,ownerList); cbox(cx,GY+h,cz,8.4,.5,8.4,flat(0x333a44),true,ownerList); cbox(cx,GY+h+.5,cz,.4,4,.4,flat(0xcc2222),false,ownerList);
   fireEscape(cx+4,cz-3.2,cz+3.2,n,h/n,GY,ownerList);
   for(let k=2;k<n;k+=2) if(vr()<.45) balcony(cx-4,-1,cz+(vr()-.5)*3,GY+k*(h/n),ownerList);
@@ -794,98 +819,44 @@ function park(cx,cz,rnd,ownerList){
   cbox(cx,GY,cz,3,.4,3,flat(0x4aa8e0),false,ownerList); cbox(cx,GY+.4,cz,.6,1.2,.6,flat(0xbbbbbb),false,ownerList); cbox(cx,GY,cz+4.3,2.2,.5,.6,flat(0x6b4a2d),false,ownerList);
   for(let i=0;i<8;i++){ const a=i*.785+.3; ownerList.treeSpots.push([cx+Math.cos(a)*4,cz+Math.sin(a)*4]); }
 }
-const KINDS=[house,house,shop,apartment,tower,park,house,shop];
+function warehouse(cx,cz,rnd,o){
+  cbox(cx,GY,cz,20,8,14,wallMat('#8a8478','#5a5f66',6,1),true,o); cbox(cx,GY+8,cz,20.6,.5,14.6,flat(0x4a4a50),true,o);
+  cbox(cx,GY,cz+7.05,6,5.5,.2,flat(0x3a3f46),false,o); ladder(cx-10,cz,-1,0,GY,GY+8,o);
+  for(let i=0;i<4;i++) cbox(cx-6+i*3.9,GY,cz+9.4,2.6,2.2,2.6,flat([0x9a6b3a,0x5a7ab0,0xb0663a][(i+rnd(3))%3]),true,o);
+  roofProps(cx,cz,GY+8.5,10,7,o,false); o.roofSpots.push([cx+3,cz,GY+8.5]);
+}
 
 const trunkMat = new THREE.MeshLambertMaterial({color:0x6b4a2d});
 const leafMat = new THREE.MeshLambertMaterial({color:0x2e8b3d});
 
-// Generates one chunk's terrain + city cell + trees + roadlines + cars. Deterministic from (cx,cz).
+// Voxel ground for one chunk (diggable terrain, near the player only). Buildings, trees and parked cars are LOTS now (see METROPOLIS).
 function generateChunk(cx, cz){
   const key = chunkKeyOf(cx,cz);
   const meshes = newChunkMeshes();
-  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[], treeSpots:[], roofSpots:[] } };
-  // freeSlots/usedCount for each block type are created lazily in getOrCreateMesh, only when that chunk actually uses that type
+  const chunk = { key, cx, cz, meshes, freeSlots:{}, usedCount:{}, colliders:[], props:{ meshes:[], colliders:[] } };
   chunks.set(key, chunk);
-
-  const x0 = cx*CHUNK - HALF, z0 = cz*CHUNK - HALF; // world-space column origin of this chunk
-
-  // terrain voxels
+  const x0 = cx*CHUNK - HALF, z0 = cz*CHUNK - HALF;
   for(let lx=0; lx<CHUNK; lx++){
     for(let lz=0; lz<CHUNK; lz++){
-      const gx = x0+lx, gz = z0+lz;
-      const h = surfaceHeight(gx,gz);
-      const topType = zoneType(gx,gz);
+      const gx = x0+lx, gz = z0+lz, h = surfaceHeight(gx,gz), topType = zoneType(gx,gz);
       for(let y = h-2; y <= h; y++){
         let type;
-        if(y === h) type = topType;
-        else if(y >= h-1) type = (topType==='sand') ? 'sand' : 'dirt';
-        else type = 'stone';
+        if(y === h) type = topType; else if(y >= h-1) type = (topType==='sand') ? 'sand' : 'dirt'; else type = 'stone';
         addBlockAt(type, gx, y, gz);
       }
     }
   }
-
-  // city cell: one building/park per chunk, deterministic by chunk coord (special-cases mirror the old fixed 8x8 map at the origin, then repeats the pattern outward so it tiles forever)
-  const rnd = seededRng(chunkSeed(cx,cz));
-  const rndInt = n => Math.floor(rnd()*n);
-  chunk.props.vr = seededRng((chunkSeed(cx,cz) ^ 0x5bd1e995) || 12345); // vertical-city extras use their own stream
-  const centerCx = x0 + CHUNK/2 - 0.5, centerCz = z0 + CHUNK/2 - 0.5;
-  const kindPick = (cx===128&&cz===128) ? park : (cx===128&&cz===127) ? school : KINDS[(((cx%8)+8)%8*3 + ((cz%8)+8)%8*5 + cx*cz)%8];
-  kindPick(centerCx, centerCz, rndInt, chunk.props);
-
-  // road markings along this chunk's cell edges
-  const mkPts = [];
-  for(let s=-CHUNK/2+2; s<CHUNK/2-2; s+=4){
-    mkPts.push([x0+1, GY+.02, z0+CHUNK/2-0.5+ (s) ]);
-  }
-  if(mkPts.length){
-    const rm = new THREE.InstancedMesh(UB, new THREE.MeshBasicMaterial({color:0xf2e6a0}), mkPts.length*2);
-    let n=0;
-    mkPts.forEach(([mx,my,mz])=>{
-      dummy.scale.set(.25,.05,1.6); dummy.position.set(x0+0.5,my,mz); dummy.updateMatrix(); rm.setMatrixAt(n++,dummy.matrix);
-      dummy.scale.set(1.6,.05,.25); dummy.position.set(mz-z0+x0, my, z0+0.5); dummy.updateMatrix(); rm.setMatrixAt(n++,dummy.matrix);
-    });
-    rm.count=n; rm.frustumCulled=false; scene.add(rm); chunk.props.meshes.push(rm);
-  }
-
-  // trees for this chunk
-  const spots = chunk.props.treeSpots;
-  if(spots.length){
-    const trunkI = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6,2.2,0.6), trunkMat, spots.length);
-    const leafI = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2,2.2,2.2), leafMat, spots.length);
-    spots.forEach((s,n)=>{
-      dummy.scale.set(1,1,1); dummy.position.set(s[0],GY+1.1,s[1]); dummy.updateMatrix(); trunkI.setMatrixAt(n,dummy.matrix);
-      dummy.position.y=GY+2.9; dummy.updateMatrix(); leafI.setMatrixAt(n,dummy.matrix);
-    });
-    trunkI.count=leafI.count=spots.length; [trunkI,leafI].forEach(m=>{m.frustumCulled=false;m.castShadow=true;scene.add(m);});
-    chunk.props.meshes.push(trunkI, leafI);
-  }
-
-  // one parked car for this chunk cell, skipping the origin cell (player spawn stays clear)
-  if(!(cx===128&&cz===128) && rnd()<0.55){
-    const vert = rnd()<0.5, lane = rndInt(2)+1;
-    const carX = vert ? centerCx - CHUNK/2 + lane*3 : centerCx + (rnd()-0.5)*8;
-    const carZ = vert ? centerCz + (rnd()-0.5)*8 : centerCz - CHUNK/2 + lane*3;
-    const car = makeBoulder(carX, GY+.95, carZ, 1.9, CARCOL[rndInt(6)], true);
-    car.mesh.rotation.y = vert?0:Math.PI/2; car.yaw = car.mesh.rotation.y; car.by = GY;
-    chunk.props.carRef = car; // tracked so it can be cleaned up on unload
-  }
-
   return chunk;
 }
 
 function disposeChunk(chunk){
-  // Only remove the InstancedMesh from the scene — geometry and material are shared across
-  // every chunk now (see blockMaterials/sharedBoxGeo above), so they must never be disposed here.
-  Object.values(chunk.meshes).forEach(m=>{ scene.remove(m); });
-  chunk.props.meshes.forEach(m=>{ if(m.parent) m.parent.remove(m); if(m.geometry&&m.geometry!==UB) m.geometry.dispose(); if(m.material&&!Array.isArray(m.material)&&m.material!==railMat){ if(m.material.map) m.material.map.dispose(); m.material.dispose(); } });
-  chunk.props.colliders.forEach(c=>{ const i=colliders.indexOf(c); if(i>=0) colliders.splice(i,1); });
-  if(chunk.props.carRef && !chunk.props.carRef.driver && chunk.props.carRef!==carried){ removeVehicle(chunk.props.carRef); }
-  // clear this chunk's block registry entries (terrain memory is freed; columnHeight persists so ground queries outside load radius still resolve sanely)
+  // Return the InstancedMeshes to the pool (shared geometry/materials are never disposed), drop this chunk's voxel registry
+  // entries, and forget undisturbed column heights: unloaded columns are flat ground by definition, so only edited craters persist.
+  Object.entries(chunk.meshes).forEach(([type,m])=>{ scene.remove(m); m.count=0; (meshPool[type]||(meshPool[type]=[])).push(m); });
+  chunk.props.meshes.forEach(m=>{ if(m.parent) m.parent.remove(m); });
+  if(chunk.bkeys) for(let i=0;i<chunk.bkeys.length;i++) blocks.delete(chunk.bkeys[i]);
   const x0 = chunk.cx*CHUNK - HALF, z0 = chunk.cz*CHUNK - HALF;
-  for(let lx=0; lx<CHUNK; lx++) for(let lz=0; lz<CHUNK; lz++){
-    for(let y=-14;y<=20;y++){ const k=keyOf(x0+lx,y,z0+lz); if(blocks.has(k)) blocks.delete(k); }
-  }
+  for(let lx=0; lx<CHUNK; lx++) for(let lz=0; lz<CHUNK; lz++){ const ck=colKey(x0+lx,z0+lz); if(columnHeight[ck]===surfaceHeight(x0+lx,z0+lz)) delete columnHeight[ck]; }
   chunks.delete(chunk.key);
 }
 
@@ -896,9 +867,9 @@ function disposeChunk(chunk){
 // immediately around the player are always the first to appear.
 const loadQueue = [];
 const queuedKeys = new Set();
-const CHUNKS_PER_FRAME = 2;      // baseline budget when standing/walking
-const MAX_CHUNKS_PER_FRAME = 5;  // ceiling at extreme speed - bounded so one frame can never freeze the phone
-const LOOKAHEAD_MAX = 3;         // extra chunks to reach ahead of the player at full speed (on top of LOAD_RADIUS)
+const CHUNKS_PER_FRAME = 2;      // (legacy count) now bounded by FB.chunkMs milliseconds instead
+const MAX_CHUNKS_PER_FRAME = 4;  // ceiling at extreme speed - bounded so one frame can never freeze the phone
+const LOOKAHEAD_MAX = 1;         // extra chunks to reach ahead of the player at full speed (on top of LOAD_RADIUS)
 
 // Track the player's actual movement (derived from position deltas) so streaming can be biased toward
 // where they are heading rather than loading a symmetric square around where they currently stand.
@@ -914,7 +885,7 @@ function updateChunkStreaming(px,pz,dt){
   const speed = Math.hypot(velX, velZ);
   const dirX = speed>0.5 ? velX/speed : 0, dirZ = speed>0.5 ? velZ/speed : 0;
   // 0 at walking pace, 1 at ~60 units/sec (full XLR8 speed)
-  const speedFrac = Math.max(0, Math.min(1, (speed-8)/50));
+  const speedFrac = Math.max(0, Math.min(1, (speed-8)/80));
 
   const [ccx,ccz] = chunkCoordOf(px,pz);
   // Re-plan when the chunk changes OR the heading meaningfully changes (bucketed to avoid re-planning every frame).
@@ -979,13 +950,246 @@ function updateChunkStreaming(px,pz,dt){
   }
 
   // Budget scales with speed: more chunks per frame when moving fast, but hard-capped.
-  const budget = Math.min(MAX_CHUNKS_PER_FRAME, CHUNKS_PER_FRAME + Math.round(speedFrac*(MAX_CHUNKS_PER_FRAME-CHUNKS_PER_FRAME)));
-  for(let i=0;i<budget && loadQueue.length;i++){
+  const tc0=performance.now(); let nb=0;
+  if(speed>28){ loadQueue.length=0; queuedKeys.clear(); }      // speedster mode: the ground layers + lots carry the visuals, no new voxel chunks until we slow down
+  while(loadQueue.length && nb<MAX_CHUNKS_PER_FRAME && (nb===0 || performance.now()-tc0<FB.chunkMs)){
     const [cx,cz] = loadQueue.shift();
     const key = chunkKeyOf(cx,cz);
     queuedKeys.delete(key);
-    if(!chunks.has(key)) generateChunk(cx,cz);
+    if(!chunks.has(key)){ generateChunk(cx,cz); STAT.chunksBuilt++; nb++; }
   }
+  STAT.tChunk=performance.now()-tc0;
+}
+/* =========================================================================
+   METROPOLIS - city layout, lot streaming, skyline LOD, predictive frame-budgeted streaming
+   Detail tiers (1 world unit ~ 0.73 m):
+     Tier 0   0-80 u    voxel ground (diggable), full lots with colliders, NPCs/vehicles simulated
+     Tier 1   80-230 u  full lots (merged meshes, spatial-grid colliders), reduced NPC simulation
+     Tier 2   230-880 u skyline: one instanced mesh of building volumes + analytic road network (ground texture + avenue strips)
+     Tier 3   fog       horizon silhouettes dissolve into haze
+     Tier 4   beyond    nothing exists in memory; the layout is a pure function of coordinates (lotSpec/districtOf), so it regenerates identically
+========================================================================= */
+var CAR_S=2.7, CAR_H=1.35;               // var (hoisted): parked cars can be created during the first lot build
+const LOT_OFF=12;                        // four lots per block at +-12 from the block centre
+const S_KIND={house:2,shop:2,apartment:2,tower:2,school:2,warehouse:1,park:2};
+const SKY_COL={tower:0x34506e,apartment:0x9a7650,house:0xd9c8a8,shop:0xb9bcc6,school:0xb04a32,warehouse:0x8a8478};
+const STAT={tChunk:0,tPlan:0,tLot:0,tSky:0,tGround:0,lotsBuilt:0,lotsDropped:0,lotMsLast:0,lotMsMax:0,lotMsSum:0,chunksBuilt:0,skyBuilds:0,skyMsMax:0,urgent:0,queue:0,dropQ:0};
+const FB={lotMs:3.5,chunkMs:1.5,skyMs:1.2,ema:16.7};     // per-frame work budgets, adapted to the measured frame time
+function hash3(a,b,c){ let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263)+Math.imul(c|0,2147483629))|0; h=Math.imul(h^(h>>>15),2246822519); h=Math.imul(h^(h>>>13),3266489917); return (h^(h>>>16))>>>0; }
+function sectorOf(bx,bz){ return [Math.floor((bx+4)/8),Math.floor((bz+4)/8)]; }          // 8x8 blocks = 640 u (~470 m) major sectors
+// Recognisable structure: dense downtown at the origin, commercial ring, then residential suburbs with industrial and parkland sectors.
+function districtOf(bx,bz){ const [sx,sz]=sectorOf(bx,bz), d=Math.hypot(sx,sz); if(d<=0.8) return 'downtown'; if(d<=1.5) return 'commercial'; const h=hash3(sx,sz,77)%100; if(d<=2.6) return h<35?'commercial':'residential'; return h<14?'industrial':h<27?'parkland':h<38?'commercial':'residential'; }
+function lotSpec(bx,bz,li){
+  const h=hash3(bx,bz,li+1), r=(h%1000)/1000, r2=((h>>>10)%1000)/1000, dist=districtOf(bx,bz);
+  let kind;
+  if(bx===0&&bz===0) kind='park'; else if(bx===0&&bz===-1&&li===3) kind='school';
+  else if(dist==='downtown') kind=r<.55?'tower':r<.8?'apartment':r<.95?'shop':'park';
+  else if(dist==='commercial') kind=r<.4?'shop':r<.7?'apartment':r<.9?'tower':'park';
+  else if(dist==='industrial') kind=r<.7?'warehouse':r<.8?'shop':r<.9?'apartment':'park';
+  else if(dist==='parkland') kind=r<.8?'park':r<.9?'house':'shop';
+  else kind=r<.6?'house':r<.85?'apartment':r<.93?'shop':'park';
+  const cx=bx*PITCH+((li&1)?LOT_OFF:-LOT_OFF), cz=bz*PITCH+((li&2)?LOT_OFF:-LOT_OFF), S=S_KIND[kind];
+  let w=0,d=0,hh=0,hBase=0,hm=1;
+  if(kind==='house'){ w=12;d=12;hh=8; }
+  else if(kind==='shop'){ w=16;d=14;hh=8.8; }
+  else if(kind==='apartment'){ hBase=6+Math.floor(r2*3)*3; w=d=14; hh=(hBase+.4)*S; }
+  else if(kind==='tower'){ hBase=18+Math.floor(r2*4)*5; hm=dist==='downtown'?1.3+((h>>>20)%100)/100:1; w=d=16; hh=(hBase*hm+.5)*S; }
+  else if(kind==='school'){ w=18.8;d=8;hh=11; }
+  else if(kind==='warehouse'){ w=20;d=14;hh=8.5; }
+  return {bx,bz,li,kind,cx,cz,S,w,d,h:hh,hBase,hm,seed:h||1,dist};
+}
+function scaleOwner(o,px,pz,S){        // scale everything a builder produced about the lot centre (ground-anchored)
+  const gy=GY;
+  for(const m of o.meshes){ m.position.set(px+S*(m.position.x-px),gy+S*(m.position.y-gy),pz+S*(m.position.z-pz)); m.scale.multiplyScalar(S); }
+  for(const c of o.colliders){
+    c.x0=px+S*(c.x0-px); c.x1=px+S*(c.x1-px); c.z0=pz+S*(c.z0-pz); c.z1=pz+S*(c.z1-pz); c.top=gy+S*(c.top-gy); if(c.bot!==undefined) c.bot=gy+S*(c.bot-gy);
+    if(c.ramp){ const r=c.ramp, p0=r.ax==='z'?pz:px; r.s=p0+S*(r.s-p0); r.e=p0+S*(r.e-p0); r.y0=gy+S*(r.y0-gy); r.y1=gy+S*(r.y1-gy); }
+    if(c.pyr){ const q=c.pyr; q.cx=px+S*(q.cx-px); q.cz=pz+S*(q.cz-pz); q.hw*=S; q.y0=gy+S*(q.y0-gy); q.h*=S; }
+  }
+  o.treeSpots=o.treeSpots.map(t=>[px+S*(t[0]-px),pz+S*(t[1]-pz)]);
+  o.roofSpots=o.roofSpots.map(t=>[px+S*(t[0]-px),pz+S*(t[1]-pz),gy+S*(t[2]-gy)]);
+}
+// Static batching: every plain box that shares a material becomes ONE mesh (a lot drops from ~25 draw calls to ~6).
+function mergeOwner(o){
+  const groups=new Map(), keep=[];
+  for(const m of o.meshes){ if(m.isInstancedMesh||m.geometry!==UB||Array.isArray(m.material)) keep.push(m); else { let a=groups.get(m.material); if(!a) groups.set(m.material,a=[]); a.push(m); } }
+  const bp=UB.attributes.position.array, bn=UB.attributes.normal.array, bu=UB.attributes.uv.array, bi=UB.index.array, v=new THREE.Vector3(), nm=new THREE.Matrix3();
+  groups.forEach((list,mat)=>{
+    if(list.length<2){ keep.push(list[0]); return; }
+    const n=list.length, pos=new Float32Array(n*72), nor=new Float32Array(n*72), uv=new Float32Array(n*48), idx=new Uint16Array(n*36);
+    for(let k=0;k<n;k++){ const m=list[k]; m.updateMatrix(); const mx=m.matrix; nm.getNormalMatrix(mx);
+      for(let i=0;i<24;i++){ v.set(bp[i*3],bp[i*3+1],bp[i*3+2]).applyMatrix4(mx); pos[k*72+i*3]=v.x; pos[k*72+i*3+1]=v.y; pos[k*72+i*3+2]=v.z;
+        v.set(bn[i*3],bn[i*3+1],bn[i*3+2]).applyMatrix3(nm).normalize(); nor[k*72+i*3]=v.x; nor[k*72+i*3+1]=v.y; nor[k*72+i*3+2]=v.z; uv[k*48+i*2]=bu[i*2]; uv[k*48+i*2+1]=bu[i*2+1]; }
+      for(let i=0;i<36;i++) idx[k*36+i]=bi[i]+k*24;
+      if(m.parent) m.parent.remove(m); }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('normal',new THREE.BufferAttribute(nor,3)); g.setAttribute('uv',new THREE.BufferAttribute(uv,2)); g.setIndex(new THREE.BufferAttribute(idx,1)); g.computeBoundingSphere();
+    const mm=new THREE.Mesh(g,mat); mm.castShadow=true; mm.userData.merged=true; cityGroup.add(mm); keep.push(mm); });
+  return keep;
+}
+const lots=new Map(), lotKey=(bx,bz,li)=>bx+','+bz+','+li;
+const TREE_T=new THREE.BoxGeometry(.6,2.2,.6), TREE_L=new THREE.BoxGeometry(2.2,2.2,2.2);
+function placeParkedCar(spec){
+  const side=(spec.seed>>>9)&3, vertEdge=side>1, cxb=spec.bx*PITCH, czb=spec.bz*PITCH, off=((((spec.seed>>>13)%100)/100)-.5)*8;
+  let x,z,yaw; const flip=((spec.seed>>>17)&1)?Math.PI:0;
+  if(!vertEdge){ const lz=czb+(side?40:-40), a=ROAD_LV[lineLevel(Math.round((lz-LINE_OFF)/PITCH))].a, inward=side?-1:1; z=lz+inward*(a-1.7); x=spec.cx+off; yaw=Math.PI/2+flip; }
+  else { const lx=cxb+(side===3?40:-40), a=ROAD_LV[lineLevel(Math.round((lx-LINE_OFF)/PITCH))].a, inward=side===3?-1:1; x=lx+inward*(a-1.7); z=spec.cz+off; yaw=flip; }
+  const car=makeBoulder(x,GY+CAR_H,z,CAR_S,CARCOL[(spec.seed>>>21)%6],true); car.mesh.rotation.y=yaw; car.yaw=yaw; car.by=GY; return car;
+}
+function generateLot(spec){
+  const key=lotKey(spec.bx,spec.bz,spec.li); if(lots.has(key)) return lots.get(key);
+  const t0=performance.now();
+  const o={meshes:[],colliders:[],treeSpots:[],roofSpots:[],vr:seededRng((spec.seed^0x5bd1e995)||12345),hBase:spec.hBase,hm:spec.hm};
+  const rf=seededRng(spec.seed), ri=n=>Math.floor(rf()*n);
+  const B={house,shop,apartment,tower,school,park,warehouse}[spec.kind];
+  B(spec.cx,spec.cz,ri,o);
+  if(spec.kind==='park') for(let i=0;i<9;i++){ const a=rf()*6.283, r=2+rf()*4.5; o.treeSpots.push([spec.cx+Math.cos(a)*r,spec.cz+Math.sin(a)*r]); }
+  if(spec.S!==1) scaleOwner(o,spec.cx,spec.cz,spec.S);
+  o.meshes=mergeOwner(o);
+  if(o.treeSpots.length){                       // trees: two instanced boxes per lot, scaled to the larger world
+    const n=o.treeSpots.length, ts=1.7, tI=new THREE.InstancedMesh(TREE_T,trunkMat,n), lI=new THREE.InstancedMesh(TREE_L,leafMat,n);
+    o.treeSpots.forEach((p,i)=>{ dummy.rotation.set(0,0,0); dummy.scale.set(ts,ts,ts); dummy.position.set(p[0],GY+1.1*ts,p[1]); dummy.updateMatrix(); tI.setMatrixAt(i,dummy.matrix); dummy.position.y=GY+2.9*ts; dummy.updateMatrix(); lI.setMatrixAt(i,dummy.matrix); });
+    [tI,lI].forEach(m=>{ m.count=n; m.frustumCulled=false; m.castShadow=true; cityGroup.add(m); o.meshes.push(m); });
+  }
+  o.colliders.forEach(gridAdd);
+  let car=null; if(spec.kind!=='park' && ((spec.seed>>>5)%1000)<450) car=placeParkedCar(spec);
+  const lot={key,spec,o,car}; lots.set(key,lot);
+  const ms=performance.now()-t0; STAT.lotsBuilt++; STAT.lotMsLast=ms; STAT.lotMsSum+=ms; if(ms>STAT.lotMsMax) STAT.lotMsMax=ms;
+  return lot;
+}
+function disposeLot(l){
+  for(const m of l.o.meshes){ if(m.parent) m.parent.remove(m); if(m.isInstancedMesh){ if(m.dispose) m.dispose(); } else if(m.geometry && m.geometry!==UB) m.geometry.dispose(); }
+  l.o.colliders.forEach(gridRemove);
+  if(l.car && !l.car.driver && l.car!==carried) removeVehicle(l.car);
+  lots.delete(l.key); STAT.lotsDropped++;
+}
+
+// ---- predictive planner: which lots do we want around the player AND along the predicted corridor? ----
+const STREAM={planT:0,planKey:'',lotQ:[],dropQ:[],want:new Set()};
+function planLots(px,pz,sf,horizon,q){
+  const vx=velX, vz=velZ, samples=[[px,pz,q.lotR]];
+  if(sf>0.02){ samples.push([px+vx*horizon*.5,pz+vz*horizon*.5,q.lotR*.8],[px+vx*horizon,pz+vz*horizon,q.lotR*.8]); }
+  let mnx=1e9,mxx=-1e9,mnz=1e9,mxz=-1e9; for(const [x,z,r] of samples){ mnx=Math.min(mnx,x-r); mxx=Math.max(mxx,x+r); mnz=Math.min(mnz,z-r); mxz=Math.max(mxz,z+r); }
+  const bx0=Math.floor(mnx/PITCH)-1, bx1=Math.ceil(mxx/PITCH)+1, bz0=Math.floor(mnz/PITCH)-1, bz1=Math.ceil(mxz/PITCH)+1, missing=[], want=new Set();
+  for(let bx=bx0;bx<=bx1;bx++) for(let bz=bz0;bz<=bz1;bz++) for(let li=0;li<4;li++){
+    const cx=bx*PITCH+((li&1)?LOT_OFF:-LOT_OFF), cz=bz*PITCH+((li&2)?LOT_OFF:-LOT_OFF);
+    if(Math.abs(cx)>WORLD_LIMIT-30||Math.abs(cz)>WORLD_LIMIT-30) continue;
+    let best=1e9; for(let k=0;k<samples.length;k++){ const sm=samples[k], d=Math.hypot(cx-sm[0],cz-sm[1]); if(d<=sm[2]) best=Math.min(best,k?d*1.15:d); }
+    if(best>=1e9) continue; const key=lotKey(bx,bz,li); want.add(key); if(!lots.has(key)) missing.push([bx,bz,li,best]);
+  }
+  missing.sort((a,b)=>a[3]-b[3]); STREAM.lotQ=missing.length>q.lotMax*1.5?missing.slice(0,Math.round(q.lotMax*1.5)):missing; STREAM.want=want;
+  // drop lots that are comfortably outside both the player radius and the predicted corridor (hysteresis keeps edges from thrashing)
+  const drop=[]; for(const l of lots.values()){ if(want.has(l.key)) continue; let near=false; for(const [x,z,r] of samples){ if(Math.hypot(l.spec.cx-x,l.spec.cz-z)<r+70){ near=true; break; } } if(!near) drop.push([l, Math.hypot(l.spec.cx-px,l.spec.cz-pz)]); }
+  drop.sort((a,b)=>b[1]-a[1]); STREAM.dropQ=drop.map(d=>d[0]);
+  STAT.queue=STREAM.lotQ.length; STAT.dropQ=STREAM.dropQ.length;
+}
+function runLotJobs(px,pz,q,unlimited){
+  // unload (a couple per frame, farthest first)
+  for(let i=0;i<2&&STREAM.dropQ.length;i++){ const l=STREAM.dropQ.shift(); if(lots.has(l.key)) disposeLot(l); }
+  if(lots.size>q.lotMax+8&&!STREAM.dropQ.length){ let far=null,fd=0; for(const l of lots.values()){ const d=Math.hypot(l.spec.cx-px,l.spec.cz-pz); if(d>fd){ fd=d; far=l; } } if(far&&fd>q.lotR*.7) disposeLot(far); }
+  // collision safety: a lot within ~58 u that does not exist yet is built NOW (max 2/frame) so fast movers can never outrun collision data
+  let urgent=0; for(let i=0;i<Math.min(6,STREAM.lotQ.length)&&urgent<2;i++){ const e=STREAM.lotQ[i]; const sp=lotSpec(e[0],e[1],e[2]); if(Math.hypot(sp.cx-px,sp.cz-pz)<58+Math.abs(velX*.1)+Math.abs(velZ*.1)){ STREAM.lotQ.splice(i,1); i--; if(!lots.has(lotKey(e[0],e[1],e[2]))){ generateLot(sp); urgent++; STAT.urgent++; } } }
+  const t0=performance.now();
+  while(STREAM.lotQ.length && lots.size<q.lotMax+8){
+    if(!unlimited && performance.now()-t0>=FB.lotMs) break;
+    const e=STREAM.lotQ.shift(); if(lots.has(lotKey(e[0],e[1],e[2]))) continue; generateLot(lotSpec(e[0],e[1],e[2]));
+  }
+  STAT.queue=STREAM.lotQ.length;
+}
+function drainLotsNow(px,pz,radius){
+  const q=QUALITY.presets[QUALITY.level], saved=q.lotR; velX=velZ=0; q.lotR=radius||120; planLots(px,pz,0,1,q); q.lotR=saved; runLotJobs(px,pz,q,true); STREAM.planKey='';
+}
+const PERF={on:false,t:0,frames:0,msMax:0,fps:60,mem:0};
+function perfTick(dt){
+  FB.ema+=(dt*1000-FB.ema)*.05; PERF.msMax=Math.max(PERF.msMax*.995,dt*1000);
+  if(FB.ema>26){ FB.lotMs=1.6; FB.chunkMs=.8; FB.skyMs=.6; } else if(FB.ema>20){ FB.lotMs=2.5; FB.chunkMs=1; FB.skyMs=.9; } else { FB.lotMs=3.5; FB.chunkMs=1.5; FB.skyMs=1.2; }
+  if(Math.hypot(velX,velZ)>40 && FB.ema<19){ FB.lotMs*=1.5; FB.chunkMs*=1.4; }
+  PERF.frames++; PERF.t+=dt; if(PERF.t<.5) return; PERF.fps=PERF.frames/PERF.t; PERF.frames=0; PERF.t=0;
+  if(performance.memory) PERF.mem=performance.memory.usedJSHeapSize/1048576;
+  if(!PERF.on) return;
+  const el=document.getElementById('perf-hud'), ri=renderer.info&&renderer.info.render||{calls:0,triangles:0};
+  el.textContent='FPS '+PERF.fps.toFixed(0)+'  frame '+FB.ema.toFixed(1)+'ms (max '+PERF.msMax.toFixed(0)+')\n'+
+    'chunks '+chunks.size+'  lots '+lots.size+'/'+QUALITY.presets[QUALITY.level].lotMax+'  queue '+STAT.queue+'\n'+
+    'built '+STAT.lotsBuilt+'  dropped '+STAT.lotsDropped+'  urgent '+STAT.urgent+'\n'+
+    'lot ms last '+STAT.lotMsLast.toFixed(1)+' max '+STAT.lotMsMax.toFixed(1)+'  sky '+(SKY.mesh?SKY.mesh.count:0)+'\n'+
+    'ents '+enemies.length+'  props '+props.length+'  draws '+ri.calls+'  tris '+ri.triangles+(PERF.mem?'\nheap '+PERF.mem.toFixed(0)+' MB':'');
+}
+function setPerf(on){ PERF.on=!!on; document.getElementById('perf-hud').style.display=PERF.on?'block':'none'; }
+addEventListener('keydown',e=>{ if(e.code==='F3'){ e.preventDefault(); setPerf(!PERF.on); } });
+function updateMetropolis(px,pz,dt){
+  perfTick(dt);
+  const q=QUALITY.presets[QUALITY.level], speed=Math.hypot(velX,velZ), sf=Math.max(0,Math.min(1,(speed-10)/80)), horizon=1+2*sf;   // 1..3 s prediction horizon scaled by speed
+  const dirx=speed>1?velX/speed:0, dirz=speed>1?velZ/speed:0, hb=speed>10?Math.round(Math.atan2(dirz,dirx)/.45):99;
+  const pk=Math.round(px/PITCH)+','+Math.round(pz/PITCH)+','+hb;
+  STREAM.planT-=dt; let tm=performance.now();
+  if(STREAM.planT<=0||pk!==STREAM.planKey){ STREAM.planT=.2; STREAM.planKey=pk; planLots(px,pz,sf,horizon,q); }
+  STAT.tPlan=performance.now()-tm; tm=performance.now();
+  runLotJobs(px,pz,q); STAT.tLot=performance.now()-tm; tm=performance.now();
+  skylineTick(px,pz,q); STAT.tSky=performance.now()-tm; tm=performance.now();
+  updateGroundLayers(px,pz); STAT.tGround=performance.now()-tm;
+}
+
+// ---- Tier 2: skyline (all building volumes beyond the full-detail radius share ONE instanced mesh, rebuilt incrementally) ----
+var skyDirty=true; const SKY={mesh:null,center:[1e9,1e9],job:null,col:new THREE.Color(),offs:null,offsR:0};
+(function(){ const m=new THREE.InstancedMesh(UB,new THREE.MeshLambertMaterial({color:0xffffff}),1700); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.count=0; m.frustumCulled=false; m.setColorAt(0,new THREE.Color(1,1,1)); scene.add(m); SKY.mesh=m; })();
+function skyOffsets(bR){ if(SKY.offs&&SKY.offsR===bR) return SKY.offs; const a=[]; for(let i=-bR;i<=bR;i++) for(let j=-bR;j<=bR;j++) a.push([i,j,i*i+j*j]); a.sort((p,q2)=>p[2]-q2[2]); SKY.offs=a; SKY.offsR=bR; return a; }
+function* skylineJob(px,pz,q){
+  const R=q.skyR, bR=Math.ceil(R/PITCH)+1, bx0=Math.round(px/PITCH), bz0=Math.round(pz/PITCH), offs=skyOffsets(bR), m=SKY.mesh, arr=m.instanceMatrix.array, car=m.instanceColor.array, cap=Math.min(1700,q.skyMax), col=SKY.col;
+  let n=0, blocks=0;
+  outer: for(const [dx,dz] of offs){
+    for(let li=0;li<4;li++){ const sp=lotSpec(bx0+dx,bz0+dz,li); if(!sp.h||sp.kind==='park') continue; if(Math.hypot(sp.cx-px,sp.cz-pz)>R) continue;
+      if(Math.abs(sp.cx)>WORLD_LIMIT||Math.abs(sp.cz)>WORLD_LIMIT) continue;
+      const o=n*16; arr[o]=sp.w*.96; arr[o+1]=0; arr[o+2]=0; arr[o+3]=0; arr[o+4]=0; arr[o+5]=sp.h; arr[o+6]=0; arr[o+7]=0; arr[o+8]=0; arr[o+9]=0; arr[o+10]=sp.d*.96; arr[o+11]=0; arr[o+12]=sp.cx; arr[o+13]=GY+sp.h/2; arr[o+14]=sp.cz; arr[o+15]=1;
+      col.setHex(SKY_COL[sp.kind]||0x888888); const vv=.86+((sp.seed>>>7)%100)/360; car[n*3]=col.r*vv; car[n*3+1]=col.g*vv; car[n*3+2]=col.b*vv;
+      if(++n>=cap) break outer; }
+    if((++blocks)%10===0) yield;
+  }
+  m.count=n; m.instanceMatrix.needsUpdate=true; m.instanceColor.needsUpdate=true; SKY.center=[px,pz]; STAT.skyBuilds++;
+}
+function skylineTick(px,pz,q){
+  if(!SKY.job && (skyDirty || Math.hypot(px-SKY.center[0],pz-SKY.center[1])>90)){ skyDirty=false; SKY.job=skylineJob(px,pz,q); }
+  if(SKY.job){ const t0=performance.now(); let r; do{ r=SKY.job.next(); }while(!r.done && performance.now()-t0<FB.skyMs); if(r.done) SKY.job=null; const ms=performance.now()-t0; if(ms>STAT.skyMsMax) STAT.skyMsMax=ms; }
+}
+
+// ---- road network: street lattice is one repeating ground texture; avenues/boulevards are pooled long strips (to the horizon, zero chunk cost) ----
+function makeStreetTile(){
+  const S=320, u=S/PITCH, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
+  g.fillStyle='#5fae3c'; g.fillRect(0,0,S,S); let sd=11; const rn=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+  for(let i=0;i<420;i++){ g.fillStyle=rn()<.5?'rgba(60,130,40,.35)':'rgba(130,200,80,.3)'; g.fillRect(rn()*S,rn()*S,4,4); }
+  const T=ROAD_LV[1].t*u, A=ROAD_LV[1].a*u;
+  const bands=(h,col)=>{ g.fillStyle=col; g.fillRect(0,0,h,S); g.fillRect(S-h,0,h,S); g.fillRect(0,0,S,h); g.fillRect(0,S-h,S,h); };
+  bands(T,'#bdb6a8'); bands(T+1.5,'rgba(0,0,0,0)'); g.fillStyle='#8f897f'; g.fillRect(T-1.5,0,1.5,S); g.fillRect(S-T,0,1.5,S); g.fillRect(0,T-1.5,S,1.5); g.fillRect(0,S-T,S,1.5);
+  bands(A,'#3a3a40');
+  g.fillStyle='#e8d27a'; for(let y=T+10;y<S-T-14;y+=26){ g.fillRect(-1.5,y,3,13); g.fillRect(S-1.5,y,3,13); } for(let x=T+10;x<S-T-14;x+=26){ g.fillRect(x,-1.5,13,3); g.fillRect(x,S-1.5,13,3); }
+  g.fillStyle='rgba(255,255,255,.85)'; for(let k=-A+4;k<A-3;k+=9){ g.fillRect(k,T+4,5,10); g.fillRect(k,S-T-14,5,10); g.fillRect(S+k,T+4,5,10); g.fillRect(T+4,k,10,5); g.fillRect(S-T-14,k,10,5); g.fillRect(T+4,S+k,10,5); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(16,16); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1; return t;
+}
+function makeStripTexture(level){
+  const L=ROAD_LV[level], u=4, W=L.t*2*u, H=128, c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+  g.fillStyle='#bdb6a8'; g.fillRect(0,0,W,H); g.fillStyle='#8f897f'; g.fillRect((L.t-L.a)*u-2,0,2,H); g.fillRect(W-(L.t-L.a)*u,0,2,H);
+  g.fillStyle='#3a3a40'; g.fillRect((L.t-L.a)*u,0,L.a*2*u,H);
+  const lanes=level===3?6:4, lw=L.a*2*u/lanes;
+  for(let k=1;k<lanes;k++){ const x=(L.t-L.a)*u+k*lw;
+    if(k===lanes/2){ g.fillStyle='#e8c83a'; g.fillRect(x-4,0,2.5,H); g.fillRect(x+1.5,0,2.5,H); } else { g.fillStyle='rgba(255,255,255,.85)'; for(let y=0;y<H;y+=32) g.fillRect(x-1.2,y,2.4,16); } }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1,45); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1; return t;
+}
+const GROUND={plane:null,strips:[],mat:[null,null,null,null]};
+(function(){
+  const tile=makeStreetTile(), pm=new THREE.MeshLambertMaterial({map:tile}), pl=new THREE.Mesh(new THREE.PlaneGeometry(1280,1280),pm);
+  pl.rotation.x=-Math.PI/2; pl.position.y=GY-0.03; pl.receiveShadow=true; pl.frustumCulled=false; scene.add(pl); GROUND.plane=pl;
+  GROUND.mat[2]=new THREE.MeshLambertMaterial({map:makeStripTexture(2)}); GROUND.mat[3]=new THREE.MeshLambertMaterial({map:makeStripTexture(3)});
+  for(let i=0;i<20;i++){ const m=new THREE.Mesh(UB,GROUND.mat[2]); m.visible=false; m.frustumCulled=false; m.receiveShadow=true; scene.add(m); GROUND.strips.push(m); }
+})();
+function updateGroundLayers(px,pz){
+  GROUND.plane.position.x=LINE_OFF+PITCH*Math.round((px-LINE_OFF)/PITCH); GROUND.plane.position.z=LINE_OFF+PITCH*Math.round((pz-LINE_OFF)/PITCH);
+  const R=700; let k=0;
+  for(let axis=0;axis<2;axis++){
+    const p=axis?pz:px, o=axis?px:pz, n0=Math.floor((p-R-LINE_OFF)/PITCH), n1=Math.ceil((p+R-LINE_OFF)/PITCH);
+    for(let n=n0;n<=n1&&k<GROUND.strips.length;n++){ const lv=lineLevel(n); if(lv<2) continue;
+      const m=GROUND.strips[k++], Lw=ROAD_LV[lv].t*2, along=32*Math.round(o/32);
+      m.visible=true; m.material=GROUND.mat[lv]; m.scale.set(Lw,.05,1440);
+      if(axis===0){ m.position.set(LINE_OFF+n*PITCH,GY-.015,along); m.rotation.y=0; } else { m.position.set(along,GY-.012,LINE_OFF+n*PITCH); m.rotation.y=Math.PI/2; } }
+  }
+  for(;k<GROUND.strips.length;k++) GROUND.strips[k].visible=false;
 }
 // Used once at startup only: generates every currently-queued chunk immediately (a one-time loading
 // pause is fine before the player can even see or move), so the spawn area is fully solid on frame one.
@@ -1012,17 +1216,17 @@ water.visible=false; scene.add(water);
 function groundTopAt(x,z,fy){
   const gx = Math.round(x), gz = Math.round(z);
   const t = columnHeight[colKey(gx,gz)];
-  let best = Math.max(t===undefined ? -3 : t, -14) + 0.5;
+  let best = Math.max(t===undefined ? 1 : t, -14) + 0.5;      // unloaded columns are flat ground (surfaceHeight=1): the world is walkable before its voxels exist
   if(fy===undefined) return best;
   const lim = fy + STEP_UP;
-  for(let i=colliders.length-1;i>=0;i--){
-    const c=colliders[i];
+  for(let pp=0;pp<2;pp++){ const arr=pp?colliders:cellList(x,z); if(!arr) continue; for(let i=arr.length-1;i>=0;i--){
+    const c=arr[i];
     if(c.ladder||x<=c.x0||x>=c.x1||z<=c.z0||z>=c.z1) continue;
     let h=c.top;
     if(c.ramp){ const r=c.ramp, u=Math.max(0,Math.min(1,((r.ax==='z'?z:x)-r.s)/(r.e-r.s))); h=r.y0+(r.y1-r.y0)*u; }
     else if(c.pyr){ const q=c.pyr, m=Math.max(Math.abs(x-q.cx),Math.abs(z-q.cz)); h=q.y0+q.h*Math.max(0,1-m/q.hw); }
     if(h<=lim && h>best) best=h;
-  }
+  } }
   return best;
 }
 
@@ -1551,7 +1755,7 @@ const ACT={
 };
 const ALIENS = [
   { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:13,
-    atkDamage:22, atkRange:2.4, atkCooldown:0.7, modelScale:1.18,
+    atkDamage:22, atkRange:2.4, atkCooldown:0.7, modelScale:1.45,
     special:{ name:'GROUND SLAM', cost:35, cooldown:5,
       run(ctx){ shockwaveAt(ctx.player.pos, 4.5, 40, true); shakeCamera(0.3); } } },
   { id:'heatblast', name:'HEATBLAST', actions:[ACT.fire,ACT.fly,ACT.burn], maxHealth:100, maxEnergy:120, speed:3.0, jump:5.6, flies:true, flySpeed:22,
@@ -1581,6 +1785,7 @@ const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jum
 ========================================================================= */
 updateChunkStreaming(0.5, 0.5, 0); // queue starting chunks
 drainChunkQueueFully();          // ...and load them all now, before we ask groundTopAt for spawn height
+drainLotsNow(0.5, 0.5, 130);     // spawn area buildings (one-time pause before the player can move)
 const player = {
   pos: new THREE.Vector3(0.5, groundTopAt(0.5,0.5)+1, 0.5),
   vel: new THREE.Vector3(),
@@ -1786,8 +1991,8 @@ function updateCamera(){
   );
   const drv = player.driving ? 1 : 0;
   const la=Math.min(.16, .028+ (drv?.02:0)); // seconds of look-ahead
-  const pivot = player.pos.clone().add(new THREE.Vector3(camDyn.vx*la, camState.height + drv*0.6 - camDyn.kick, camDyn.vz*la));
-  const desired = pivot.clone().addScaledVector(lookDir, -(camState.dist + drv*3.6));
+  const pivot = player.pos.clone().add(new THREE.Vector3(camDyn.vx*la, camState.height + drv*1.3 - camDyn.kick, camDyn.vz*la));
+  const desired = pivot.clone().addScaledVector(lookDir, -(camState.dist + drv*5.8));
   camera.position.lerp(desired, 0.18);
   const lookAt = pivot.clone().addScaledVector(lookDir, 8);
   camera.lookAt(lookAt);
@@ -1986,11 +2191,9 @@ function enemyGroundY(en,yOff,dt){
 }
 // A rooftop within reach of the player (12-38 units away) to ambush from, so rooftops become fighting spaces.
 function roofSpawnPoint(){
-  const cc=chunkCoordOf(player.pos.x,player.pos.z), cand=[];
-  for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++){
-    const ch=chunks.get(chunkKeyOf(cc[0]+dx,cc[1]+dz)); if(!ch||!ch.props.roofSpots) continue;
-    ch.props.roofSpots.forEach(q=>{ const d=Math.hypot(q[0]-player.pos.x,q[1]-player.pos.z); if(d>18&&d<38&&!blockedAt(q[0],q[1],q[2])) cand.push(q); });
-  }
+  const cand=[];
+  for(const l of lots.values()){ if(Math.hypot(l.spec.cx-player.pos.x,l.spec.cz-player.pos.z)>90) continue;
+    l.o.roofSpots.forEach(q=>{ const d=Math.hypot(q[0]-player.pos.x,q[1]-player.pos.z); if(d>18&&d<44&&!blockedAt(q[0],q[1],q[2])) cand.push(q); }); }
   return cand.length ? cand[Math.floor(Math.random()*cand.length)] : null;
 }
 // Combat pacing (GTA/Batman-style): at most 2 melee and 1 ranged enemy commit to an attack at once. Everyone
@@ -2145,12 +2348,12 @@ function updateEnemies(dt){
         // differentiated purely by their stats (speed/damage/hp/retreat threshold from ENEMY_STATS).
         const dir = tpos.clone().sub(p); dir.y = 0; dir.normalize();
         const reach = 1.75;
-        const myTurn = distToTarget < 3.4 ? grabSlot(en, en.type==='brute'?1.9:1.5, false) : (en.slotT>0);
+        const myTurn = distToTarget < 4.8 ? grabSlot(en, en.type==='brute'?1.9:1.5, false) : (en.slotT>0);   // the waiting ring (~4.2 u) is inside slot range, so waiters take turns
         if(!myTurn && distToTarget < 5.2){
           // waiting for a slot: hang back at ~3.6 units and circle the target instead of piling in
           en.repositionT -= dt; if(en.repositionT <= 0){ en.repositionT = 1.2 + Math.random()*1.6; en.repositionDir = Math.random()<.5?-1:1; }
           const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(en.repositionDir);
-          const rad = distToTarget < 3.2 ? -0.55 : (distToTarget > 4.2 ? 0.5 : 0);
+          const rad = distToTarget < 3.2 ? -1.1 : (distToTarget > 4.2 ? 0.5 : 0);
           const mx = perp.x*0.55 + dir.x*rad, mz = perp.z*0.55 + dir.z*rad;
           const nx=p.x+mx*en.speed*dt, nz=p.z+mz*en.speed*dt;
           if(!blockedAt(nx,p.z,p.y-0.5)) p.x=nx; if(!blockedAt(p.x,nz,p.y-0.5)) p.z=nz;
@@ -2735,7 +2938,7 @@ const NG={ head:new THREE.BoxGeometry(.4,.4,.4), torso:new THREE.BoxGeometry(.55
 const nmats={}, nm=c=>nmats[c]||(nmats[c]=new THREE.MeshLambertMaterial({color:c}));
 const flashMat=new THREE.MeshLambertMaterial({color:0xffffff,emissive:0xff3030});
 const SKINS=[0xf1c8a0,0xd9a577,0xa8744a,0x6e4a2e], SHIRTS=[0x3a6ea8,0xc25a8a,0x8a9a3a,0xe0e0e0,0x8a5a2a,0x3a3a3a], PANTS=[0x2a2a3a,0x4a3a2a,0x1a3a5a];
-const GANGS=[{name:'RED',col:0xb32222,home:[-30.5,17.5]},{name:'PURPLE',col:0x7a2fb3,home:[33.5,-14.5]},{name:'YELLOW',col:0xd8b81a,home:[1.5,-46.5]}].map(g=>({...g,size:4,members:[],respT:0}));
+const GANGS=[{name:'RED',col:0xb32222,home:[-35,35]},{name:'PURPLE',col:0x7a2fb3,home:[-35,-35]},{name:'YELLOW',col:0xd8b81a,home:[25.5,-25.5]}].map(g=>({...g,size:4,members:[],respT:0}));
 function makeNpcModel(skin,shirt,pants,cap){
   const R=buildRig({legLen:.66,torsoH:.62,torsoW:.5,torsoD:.28,headS:.36,armLen:.58,armT:.14,legT:.17,neck:.06,skin,top:shirt,bottom:pants,accent:0x222222,sleeve:true});
   const parts=R.parts;
@@ -2751,14 +2954,16 @@ function spawnNpc(gang,x,z){
     home:new THREE.Vector3(x,0,z),target:new THREE.Vector3(x,0,z),threat:null};
   root.rotation.y=en.yaw; enemies.push(en); if(gang) gang.members.push(en); return en;
 }
-function sidewalkPoint(){
-  const k=rnd(8), s=Math.random()<.5?4:15, along=(Math.random()-.5)*118;
-  return Math.random()<.5?[-64+16*k+s,along]:[along,-64+16*k+s];
+function sidewalkPoint(){        // a pavement point on a street near the player
+  const ax=Math.random()<.5, p=ax?player.pos.x:player.pos.z, o=ax?player.pos.z:player.pos.x;
+  const L=nearestLine(p+(Math.random()-.5)*150), off=(Math.random()<.5?-1:1)*(L.a+(L.t-L.a)*.5), along=o+(Math.random()-.5)*150;
+  return ax?[L.pos+off,along]:[along,L.pos+off];
 }
+const CIV_MAX={LOW:10,MEDIUM:18,HIGH:26};
 function pickTarget(en){
   for(let i=0;i<8;i++){
     const a=Math.random()*6.28, r=en.gang?2+Math.random()*4:4+Math.random()*10, x=en.home.x+Math.cos(a)*r, z=en.home.z+Math.sin(a)*r;
-    if(Math.abs(x)>60||Math.abs(z)>60||blockedAt(x,z,GY)) continue;
+    if(Math.abs(x)>WORLD_LIMIT-4||Math.abs(z)>WORLD_LIMIT-4||blockedAt(x,z,GY)) continue;
     if(!en.gang&&zoneType(Math.round(x),Math.round(z))==='grass'&&Math.random()<.85) continue;
     en.target.set(x,0,z); return;
   }
@@ -2797,13 +3002,13 @@ function hurtTarget(tu,dmg){
   else if(player.alive&&player.invuln<=0){ player.health-=dmg; player.invuln=.4; flashDamage(); }
 }
 GANGS.forEach(g=>{ for(let i=0;i<g.size;i++) spawnNpc(g,g.home[0]+(Math.random()-.5)*5,g.home[1]+(Math.random()-.5)*5); });
-for(let i=0;i<22;i++){ const s=sidewalkPoint(); spawnNpc(null,s[0],s[1]); }
+for(let i=0;i<14;i++){ const s=sidewalkPoint(); spawnNpc(null,s[0],s[1]); }
 let npcMgrT=0;
 function updateNpcs(dt){
   npcMgrT-=dt;
   if(npcMgrT<=0){
     npcMgrT=4;
-    if(enemies.filter(e=>e.npc&&!e.gang).length<22){ const s=sidewalkPoint(); if(Math.hypot(s[0]-player.pos.x,s[1]-player.pos.z)>30) spawnNpc(null,s[0],s[1]); }
+    if(enemies.filter(e=>e.npc&&!e.gang).length<(CIV_MAX[QUALITY.level]||18)){ const s=sidewalkPoint(); if(Math.hypot(s[0]-player.pos.x,s[1]-player.pos.z)>30) spawnNpc(null,s[0],s[1]); }
     GANGS.forEach(g=>{ if(g.members.length<g.size&&g.respT<=0) spawnNpc(g,g.home[0]+(Math.random()-.5)*5,g.home[1]+(Math.random()-.5)*5); });
   }
   GANGS.forEach(g=>g.respT=Math.max(0,g.respT-dt));
@@ -2814,6 +3019,11 @@ function updateNpcs(dt){
       if(en.deadT<=0){ scene.remove(en.mesh); rigDispose(en.parts); enemies.splice(i,1); if(en.gang){ const k=en.gang.members.indexOf(en); if(k>=0) en.gang.members.splice(k,1); en.gang.respT=25; } }
       continue;
     }
+    // simulation radius: civilians beyond ~180 u are recycled (fresh ones appear near the player); anyone beyond ~95 u sleeps (no AI, no animation, hidden)
+    { const dxp=en.mesh.position.x-player.pos.x, dzp=en.mesh.position.z-player.pos.z, dsq=dxp*dxp+dzp*dzp;
+      if(!en.gang && dsq>180*180){ scene.remove(en.mesh); rigDispose(en.parts); enemies.splice(i,1); continue; }
+      if(dsq>95*95){ en.mesh.visible=false; continue; }
+      if(!en.mesh.visible) en.mesh.visible=true; }
     if(en.ice) continue;
     en.atkCd=Math.max(0,en.atkCd-dt); en.atk=Math.max(0,en.atk-dt); if(en.slotT>0) en.slotT-=dt; if(en.slotCd>0) en.slotCd-=dt; if(en.windT>0) en.windT-=dt; if(en.joinDelay>0) en.joinDelay-=dt;
     if(en.flash>0){ en.flash-=dt; if(en.flash<=0) rigFlash(en.parts,false); }
@@ -3271,7 +3481,7 @@ function doJump(){
   }
 }
 const GRAVITY = -18;
-const WORLD_LIMIT = HALF - 1;
+
 function flySpeedOf(p){ return (p.form.flySpeed||8) * 0.6; }
 
 /* =========================================================================
@@ -3281,8 +3491,8 @@ function flySpeedOf(p){ return (p.form.flySpeed||8) * 0.6; }
    Arcade model only: speed target + accel/brake, speed-scaled steering, 5-point wall probe, circle car-vs-car.
    No suspension or tyre simulation, so it stays cheap on phones.
 ========================================================================= */
-var CAR_H=.95, CAR_HP=100, CAR_MAX_FWD=19, CAR_MAX_REV=6; // var: initVeh() can run during first chunk generation, before this line
-var TRAFFIC_MAX={LOW:2,MEDIUM:4,HIGH:6};
+var CAR_HP=100, CAR_MAX_FWD=25, CAR_MAX_REV=8, CK=1.3;   // CK: speed/acceleration scale versus the original tuning // var: initVeh() can run during first chunk generation, before this line
+var TRAFFIC_MAX={LOW:3,MEDIUM:6,HIGH:9};
 var vehNear=null, vehHornCd=0, vehTick=0, trafficT=0;
 function initVeh(p){ p.veh=true; p.mesh.rotation.order='YXZ'; p.pitch=0; p.pitchV=0; p.lean=0; p.leanV=0; p.bob=0; p.bobV=0; p.pv=0; p.accS=0; p.yawRate=0; p.steer=0; p.hp=(CAR_HP||100); p.v=0; p.yaw=p.mesh.rotation.y; p.by=Math.max(0,p.mesh.position.y-(CAR_H||.95)); p.vy=0; p.push=new THREE.Vector3(); p.flipT=0; p.flipped=false; p.roll=0; p.burnT=0; p.fxT=0; p.hitCd=0; p.driver=null; p.traffic=false; return p; }
 function removeVehicle(p){
@@ -3324,7 +3534,7 @@ function vehicleHit(p,dir,dmg,shove,kind){
 }
 function carProbeBlocked(p,x,z){
   const c=Math.cos(p.yaw), sn=Math.sin(p.yaw), fx=-sn, fz=-c, rx=c, rz=-sn, by=p.by;
-  const P=[[0,2.0],[.85,1.7],[-.85,1.7],[.85,-1.7],[-.85,-1.7],[0,-2.0]];
+  const K=CAR_S/1.9, P=[[0,2.0*K],[.85*K,1.7*K],[-.85*K,1.7*K],[.85*K,-1.7*K],[-.85*K,-1.7*K],[0,-2.0*K]];
   for(const q of P){ const px=x+rx*q[0]+fx*q[1], pz=z+rz*q[0]+fz*q[1];
     if(blockedAt(px,pz,by+.05)) return true;
     if(groundTopAt(px,pz,by)-by>.5) return true;
@@ -3369,7 +3579,7 @@ function exitCar(forced){
   player.pos.set(ex, (ok?groundTopAt(ex,ez,p.by):p.by+2.2)+1, ez); player.vel.set(0,0,0); player.onGround=ok; player.invuln=Math.max(player.invuln,.5);
   player.model.visible=true; player.jumpHeld=false;
 }
-function vehicleButton(){ if(player.driving) exitCar(); else { const c=nearestCar(3.8); if(c) enterCar(c); } }
+function vehicleButton(){ if(player.driving) exitCar(); else { const c=nearestCar(5.6); if(c) enterCar(c); } }
 function driveTick(dt){
   const p=player.driving;
   updateKeyboardMove();
@@ -3383,19 +3593,19 @@ function driveTick(dt){
   const av0=Math.abs(p.v), sgn=p.v>=0?1:-1;
   // ---- longitudinal: torque falls off with speed, drag grows with speed^2, engine braking when you lift off ----
   const top=CAR_MAX_FWD;
-  if(brake){ p.v -= Math.sign(p.v)*Math.min(av0,(av0>1?15:9)*dt); }
+  if(brake){ p.v -= Math.sign(p.v)*Math.min(av0,(av0>1?15:9)*CK*dt); }
   else if(thr>0){
-    if(p.v<-.6){ p.v += 15*dt; }                                             // brake out of reverse first
-    else { const want=thr*top; if(p.v<want){ const f=Math.max(0,p.v)/top; p.v += (11*(1-Math.pow(f,1.6))+1.1)*dt*Math.min(1,.4+thr); } else p.v -= 3.5*dt; }
+    if(p.v<-.6){ p.v += 15*CK*dt; }                                             // brake out of reverse first
+    else { const want=thr*top; if(p.v<want){ const f=Math.max(0,p.v)/top; p.v += (11*(1-Math.pow(f,1.6))+1.1)*CK*dt*Math.min(1,.4+thr); } else p.v -= 3.5*CK*dt; }
   } else if(thr<0){
-    if(p.v>.6){ p.v -= 15*dt; }                                              // brakes, then reverse
-    else { const want=thr*CAR_MAX_REV; if(p.v>want) p.v -= (5.5*(1-Math.pow(Math.max(0,-p.v)/CAR_MAX_REV,1.4))+.8)*dt; }
-  } else { p.v -= Math.sign(p.v)*Math.min(av0,(2.6+av0*.12)*dt); }         // engine braking / coast
-  p.v -= Math.sign(p.v)*Math.min(Math.abs(p.v),(.5+.0105*p.v*p.v)*dt);      // rolling resistance + aero drag: this is what stops it zooming forever
+    if(p.v>.6){ p.v -= 15*CK*dt; }                                              // brakes, then reverse
+    else { const want=thr*CAR_MAX_REV; if(p.v>want) p.v -= (5.5*(1-Math.pow(Math.max(0,-p.v)/CAR_MAX_REV,1.4))+.8)*CK*dt; }
+  } else { p.v -= Math.sign(p.v)*Math.min(av0,(2.6*CK+av0*.12)*dt); }         // engine braking / coast
+  p.v -= Math.sign(p.v)*Math.min(Math.abs(p.v),CK*(.5+.0105*(p.v/CK)*(p.v/CK))*dt);      // rolling resistance + aero drag: this is what stops it zooming forever
   // ---- steering: wheel angle eases toward the stick (no instant snap), yaw rate depends on speed, high speed understeers ----
   const av=Math.abs(p.v);
   p.steer += (str-p.steer)*Math.min(1,dt*(str===0?9:5.5));
-  const grip=Math.min(1,av/3.5)*(1-Math.min(.6,av/44));
+  const grip=Math.min(1,av/(3.5*CK))*(1-Math.min(.6,av/(44*CK)));
   const oldFx=-Math.sin(p.yaw), oldFz=-Math.cos(p.yaw);
   const dyaw = -p.steer*2.05*grip*dt*(p.v>=0?1:-1)*(brake&&av>7?1.5:1);
   p.yaw += dyaw; p.yawRate = dyaw/Math.max(dt,1e-4);
@@ -3414,23 +3624,22 @@ function driveTick(dt){
 // Running things over: driven cars, shoved cars and (harmlessly slow) traffic. Returns nothing; damages enemies/NPCs.
 function vehicleRunover(p){
   const sp=Math.hypot(p.v,Math.hypot(p.push.x,p.push.z)); if(sp<5||!(p.driver||p.pushSp>6)) return;
-  const fx=p.v>=0?-Math.sin(p.yaw):Math.sin(p.yaw), fz=p.v>=0?-Math.cos(p.yaw):Math.cos(p.yaw), nx=p.mesh.position.x+fx*1.6, nz=p.mesh.position.z+fz*1.6, now=performance.now();
+  const fx=p.v>=0?-Math.sin(p.yaw):Math.sin(p.yaw), fz=p.v>=0?-Math.cos(p.yaw):Math.cos(p.yaw), nx=p.mesh.position.x+fx*2.4, nz=p.mesh.position.z+fz*2.4, now=performance.now();
   enemies.forEach(en=>{ if(!en.alive) return; if(en.carHitUntil&&now<en.carHitUntil) return;
-    const q=en.mesh.position; if(Math.abs(q.y-p.mesh.position.y)>3||Math.hypot(q.x-nx,q.z-nz)>1.9) return;
+    const q=en.mesh.position; if(Math.abs(q.y-p.mesh.position.y)>3||Math.hypot(q.x-nx,q.z-nz)>2.7) return;
     en.carHitUntil=now+450; const d=new THREE.Vector3(fx+(q.x-nx)*.3,0,fz+(q.z-nz)*.3).normalize();
     damageEnemy(en,sp*1.9,d,{heavy:true,knock:sp*.5}); damageVehicle(p,2.5,'hit'); if(p.driver) shakeCamera(.15); });
-  if(!p.driver && !player.driving && player.invuln<=0 && Math.hypot(player.pos.x-nx,player.pos.z-nz)<1.9 && Math.abs(player.pos.y-1-p.by)<2.2){ player.health-=10; player.invuln=.6; flashDamage(); player.vel.x+=fx*4; player.vel.z+=fz*4; }
+  if(!p.driver && !player.driving && player.invuln<=0 && Math.hypot(player.pos.x-nx,player.pos.z-nz)<2.7 && Math.abs(player.pos.y-1-p.by)<2.2){ player.health-=10; player.invuln=.6; flashDamage(); player.vel.x+=fx*4; player.vel.z+=fz*4; }
 }
-function pickTrafficSpot(){
+function pickTrafficSpot(){        // lane-accurate: street 1 lane/direction, avenue 2, boulevard 3
   for(let t=0;t<8;t++){
-    const axisZ=Math.random()<.5, lane=Math.random()<.5?0.5:2.5, sgn=lane<1?1:-1;
-    const along=(Math.random()<.5?-1:1)*(28+Math.random()*30);
-    let x,z,yaw;
-    if(axisZ){ x=Math.round((player.pos.x+(Math.random()-.5)*60-1.5)/16)*16+lane; z=player.pos.z+along; yaw=sgn>0?0:Math.PI; }
-    else { z=Math.round((player.pos.z+(Math.random()-.5)*60-1.5)/16)*16+lane; x=player.pos.x+along; yaw=sgn>0?Math.PI/2:-Math.PI/2; }
+    const axisZ=Math.random()<.5, p=axisZ?player.pos.x:player.pos.z, o=axisZ?player.pos.z:player.pos.x;
+    const L=nearestLine(p+(Math.random()-.5)*160); if(Math.abs(L.pos-p)>130) continue;
+    const lanes=L.level===3?3:L.level===2?2:1, li=Math.floor(Math.random()*lanes*2), sg=li<lanes?1:-1, off=sg*((li%lanes)+.5)*(L.a/lanes);
+    const along=o+(Math.random()<.5?-1:1)*(60+Math.random()*70);
+    let x,z,yaw; if(axisZ){ x=L.pos+off; z=along; yaw=sg>0?0:Math.PI; } else { z=L.pos+off; x=along; yaw=sg>0?Math.PI/2:-Math.PI/2; }
     if(Math.abs(x)>WORLD_LIMIT-8||Math.abs(z)>WORLD_LIMIT-8) continue;
-    const gx=Math.round(x), gz=Math.round(z); if(columnHeight[colKey(gx,gz)]===undefined) continue;
-    if(props.some(q=>q.veh&&Math.hypot(q.mesh.position.x-x,q.mesh.position.z-z)<9)) continue;
+    if(props.some(q=>q.veh&&Math.hypot(q.mesh.position.x-x,q.mesh.position.z-z)<16)) continue;
     if(blockedAt(x,z,GY)) continue;
     return {x,z,yaw};
   }
@@ -3438,17 +3647,17 @@ function pickTrafficSpot(){
 }
 function spawnTraffic(){
   const sp=pickTrafficSpot(); if(!sp) return;
-  const car=makeBoulder(sp.x,GY+CAR_H,sp.z,1.9,CARCOL[Math.floor(Math.random()*6)],true);
+  const car=makeBoulder(sp.x,GY+CAR_H,sp.z,CAR_S,CARCOL[Math.floor(Math.random()*6)],true);
   car.yaw=sp.yaw; car.by=groundTopAt(sp.x,sp.z); car.mesh.position.y=car.by+CAR_H; car.mesh.rotation.y=sp.yaw;
-  car.traffic=true; car.cruise=5.5+Math.random()*3.5; car.v=car.cruise*.7; car.tBlocked=0;
+  car.traffic=true; car.cruise=(5.5+Math.random()*3.5)*CK*1.15; car.v=car.cruise*.7; car.tBlocked=0;
 }
 function trafficAI(p,dt){
   // Keep to the lane, slow for anything in front (player, replicas, enemies, other cars), despawn if stuck.
   const fx=-Math.sin(p.yaw), fz=-Math.cos(p.yaw), m=p.mesh.position; let want=p.cruise;
-  const chk=(x,z,y)=>{ const dx=x-m.x, dz=z-m.z, f=dx*fx+dz*fz, sd=Math.abs(dx*fz-dz*fx); if(f>1&&f<9&&sd<1.7&&Math.abs(y-m.y)<3) want=Math.min(want,Math.max(0,(f-3.4)*1.3)); };
+  const chk=(x,z,y)=>{ const dx=x-m.x, dz=z-m.z, f=dx*fx+dz*fz, sd=Math.abs(dx*fz-dz*fx); if(f>1&&f<15&&sd<2.5&&Math.abs(y-m.y)<3.5) want=Math.min(want,Math.max(0,(f-5)*1.4)); };
   chk(player.pos.x,player.pos.z,player.pos.y);
   for(const en of enemies) if(en.alive) chk(en.mesh.position.x,en.mesh.position.z,en.mesh.position.y);
-  for(const q of props) if(q!==p&&q.veh&&q.mesh.position.distanceTo(m)<12) chk(q.mesh.position.x,q.mesh.position.z,q.mesh.position.y);
+  for(const q of props) if(q!==p&&q.veh&&q.mesh.position.distanceTo(m)<18) chk(q.mesh.position.x,q.mesh.position.z,q.mesh.position.y);
   if(carried) chk(carried.mesh.position.x,carried.mesh.position.z,m.y);
   const a=want<p.v?15:3.2; p.v+=Math.sign(want-p.v)*Math.min(Math.abs(want-p.v),a*dt);
   if(p.v<.3 && want<.3) p.stuckT=(p.stuckT||0)+dt; else p.stuckT=0;
@@ -3512,17 +3721,17 @@ function updateVehicles(dt){
   // traffic population
   trafficT-=dt;
   if(trafficT<=0){ trafficT=1.6;
-    let n=0; for(const q of props) if(q.veh&&q.traffic){ n++; if(Math.hypot(q.mesh.position.x-player.pos.x,q.mesh.position.z-player.pos.z)>85) q.despawn=true; }
+    let n=0; for(const q of props) if(q.veh&&q.traffic){ n++; if(Math.hypot(q.mesh.position.x-player.pos.x,q.mesh.position.z-player.pos.z)>190) q.despawn=true; }
     if(n<(TRAFFIC_MAX[QUALITY.level]||4) && !player.flying) spawnTraffic();
   }
   // contextual ENTER / EXIT button + drive HUD
-  vehNear = player.driving ? null : (player.alive&&!carried&&!player.flying&&!player.swimming ? nearestCar(3.8) : null);
+  vehNear = player.driving ? null : (player.alive&&!carried&&!player.flying&&!player.swimming ? nearestCar(5.6) : null);
   const btn=document.getElementById('veh-btn'), hud=document.getElementById('veh-hud');
   const showBtn = !!player.driving || !!vehNear;
   if(btn.style.display!==(showBtn?'flex':'none')) btn.style.display=showBtn?'flex':'none';
   if(showBtn){ const t=player.driving?'EXIT':'ENTER VEHICLE'; const te=document.getElementById('veh-btn-t'); if(te.textContent!==t){ te.textContent=t; } btn.classList.toggle('exit',!!player.driving); }
   if(hud.style.display!==(player.driving?'flex':'none')) hud.style.display=player.driving?'flex':'none';
-  if(player.driving){ const c=player.driving; document.getElementById('veh-spd').textContent=Math.round(Math.abs(c.v)*3.6)+' KM/H';
+  if(player.driving){ const c=player.driving; document.getElementById('veh-spd').textContent=Math.round(Math.abs(c.v)*2.63)+' KM/H';
     const f=document.getElementById('veh-hp'); f.style.width=Math.max(0,c.hp)+'%'; f.style.background=c.hp<30?'#ff4a4a':c.hp<60?'#ffc04a':'#39ff8a'; }
 }
 (function(){ const b=document.getElementById('veh-btn'); const go=e=>{ e.preventDefault(); e.stopPropagation(); Audio_.resume&&Audio_.resume(); b.classList.add('active'); vehicleButton(); };
@@ -3615,7 +3824,7 @@ function updatePlayerOnFoot(dt){
   let mx = moveInput.x, my = moveInput.y;
   const mag = Math.hypot(mx,my); if(mag>1){ mx/=mag; my/=mag; }
   const speedMult = player.speedBurstT>0 ? (player.form.special.speedMult||1) : 1;
-  const speed = player.form.speed * speedMult * (player.dashT>0 ? ((player.superSpeed||0)>.2 ? 1.3 : 1+3.6*Math.pow(player.dashT/.32,.7)) : 1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*8) * (1+(player.rollT||0)*5) * ((player.runLatch||keys['ShiftLeft']||keys['ShiftRight']) && !player.flying && !player.swimming && !carried && player.form.id!=='xlr8' ? 1.5 : 1) * (player.leapCharging ? 0.35 : 1);
+  const speed = player.form.speed * speedMult * (player.dashT>0 ? ((player.superSpeed||0)>.2 ? 1.3 : 1+3.6*Math.pow(player.dashT/.32,.7)) : 1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*12) * (1+(player.rollT||0)*5) * ((player.runLatch||keys['ShiftLeft']||keys['ShiftRight']) && !player.flying && !player.swimming && !carried && player.form.id!=='xlr8' ? 1.5 : 1) * (player.leapCharging ? 0.35 : 1);
   let moveX = forward.x*my + right.x*mx;
   let moveZ = forward.z*my + right.z*mx;
   if(player.dashT>0){ moveX=player.dashDir.x; moveZ=player.dashDir.z; player.dashT-=dt; }
@@ -3914,6 +4123,7 @@ function loop(){
   document.getElementById('slow-overlay').style.opacity = player.slowT>0?1:0;
   const wdt = dt*timeScale;
   updateChunkStreaming(player.pos.x, player.pos.z, dt);
+  updateMetropolis(player.pos.x, player.pos.z, dt);
   water.position.x = player.pos.x; water.position.z = player.pos.z;
   updateDayNight(wdt);
   updatePlayer(dt);
@@ -3927,7 +4137,7 @@ function loop(){
   updateSpeedEffects(dt);
   const under = camera.position.y < WATER_LEVEL+0.4;
   if(under){ scene.fog.color.set(0x1d5c8c); scene.background = scene.fog.color.clone(); }
-  scene.fog.near = under?1:14; scene.fog.far = under?26:QUALITY.presets[QUALITY.level].fogFar;
+  { const ff=QUALITY.presets[QUALITY.level].fogFar; scene.fog.near = under?1:Math.max(14,ff*0.3); scene.fog.far = under?26:ff; }
   if(camShake>0){ camShake=Math.max(0,camShake-dt*2); camera.position.x += (Math.random()-0.5)*camShake; camera.position.y += (Math.random()-0.5)*camShake; }
   syncHud();
   renderer.render(scene, camera);
@@ -3947,7 +4157,8 @@ document.getElementById('btn-about').addEventListener('click', ()=> showPanel(
   'OMNITRIX: VOXEL PROTOCOL — an original fan-made prototype blending a Minecraft-style voxel world with Ben 10 Alien Force-inspired transformation and combat mechanics. All characters, names and visuals here are original interpretations.'
 ));
 document.getElementById('btn-settings').addEventListener('click', ()=>{
-  showPanel('<div>GRAPHICS QUALITY</div><div id="quality-row"></div><div style="margin-top:14px">OMNITRIX TIMER</div><div id="omni-row"></div>');
+  showPanel('<div>GRAPHICS QUALITY</div><div id="quality-row"></div><div style="margin-top:14px">OMNITRIX TIMER</div><div id="omni-row"></div><div style="margin-top:14px">PERFORMANCE STATS</div><div id="perf-row"></div>');
+  { const prow=document.getElementById('perf-row'); [['OFF',false],['ON',true]].forEach(([t,v])=>{ const b=document.createElement('div'); b.className='qbtn'+(PERF.on===v?' active':''); b.textContent=t; b.addEventListener('click',()=>{ setPerf(v); [...prow.children].forEach(c=>c.classList.remove('active')); b.classList.add('active'); }); prow.appendChild(b); }); }
   { const orow=document.getElementById('omni-row'); [['ON',true],['OFF',false]].forEach(([t,v])=>{ const b=document.createElement('div'); b.className='qbtn'+(OMNI.enabled===v?' active':''); b.textContent=t;
       b.addEventListener('click',()=>{ OMNI.enabled=v; [...orow.children].forEach(c=>c.classList.remove('active')); b.classList.add('active'); }); orow.appendChild(b); }); }
   const row = document.getElementById('quality-row');

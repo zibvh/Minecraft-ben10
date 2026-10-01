@@ -2,8 +2,8 @@ const {boot}=require('./vmharness.js');
 const g=boot(); g.start(); g.step(30); const d=g.d;
 // clear existing hostile enemies, then surround the player with 6 melee grunts at 5 units
 d.enemies.filter(e=>!e.npc).forEach(e=>{ e.alive=false; e.mesh.position.set(9999,0,9999); });
-d.player.pos.set(2,d.groundTopAt(2,55)+1,55); d.player.health=9999; g.step(3);
-const es=[]; for(let i=0;i<6;i++){ const a=i/6*6.283; es.push(d.makeEnemy('normal',2+Math.cos(a)*5,55+Math.sin(a)*5)); }
+d.player.pos.set(40,d.groundTopAt(40,500)+1,500); d.player.health=9999; g.step(3);
+const es=[]; for(let i=0;i<6;i++){ const a=i/6*6.283; es.push(d.makeEnemy('normal',40+Math.cos(a)*5,500+Math.sin(a)*5)); }
 es.forEach(e=>{ e.state='chase'; e.alertedT=99; });
 let maxAtk=0, hits=0, lastHp=d.player.health, closeMax=0, frames=0; const hitTimes=[];
 for(let i=0;i<60*12;i++){ g.step(1); d.player.invuln=0;
