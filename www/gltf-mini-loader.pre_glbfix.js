@@ -98,23 +98,8 @@
     }
     await Promise.all(tasks);
     root.updateMatrixWorld(true);
-    root.traverse(o=>{
-      if(o.isSkinnedMesh&&o.userData.gltfSkin){
-        o.frustumCulled=false;
-        if(o.material){
-          const mats=Array.isArray(o.material)?o.material:[o.material];
-          mats.forEach(mat=>{ if(mat){ mat.side=THREE.DoubleSide; mat.transparent=false; mat.depthWrite=true; mat.needsUpdate=true; } });
-        }
-        o.userData.gltfSkin.skeleton.update();
-        o.updateMatrixWorld(true);
-      }
-      if(o.isMesh){
-        o.frustumCulled=false;
-        o.userData.sourceGLB=url;
-        o.userData.bindPose=!o.isSkinnedMesh;
-        o.userData.gltfSkinned=!!o.isSkinnedMesh;
-      }
-    });
+    root.traverse(o=>{if(o.isSkinnedMesh&&o.userData.gltfSkin){o.userData.gltfSkin.skeleton.update();}});
+    root.traverse(o=>{if(o.isMesh){o.frustumCulled=true;o.userData.sourceGLB=url;o.userData.bindPose=!o.isSkinnedMesh;o.userData.gltfSkinned=!!o.isSkinnedMesh;}});
     return root;
   }
   global.MiniGLTF={load};
