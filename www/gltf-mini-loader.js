@@ -62,7 +62,7 @@
     if(tex) opts.map=tex;
     if(md.alpha==='BLEND') opts.transparent=true;
     if(md.alpha==='MASK'){opts.transparent=true;opts.alphaTest=md.m.alphaCutoff==null?.5:md.m.alphaCutoff;}
-    if(json.extensionsUsed&&json.extensionsUsed.indexOf('KHR_materials_unlit')>=0&&md.m.extensions&&md.m.extensions.KHR_materials_unlit) material=new THREE.MeshBasicMaterial(opts); else material=new THREE.MeshStandardMaterial(opts);
+    if(json.extensionsUsed&&json.extensionsUsed.indexOf('KHR_materials_unlit')>=0&&md.m.extensions&&md.m.extensions.KHR_materials_unlit){ const basic=Object.assign({},opts); delete basic.roughness; delete basic.metalness; material=new THREE.MeshBasicMaterial(basic); } else material=new THREE.MeshStandardMaterial(opts);
     if(md.emissive) material.emissive=new THREE.Color(...md.emissive);
     const mesh=skin?new THREE.SkinnedMesh(g,material):new THREE.Mesh(g,material); mesh.castShadow=true; mesh.receiveShadow=true; if(skin){ mesh.userData._skin=skin; if(mesh.normalizeSkinWeights) mesh.normalizeSkinWeights(); } return mesh;
   }
@@ -98,7 +98,7 @@
       const md=json.meshes[n.mesh]; for(const pr of md.primitives||[]){
         const texIdx=pr.material!=null&&json.materials&&json.materials[pr.material]&&json.materials[pr.material].pbrMetallicRoughness&&json.materials[pr.material].pbrMetallicRoughness.baseColorTexture;
         const skin=n.skin!=null?skins[n.skin]:null;
-        tasks.push((async()=>{const tex=await textureFor(texIdx&&texIdx.index);const mesh=buildPrimitive(json,bin,pr,pr.material,tex,skin);if(mesh){mesh.name=md.name||n.name||('mesh_'+n.mesh);nodes[ni].add(mesh); if(skin){ nodes[ni].updateMatrixWorld(true); mesh.bind(skin.skeleton,nodes[ni].matrixWorld); mesh.userData.gltfSkin=skin; }}})());
+        tasks.push((async()=>{let tex=null; try{ tex=await textureFor(texIdx&&texIdx.index); }catch(err){ console.warn('[ALIEN GLB] texture failed for '+url+'; using material fallback.',err); } const mesh=buildPrimitive(json,bin,pr,pr.material,tex,skin);if(mesh){mesh.name=md.name||n.name||('mesh_'+n.mesh);nodes[ni].add(mesh); if(skin){ nodes[ni].updateMatrixWorld(true); mesh.bind(skin.skeleton,new THREE.Matrix4()); mesh.userData.gltfSkin=skin; }}})());
       }
     }
     await Promise.all(tasks);
@@ -117,7 +117,7 @@
         o.frustumCulled=false;
         o.userData.sourceGLB=url;
         o.userData.bindPose=!o.isSkinnedMesh;
-        o.userData.gltfSkinned=!!o.isSkinnedMesh;
+        o.userData.gltfSkinned=!!o.isSkinnedMesh; if(o.isSkinnedMesh){ o.visible=true; o.skeleton.update(); if(o.computeBoundingBox) o.computeBoundingBox(); if(o.computeBoundingSphere) o.computeBoundingSphere(); }
       }
     });
     return root;

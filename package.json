@@ -4,7 +4,8 @@
   "private": true,
   "description": "Omniverse: ZERO voxel city game, packaged as an Android app with Capacitor",
   "scripts": {
-    "build": "echo 'static site, nothing to build' && exit 0"
+    "build": "echo 'static site, nothing to build' && exit 0",
+    "test:glb": "node tests/test_glb_pipeline.js"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",

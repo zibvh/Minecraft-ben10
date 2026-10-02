@@ -1729,6 +1729,33 @@ function importedMeshFilter(kind){
   if(kind!=='echo_echo') return null;
   return (n,ni,json)=>{ const m=json.nodes[ni].mesh; return m===55||m===56||m===57; };
 }
+function importedVisualBounds(root){
+  root.updateMatrixWorld(true);
+  const out=new THREE.Box3(); let has=false;
+  root.traverse(o=>{
+    if(!o.isMesh) return;
+    let bb=null;
+    if(o.isSkinnedMesh){
+      o.skeleton&&o.skeleton.update();
+      if(o.computeBoundingBox){ o.computeBoundingBox(); bb=o.boundingBox; }
+      else {
+        const pos=o.geometry&&o.geometry.attributes&&o.geometry.attributes.position;
+        if(pos){
+          const mn=new THREE.Vector3(Infinity,Infinity,Infinity), mx=new THREE.Vector3(-Infinity,-Infinity,-Infinity), v=new THREE.Vector3();
+          for(let i=0;i<pos.count;i++){ v.fromBufferAttribute(pos,i); if(o.boneTransform) o.boneTransform(i,v); mn.min(v); mx.max(v); }
+          bb=new THREE.Box3(mn,mx);
+        }
+      }
+    } else if(o.geometry){
+      if(!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      bb=o.geometry.boundingBox;
+    }
+    if(!bb||!isFinite(bb.min.x)||!isFinite(bb.max.x)) return;
+    const wb=bb.clone().applyMatrix4(o.matrixWorld);
+    if(!has){out.copy(wb);has=true;}else out.union(wb);
+  });
+  return has?out:null;
+}
 async function getImportedAlien(kind){
   if(!IMPORTED_ALIEN_ASSETS[kind]||!window.MiniGLTF) return null;
   if(importedAlienCache[kind]) return importedAlienCache[kind];
@@ -1740,9 +1767,17 @@ async function getImportedAlien(kind){
       // rig before height fitting so its long shell axis becomes the game's Y/up axis.
       if(kind==='cannonbolt'){ root.rotation.z=Math.PI/2; root.userData.axisCorrection='Z+90'; }
       root.updateMatrixWorld(true);
-      const box=new THREE.Box3().setFromObject(root), h=Math.max(.0001,box.max.y-box.min.y);
-      const k=spec.height/h; root.scale.setScalar(k); root.updateMatrixWorld(true);
-      const b2=new THREE.Box3().setFromObject(root); root.position.y-=b2.min.y; root.updateMatrixWorld(true);
+      const box=importedVisualBounds(root) || new THREE.Box3().setFromObject(root);
+      const h=Math.max(.0001,box.max.y-box.min.y);
+      // Normalize from the ACTUAL SKINNED bounds, not the bind-pose geometry bounds.
+      // The supplied FBX exports contain armature scales and large offsets; using a raw
+      // Box3 can place or size the final character wildly incorrectly.
+      const center=new THREE.Vector3((box.min.x+box.max.x)*.5,0,(box.min.z+box.max.z)*.5);
+      const k=spec.height/h; root.scale.setScalar(k);
+      // Object3D position is not multiplied by its own scale, so apply the
+      // scaled center offset explicitly.
+      root.position.x-=center.x*k; root.position.z-=center.z*k; root.updateMatrixWorld(true);
+      const b2=importedVisualBounds(root) || new THREE.Box3().setFromObject(root); root.position.y-=b2.min.y; root.updateMatrixWorld(true);
       root.userData.importedKind=kind; root.userData.targetHeight=spec.height;
       importedAlienCache[kind]=root;
       return root;
@@ -1775,24 +1810,25 @@ function buildImportedBoneMap(root,kind){
   } else if(kind==='heatblast'){
     map.hips=pick(/bip_pelvis/); map.chest=pick(/bip_spine_2/,/bip_spine_1/); map.head=pick(/bip_head/);
     map.lUpper=pick(/bip_upperarm_l/); map.lFore=pick(/bip_lowerarm_l/); map.rUpper=pick(/bip_upperarm_r/); map.rFore=pick(/bip_lowerarm_r/);
-    map.lThigh=pick(/bip_thigh_l/,/bip_upperleg_l/); map.lShin=pick(/bip_calf_l/,/bip_lowerleg_l/); map.rThigh=pick(/bip_thigh_r/,/bip_upperleg_r/); map.rShin=pick(/bip_calf_r/,/bip_lowerleg_r/);
+    map.lThigh=pick(/bip_hip_l/,/bip_thigh_l/,/bip_upperleg_l/); map.lShin=pick(/bip_knee_l/,/bip_calf_l/,/bip_lowerleg_l/); map.rThigh=pick(/bip_hip_r/,/bip_thigh_r/,/bip_upperleg_r/); map.rShin=pick(/bip_knee_r/,/bip_calf_r/,/bip_lowerleg_r/);
   } else if(kind==='cannonbolt'){
-    map.hips=pick(/^hips_01/); map.chest=pick(/^chest_07/,/^spine_06/); map.head=pick(/head/);
+    map.hips=pick(/^hips_01/); map.chest=pick(/^chest_07/,/^spine_06/); map.head=pick(/head/,/^spine_06/,/^chest_07/);
     map.lUpper=pick(/^left arm_029/); map.lFore=pick(/^left elbow_030/); map.rUpper=pick(/^right arm_09/); map.rFore=pick(/^right elbow_010/);
     map.lThigh=pick(/wideleg[_\.].*l_/,/wideleg_l/); map.lShin=pick(/wideknee[_\.].*l_/,/wideknee_l/); map.rThigh=pick(/wideleg[_\.].*r_/,/wideleg_r/); map.rShin=pick(/wideknee[_\.].*r_/,/wideknee_r/);
   } else if(kind==='echo_echo'){
-    // Echo's exported rig uses numbered Blender bones. Its first 57 joints are stable across
-    // the three Echo skins: root, spine/head chain, then the paired limbs. Use joint order
-    // plus local X sign to identify the limbs rather than depending on generated suffixes.
-    map.hips=bones[0]||null; map.chest=bones[2]||bones[1]||null; map.head=bones.find(b=>/bone\.0?43/i.test(b.name||''))||bones[1]||null;
-    const limbs=bones.slice(1).filter(b=>{const n=(b.name||'').toLowerCase();return !n.includes('end');});
-    const left=limbs.filter(b=>b.position.x>0.01), right=limbs.filter(b=>b.position.x<-0.01);
-    const byY=(arr,hi)=>arr.slice().sort((a,b)=>b.position.y-a.position.y)[0]||null;
-    map.lUpper=byY(left); map.rUpper=byY(right);
-    const childOf=(b)=>b&&b.children.find(c=>bones.includes(c)&&!/_end/i.test(c.name||''));
-    map.lFore=childOf(map.lUpper); map.rFore=childOf(map.rUpper);
-    const legs=limbs.filter(b=>Math.abs(b.position.x)>0.01&&b.position.y<0); const ll=legs.filter(b=>b.position.x>0), rr=legs.filter(b=>b.position.x<0);
-    map.lThigh=byY(ll); map.rThigh=byY(rr); map.lShin=childOf(map.lThigh); map.rShin=childOf(map.rThigh);
+    // Echo Echo's exporter contains three duplicated 57-joint skins and numbered Blender
+    // bones. The local X of these joints is effectively zero, so the old mapper could not
+    // identify limbs from local positions. Use their authored WORLD positions after the
+    // complete hierarchy has been updated: negative X is the character's left side and
+    // positive X is the right side. The chain names are stable across all three skins.
+    const named=(re)=>bones.find(b=>re.test(b.name||''))||null;
+    map.hips=named(/^Bone\.043_/i)||bones[0]||null;
+    map.chest=named(/^Bone\.002_/i)||named(/^Bone\.003_/i)||bones[3]||null;
+    map.head=named(/^Bone\.004_/i)||bones[6]||null;
+    map.lUpper=named(/^Bone\.021_/i); map.lFore=named(/^Bone\.022_/i);
+    map.rUpper=named(/^Bone\.006_/i); map.rFore=named(/^Bone\.007_/i);
+    map.lThigh=named(/^Bone\.010_/i); map.lShin=named(/^Bone\.011_/i);
+    map.rThigh=named(/^Bone\.013_/i); map.rShin=named(/^Bone\.014_/i);
   }
   map.ready=!!(map.hips||map.chest||map.lUpper||map.rUpper);
   return map;
@@ -1836,7 +1872,7 @@ function cloneImportedAlienRig(source,kind){
 function attachImportedAlienVisual(model,kind){
   if(!IMPORTED_ALIEN_ASSETS[kind]) return;
   getImportedAlien(kind).then(imported=>{
-    if(!imported||!model||model.userData.kind!==kind) return;
+    if(!imported || !model || model.userData.kind !== kind) return;
     const old=model.userData.importedVisual; if(old) model.remove(old);
     let hasSkinned=false,meshCount=0; imported.traverse(o=>{ if(o.isSkinnedMesh) hasSkinned=true; if(o.isMesh) meshCount++; });
     // Four Arms' supplied GLB is intentionally preserved as an asset, but it has no skeleton.

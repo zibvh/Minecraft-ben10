@@ -1,0 +1,35 @@
+OMNIVERSE: ZERO — GLB PIPELINE REPAIR
+
+This revision keeps the existing game/physics/animation system and repairs the supplied GLB integration.
+
+Pipeline fixes:
+- Supplied JOINTS_0 / WEIGHTS_0 are exposed as Three.js skinIndex / skinWeight attributes.
+- SkinnedMesh binding uses the glTF-compatible identity bind matrix instead of binding against the fully scaled scene node.
+- Texture failures are non-fatal; geometry falls back to the material base color instead of aborting the entire GLB.
+- Imported skinned meshes have frustum culling disabled and are forced visible/double-sided/depth-writing.
+- Imported visual fitting uses the actual skinned/deformed bounds, not raw bind-pose geometry bounds.
+- Large FBX armature offsets are centered before scaling.
+- Cannonbolt is rotated into the game's Y-up presentation before fitting.
+- Imported skeletons are explicitly rebound after cloning.
+- Imported skeleton matrices are refreshed after gameplay poses.
+- XLR8, Heatblast, Cannonbolt and Echo Echo bone maps were calibrated against the actual supplied joint names/hierarchy.
+- Echo Echo uses its authored world-space joint layout rather than unreliable local-X heuristics.
+- Four Arms remains on the existing procedural articulated rig because its supplied GLB is unrigged.
+- getImportedAlien() always returns a Promise, so the existing game tests remain safe when the loader is unavailable.
+
+Validation performed:
+- Real supplied GLBs parsed through the actual offline loader.
+- XLR8: 1 SkinnedMesh / 66 bones.
+- Heatblast: 12 SkinnedMeshes / 69 bones.
+- Cannonbolt: 3 SkinnedMeshes / 62 bones.
+- Echo Echo: 3 SkinnedMeshes / 57 bones per skin.
+- All four have valid skinIndex/skinWeight data.
+- All four fit to their target heights with finite, sane bounds.
+- Bone rotations measurably deform the actual skinned vertices on all four.
+- Bone maps contain all required gameplay pose joints on all four.
+- Existing t_omni gameplay regression test passes with 0 errors.
+- Existing boot/frame test passes with 0 errors.
+- New tests/test_glb_pipeline.js passes all four supplied rigged assets.
+
+Not claimed:
+- No physical Android/WebView GPU capture was available in this environment. The final APK must still be tested on-device.
