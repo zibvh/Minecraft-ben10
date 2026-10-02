@@ -1,4 +1,4 @@
-# Ben 10 City — Android build
+# Omniverse: ZERO — Android build
 
 This wraps `www/index.html` (the game) as an Android app using Capacitor,
 and builds it automatically with GitHub Actions.
@@ -9,7 +9,7 @@ and builds it automatically with GitHub Actions.
    ```
    git init
    git add .
-   git commit -m "Ben 10 city app"
+   git commit -m "Omniverse ZERO app"
    git branch -M main
    git remote add origin <your-repo-url>
    git push -u origin main
@@ -17,7 +17,7 @@ and builds it automatically with GitHub Actions.
 2. Go to the repo's **Actions** tab. The "Build Android APK" workflow runs
    automatically on push (or click "Run workflow" to trigger it by hand).
 3. When it finishes (a few minutes), open the completed run and download
-   the **ben10-city-debug-apk** artifact — that's your installable APK.
+   the **omniverse-zero-debug-apk** artifact — that's your installable APK.
 4. Copy it to your phone and open it (you'll need to allow "install from
    unknown sources" once). This is a debug build, unsigned, fine for your
    own device but not for the Play Store.

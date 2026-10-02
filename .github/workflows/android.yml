@@ -57,6 +57,22 @@ jobs:
       - name: Sync web assets into Android project
         run: npx cap sync android
 
+      - name: Install Omniverse ZERO launcher icon
+        run: |
+          # Capacitor creates its default launcher assets during `cap add android`.
+          # Replace those generated assets with the game's bundled icon before Gradle.
+          cp app-icons/mipmap-mdpi/ic_launcher.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          cp app-icons/mipmap-mdpi/ic_launcher_round.png android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+          cp app-icons/mipmap-hdpi/ic_launcher.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          cp app-icons/mipmap-hdpi/ic_launcher_round.png android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+          cp app-icons/mipmap-xhdpi/ic_launcher.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          cp app-icons/mipmap-xhdpi/ic_launcher_round.png android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
+          cp app-icons/mipmap-xxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          cp app-icons/mipmap-xxhdpi/ic_launcher_round.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+          cp app-icons/mipmap-xxxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          cp app-icons/mipmap-xxxhdpi/ic_launcher_round.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
@@ -67,5 +83,5 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ben10-city-debug-apk
+          name: omniverse-zero-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk

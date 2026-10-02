@@ -118,14 +118,24 @@ setTimeout(() => {
   step(240);
   check('eventually returns to normal', p.superT < 0.05, `superT=${p.superT.toFixed(3)}`);
 
-  console.log('\n=== Test 5: FOV widens at speed and returns afterward ===');
+  console.log('\n=== Test 5: FOV widens slightly at speed and returns afterward ===');
   p.superHeld = true; p.superT = 1; p.superSpeed = 1; p.energy = xlr8.maxEnergy;
   for(let i=0;i<90;i++){ p.superHeld = true; p.energy = xlr8.maxEnergy; d.updatePlayer(DT); d.updateSpeedEffects(DT); }
   const fovFast = d.camera.fov;
-  check('camera FOV is wider at max speed', fovFast > d.BASE_FOV + 15, `fov=${fovFast.toFixed(1)} base=${d.BASE_FOV}`);
+  check('camera FOV is wider at max speed', fovFast > d.BASE_FOV + 6, `fov=${fovFast.toFixed(1)} base=${d.BASE_FOV}`);
+  check('camera FOV does not become excessively wide', fovFast <= d.BASE_FOV + d.XLR8_MAX_FOV_BOOST + 0.5, `fov=${fovFast.toFixed(1)}`);
   p.superHeld = false; p.superT = 0;
   for(let i=0;i<120;i++){ d.updatePlayer(DT); d.updateSpeedEffects(DT); }
   check('FOV returns to normal after slowing', d.camera.fov < d.BASE_FOV + 2, `fov=${d.camera.fov.toFixed(1)}`);
+
+  console.log('\n=== Test 5b: XLR8 camera stays close enough to keep the character visible ===');
+  p.superHeld = false; p.superT = 0; p.superSpeed = 0; p.energy = xlr8.maxEnergy;
+  d.updateCamera();
+  const normalCamDist = d.camera.position.distanceTo(p.pos);
+  p.superHeld = true; p.superT = 1; p.superSpeed = 1;
+  for(let i=0;i<120;i++){ d.updatePlayer(DT); d.updateCamera(); }
+  const fastCamDist = d.camera.position.distanceTo(p.pos);
+  check('XLR8 camera distance increases only modestly at max speed', fastCamDist < normalCamDist*1.35, `normal=${normalCamDist.toFixed(2)} fast=${fastCamDist.toFixed(2)}`);
 
   console.log('\n=== Test 6: speed effects are pooled and bounded ===');
   p.superHeld = true; p.superT = 1; p.energy = xlr8.maxEnergy; p.onGround = true;
