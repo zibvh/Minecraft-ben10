@@ -1738,7 +1738,7 @@ async function getImportedAlien(kind){
       root.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });
       // Cannonbolt's supplied bind pose is authored on its side. Rotate the entire imported
       // rig before height fitting so its long shell axis becomes the game's Y/up axis.
-      if(kind==='cannonbolt') root.rotation.z=Math.PI/2;
+      if(kind==='cannonbolt'){ root.rotation.z=Math.PI/2; root.userData.axisCorrection='Z+90'; }
       root.updateMatrixWorld(true);
       const box=new THREE.Box3().setFromObject(root), h=Math.max(.0001,box.max.y-box.min.y);
       const k=spec.height/h; root.scale.setScalar(k); root.updateMatrixWorld(true);
@@ -1755,7 +1755,15 @@ function _boneFind(bones,tests){
   return null;
 }
 function buildImportedBoneMap(root,kind){
-  const bones=[]; root.traverse(o=>{ if(o.isBone) bones.push(o); });
+  // MiniGLTF preserves glTF joint nodes as Object3D/Group instances rather than
+  // THREE.Bone instances. Three's SkinnedMesh/Skeleton accepts these as bone objects
+  // because it consumes their matrixWorld, so collect the actual skeleton.bones instead
+  // of filtering on isBone (the previous filter silently produced an empty map).
+  const bones=[]; const seen=new Set();
+  root.traverse(o=>{
+    if(!o.isSkinnedMesh || !o.skeleton) return;
+    for(const b of (o.skeleton.bones||[])){ if(b && !seen.has(b)){ seen.add(b); bones.push(b); } }
+  });
   const all=bones.map(b=>(b.name||'').toLowerCase());
   const map={kind,bones,base:new Map()};
   bones.forEach(b=>map.base.set(b,b.quaternion.clone()));
@@ -1771,7 +1779,7 @@ function buildImportedBoneMap(root,kind){
   } else if(kind==='cannonbolt'){
     map.hips=pick(/^hips_01/); map.chest=pick(/^chest_07/,/^spine_06/); map.head=pick(/head/);
     map.lUpper=pick(/^left arm_029/); map.lFore=pick(/^left elbow_030/); map.rUpper=pick(/^right arm_09/); map.rFore=pick(/^right elbow_010/);
-    map.lThigh=pick(/left.*leg/); map.lShin=pick(/left.*knee/); map.rThigh=pick(/right.*leg/); map.rShin=pick(/right.*knee/);
+    map.lThigh=pick(/wideleg[_\.].*l_/,/wideleg_l/); map.lShin=pick(/wideknee[_\.].*l_/,/wideknee_l/); map.rThigh=pick(/wideleg[_\.].*r_/,/wideleg_r/); map.rShin=pick(/wideknee[_\.].*r_/,/wideknee_r/);
   } else if(kind==='echo_echo'){
     // Echo's exported rig uses numbered Blender bones. Its first 57 joints are stable across
     // the three Echo skins: root, spine/head chain, then the paired limbs. Use joint order
@@ -1790,33 +1798,36 @@ function buildImportedBoneMap(root,kind){
   return map;
 }
 function cloneImportedAlienRig(source,kind){
-  // Object3D.clone(true) is not sufficient for SkinnedMesh rigs: the cloned mesh can retain
-  // the source Skeleton's bone references. That produces the classic 'shadow but no body /
-  // frozen bind pose' failure once the source scene is detached. Rebind every cloned skin to
-  // the cloned bones before the model enters gameplay.
+  // Clone the hierarchy and explicitly map every source bone object to its clone.
+  // Name-based remapping is unsafe for Echo Echo because several exported skins can
+  // contain duplicate/generated bone names.
   const cloned=source.clone(true);
+  const srcObjects=[], cloneObjects=[];
+  source.traverse(o=>srcObjects.push(o));
+  cloned.traverse(o=>cloneObjects.push(o));
+  const objectMap=new Map();
+  const n=Math.min(srcObjects.length,cloneObjects.length);
+  for(let i=0;i<n;i++) objectMap.set(srcObjects[i],cloneObjects[i]);
+
   const srcSkins=[], cloneSkins=[];
   source.traverse(o=>{if(o.isSkinnedMesh) srcSkins.push(o);});
   cloned.traverse(o=>{if(o.isSkinnedMesh) cloneSkins.push(o);});
-  const cloneBones=[]; cloned.traverse(o=>{if(o.isBone) cloneBones.push(o);});
-  const byName=Object.create(null);
-  cloneBones.forEach(b=>{(byName[b.name]||(byName[b.name]=[])).push(b);});
+
   cloneSkins.forEach((sm,i)=>{
-    const src=srcSkins[i]; if(!src) return;
+    const src=srcSkins[i]; if(!src||!src.skeleton) return;
     const srcSkel=src.skeleton;
-    const bones=(srcSkel.bones||[]).map((b,bi)=>{
-      const list=byName[b.name]||[];
-      if(list.length===1) return list[0];
-      // Duplicate bone names are possible; preserve traversal/index order as a deterministic fallback.
-      return cloneBones.find(x=>x.name===b.name && !x.userData.__claimedBone)||cloneBones[bi]||cloneBones[0];
-    });
-    bones.forEach(b=>{if(b)b.userData.__claimedBone=true;});
+    const bones=(srcSkel.bones||[]).map((b,bi)=>objectMap.get(b)||null);
+    const valid=bones.every(Boolean);
+    if(!valid){ console.warn('[ALIEN GLB] '+kind+' skeleton remap incomplete on skin '+i); return; }
     const inverses=(srcSkel.boneInverses||[]).map(m=>m.clone());
-    sm.bind(new THREE.Skeleton(bones,inverses),src.bindMatrix.clone());
+    const skeleton=new THREE.Skeleton(bones,inverses);
+    sm.bind(skeleton,src.bindMatrix.clone());
+    sm.bindMode=src.bindMode||'attached';
     sm.frustumCulled=false;
+    if(sm.normalizeSkinWeights) sm.normalizeSkinWeights();
+    const mats=Array.isArray(sm.material)?sm.material:[sm.material];
+    mats.forEach(mat=>{if(mat){mat.side=THREE.DoubleSide;mat.transparent=false;mat.opacity=1;mat.depthWrite=true;mat.needsUpdate=true;}});
     sm.userData.gltfSkinned=true;
-    if(Array.isArray(sm.material)){sm.material.forEach(mat=>{if(mat){mat.side=THREE.DoubleSide;mat.needsUpdate=true;}});}
-    else if(sm.material){sm.material.side=THREE.DoubleSide;sm.material.needsUpdate=true;}
   });
   cloned.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.castShadow=true;o.receiveShadow=true;}});
   cloned.updateMatrixWorld(true);
@@ -1835,14 +1846,15 @@ function attachImportedAlienVisual(model,kind){
       return;
     }
     const rig=cloneImportedAlienRig(imported,kind);
-    if(!rig||!meshCount){ console.warn('[ALIEN GLB] '+kind+' produced no renderable meshes; keeping procedural fallback.'); return; }
+    let validSkin=true; rig.traverse(o=>{ if(o.isSkinnedMesh && (!o.geometry.getAttribute('skinIndex') || !o.geometry.getAttribute('skinWeight'))) validSkin=false; });
+    if(!rig||!meshCount||!validSkin){ console.warn('[ALIEN GLB] '+kind+' produced an invalid skin/render state; keeping procedural fallback.'); return; }
     model.add(rig); model.userData.importedVisual=rig;
     const map=buildImportedBoneMap(rig,kind); rig.userData.bonePoseMap=map;
     const parts=model.userData.parts; if(parts){ parts.importedVisual=rig; parts.importedBoneMap=map; }
     rig.updateMatrixWorld(true);
     // Only retire the old body after the imported rig has been attached and rebound.
     const procedural=model.userData.proceduralRoot; if(procedural) procedural.visible=false;
-    console.log('[ALIEN GLB] '+kind+' ready: '+meshCount+' meshes, '+map.bones.length+' bones, live skin binding.');
+    console.log('[ALIEN GLB] '+kind+' ready: '+meshCount+' meshes, '+map.bones.length+' bones, live skin binding.', rig.getWorldPosition(new THREE.Vector3()), rig.getWorldScale(new THREE.Vector3()));
   });
 }
 // Translate the game's mature procedural pose into the imported GLB skeleton. We reset each
@@ -2012,6 +2024,14 @@ function poseImportedAlien(parts,dt,inp,P){
     }
   }
 
+  // Imported-rig idle: keep the character visibly alive even when gameplay input is zero.
+  // This is deliberately tiny and is layered on top of the authored bind pose.
+  if(!inp.moving && !inp.atk && !inp.hurt && !inp.dead && !inp.flying && !inp.rolling){
+    const idle=Math.sin((A.t||0)*2.1);
+    chestX += idle*.018; headY += idle*.028;
+    lUpperZ += idle*.014; rUpperZ -= idle*.014;
+  }
+
   smooth(m.hips,hipsX,hipsY,hipsZ);
   smooth(m.chest,chestX,chestY,chestZ);
   smooth(m.head,headX,headY,headZ);
@@ -2033,6 +2053,14 @@ function poseImportedAlien(parts,dt,inp,P){
         spine[i].quaternion.slerp(target,Math.min(1,d*.8));
       }
     }
+  }
+
+  // The custom offline loader uses the actual glTF joint Object3D nodes as the
+  // Skeleton bones. Explicitly refresh their matrices after the gameplay pose so
+  // the skinning palette is current even on WebView render paths that defer it.
+  if(parts.importedVisual){
+    parts.importedVisual.updateMatrixWorld(true);
+    parts.importedVisual.traverse(o=>{ if(o.isSkinnedMesh&&o.skeleton) o.skeleton.update(); });
   }
 }
 

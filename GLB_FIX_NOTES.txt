@@ -1,0 +1,21 @@
+Omniverse: ZERO - GLB pipeline repair (verified pass)
+
+Critical fixes:
+1. glTF JOINTS_0 / WEIGHTS_0 map to Three.js skinIndex / skinWeight.
+2. The full glTF node hierarchy is updated BEFORE SkinnedMesh.bind() captures the bind matrix.
+3. Cloned SkinnedMesh instances rebind skeleton bones by exact source-object correspondence.
+4. Skinned meshes have frustum culling disabled, normalized weights, opaque/double-sided materials.
+5. The pose mapper collects the actual skeleton.bones used by the imported SkinnedMesh. The custom offline loader represents glTF joints as Object3D/Group nodes rather than THREE.Bone instances; filtering only isBone silently produced an empty animation map.
+6. Cannonbolt's supplied authored axis is corrected before height fitting and its WideLeg/WideKnee names are mapped.
+7. The existing gameplay animateRig() remains the source of walk/run/jump/attack/flight/roll poses; the imported skeleton receives those poses directly.
+8. After each imported pose, the imported hierarchy and skeleton palette are explicitly updated for WebView-safe rendering.
+9. Four Arms remains on the existing procedural articulated rig because its supplied GLB has no skin/bones.
+10. No remote assets/services were added; all GLBs remain bundled locally.
+
+Validation performed:
+- ZIP contents and all supplied GLBs verified.
+- Loader and all inline JS syntax checks pass.
+- Existing t_omni gameplay test passes with errors=0.
+- Software model raster harness runs and renders the existing character geometry.
+- Full jsdom tests could not run because jsdom is not installed in this environment.
+- A real Android WebView/GPU capture was not available, so final device rendering must still be tested on the target phone.

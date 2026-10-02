@@ -43,7 +43,7 @@
     const im=json.images[imgIndex], bv=json.bufferViews[im.bufferView];
     const bytes=bin.subarray((bv.byteOffset||0),(bv.byteOffset||0)+(bv.byteLength||0));
     const blob=new Blob([bytes],{type:im.mimeType||'image/png'}), u=URL.createObjectURL(blob);
-    cache[imgIndex]=new Promise((resolve,reject)=>{new THREE.TextureLoader().load(u,t=>{URL.revokeObjectURL(u);t.colorSpace=THREE.SRGBColorSpace||t.colorSpace;t.flipY=false;t.needsUpdate=true;resolve(t)},undefined,e=>{URL.revokeObjectURL(u);reject(e)})});
+    cache[imgIndex]=new Promise((resolve,reject)=>{new THREE.TextureLoader().load(u,t=>{URL.revokeObjectURL(u);if('colorSpace' in t && THREE.SRGBColorSpace) t.colorSpace=THREE.SRGBColorSpace; if('encoding' in t && THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; t.flipY=false;t.needsUpdate=true;resolve(t)},undefined,e=>{URL.revokeObjectURL(u);reject(e)})});
     return cache[imgIndex];
   }
   function matDef(json,mi){
@@ -53,7 +53,7 @@
   function buildPrimitive(json,bin,pr,mat,tex,skin){
     if((pr.mode==null?4:pr.mode)!==4) return null;
     const g=new THREE.BufferGeometry();
-    for(const k of ['POSITION','NORMAL','TEXCOORD_0','COLOR_0','JOINTS_0','WEIGHTS_0']) if(pr.attributes[k]!=null){const a=makeAccessor(json,bin,pr.attributes[k]);let item=a.nc; if(k==='POSITION'||k==='NORMAL')item=3; if(k==='JOINTS_0')item=a.nc;const attr=new THREE.BufferAttribute(a.data,item);g.setAttribute(k==='TEXCOORD_0'?'uv':k.toLowerCase(),attr);}
+    for(const k of ['POSITION','NORMAL','TEXCOORD_0','COLOR_0','JOINTS_0','WEIGHTS_0']) if(pr.attributes[k]!=null){const a=makeAccessor(json,bin,pr.attributes[k]);let item=a.nc; if(k==='POSITION'||k==='NORMAL')item=3; if(k==='JOINTS_0'||k==='WEIGHTS_0')item=4; const attr=new THREE.BufferAttribute(a.data,item); const name=k==='TEXCOORD_0'?'uv':(k==='JOINTS_0'?'skinIndex':(k==='WEIGHTS_0'?'skinWeight':k.toLowerCase())); g.setAttribute(name,attr);}
     if(pr.indices!=null){const a=makeAccessor(json,bin,pr.indices);g.setIndex(new THREE.BufferAttribute(a.data,1));}
     if(!g.getAttribute('position')) return null;
     if(!g.getAttribute('normal')) g.computeVertexNormals();
@@ -64,7 +64,7 @@
     if(md.alpha==='MASK'){opts.transparent=true;opts.alphaTest=md.m.alphaCutoff==null?.5:md.m.alphaCutoff;}
     if(json.extensionsUsed&&json.extensionsUsed.indexOf('KHR_materials_unlit')>=0&&md.m.extensions&&md.m.extensions.KHR_materials_unlit) material=new THREE.MeshBasicMaterial(opts); else material=new THREE.MeshStandardMaterial(opts);
     if(md.emissive) material.emissive=new THREE.Color(...md.emissive);
-    const mesh=skin?new THREE.SkinnedMesh(g,material):new THREE.Mesh(g,material); mesh.castShadow=true; mesh.receiveShadow=true; if(skin){ mesh.userData._skin=skin; } return mesh;
+    const mesh=skin?new THREE.SkinnedMesh(g,material):new THREE.Mesh(g,material); mesh.castShadow=true; mesh.receiveShadow=true; if(skin){ mesh.userData._skin=skin; if(mesh.normalizeSkinWeights) mesh.normalizeSkinWeights(); } return mesh;
   }
   async function load(url,opts={}){
     const {json,bin}=await readGLB(url), imageCache=[], root=new THREE.Group(), nodes=[], skins=[];
@@ -77,6 +77,11 @@
     for(let i=0;i<(json.nodes||[]).length;i++){const ch=json.nodes[i].children||[];for(const c of ch)nodes[i].add(nodes[c]);}
     const sceneNodes=(json.scenes&&json.scenes[json.scene||0]&&json.scenes[json.scene||0].nodes)||[];
     sceneNodes.forEach(i=>root.add(nodes[i]));
+    // Establish the complete authored node world transforms BEFORE binding any skin.
+    // SkinnedMesh.bind() stores the bind matrix; doing this before the root hierarchy
+    // has been updated can capture stale parent matrices and make a perfectly valid
+    // skinned GLB render as a collapsed/incorrect mesh.
+    root.updateMatrixWorld(true);
     // Build glTF skins from the already-created node hierarchy. The supplied GLBs use
     // ordinary node TRS bones, so keeping those exact nodes lets the game pose the real
     // skeleton without baking animations into the mesh.
