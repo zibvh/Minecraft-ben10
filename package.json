@@ -1,11 +1,10 @@
 {
-  "name": "omniverse-zero",
+  "name": "ben10-city",
   "version": "1.0.0",
   "private": true,
-  "description": "Omniverse: ZERO voxel city game, packaged as an Android app with Capacitor",
+  "description": "Ben 10 voxel city game, packaged as an Android app with Capacitor",
   "scripts": {
-    "build": "echo 'static site, nothing to build' && exit 0",
-    "test:glb": "node tests/test_glb_pipeline.js"
+    "build": "echo 'static site, nothing to build' && exit 0"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",

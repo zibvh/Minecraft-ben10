@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>OMNIVERSE: ZERO</title>
+<title>OMNITRIX // Voxel Protocol</title>
 <style>
   :root{
     --green:#39ff8a; --green-dim:#1c7a45; --panel:#0b1210ee; --panel2:#0e1a16dd;
@@ -305,58 +305,20 @@
   .od.cur{filter:drop-shadow(0 0 8px #fff) brightness(1.15);}
   .od.off{opacity:.3;}
   .od:active{transform:scale(.9);}
-
-  /* OMNIVERSE: ZERO responsive loading/lobby */
-  #boot-screen{position:fixed;inset:0;z-index:140;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,#103d28 0%,#04130d 52%,#000 100%);color:#eafff2;transition:opacity .45s ease,visibility .45s ease;overflow:hidden}
-  #boot-screen.done{opacity:0;visibility:hidden;pointer-events:none}
-  #boot-screen::before{content:'';position:absolute;inset:-20%;background:linear-gradient(115deg,transparent 42%,rgba(57,255,138,.08) 50%,transparent 58%);animation:bootSweep 2.4s linear infinite}
-  @keyframes bootSweep{from{transform:translateX(-35%)}to{transform:translateX(35%)}}
-  .boot-core{position:relative;width:min(86vw,460px);padding:30px 26px;border:1px solid rgba(57,255,138,.35);background:rgba(3,15,10,.78);box-shadow:0 0 50px rgba(57,255,138,.13),inset 0 0 35px rgba(57,255,138,.05);text-align:center}
-  .boot-mark{width:76px;height:76px;margin:0 auto 16px;filter:drop-shadow(0 0 14px rgba(57,255,138,.45))}
-  .boot-title{font-size:clamp(25px,6vw,42px);font-weight:900;letter-spacing:clamp(3px,1vw,8px);color:#39ff8a;text-shadow:0 0 18px rgba(57,255,138,.55)}
-  .boot-sub{margin-top:5px;font-size:10px;letter-spacing:4px;opacity:.65}
-  .boot-track{height:5px;margin:25px 0 10px;background:#07120c;border:1px solid #1a3b29;overflow:hidden}
-  #boot-fill{height:100%;width:8%;background:linear-gradient(90deg,#1c7a45,#39ff8a);box-shadow:0 0 14px #39ff8a;transition:width .35s ease}
-  #boot-status{font-size:9px;letter-spacing:2px;opacity:.62}
-  #start-screen{background:radial-gradient(ellipse at 50% 28%,#0e4128 0%,#04140d 58%,#000 100%);overflow:auto;justify-content:center}
-  #start-screen .lobby{position:relative;width:min(94vw,760px);display:grid;grid-template-columns:minmax(220px,1fr) minmax(230px,310px);gap:clamp(18px,4vw,34px);align-items:center;padding:clamp(18px,4vw,34px);border:1px solid rgba(57,255,138,.25);background:linear-gradient(145deg,rgba(8,30,20,.82),rgba(2,10,7,.86));box-shadow:0 20px 70px rgba(0,0,0,.4),inset 0 0 45px rgba(57,255,138,.035)}
-  .lobby-brand{text-align:left}.lobby #logo-hex{width:clamp(62px,10vw,86px);height:clamp(62px,10vw,86px);margin-bottom:10px}
-  #start-screen h1{font-size:clamp(29px,6vw,48px);letter-spacing:clamp(3px,1vw,8px);line-height:1;margin:0;position:relative;color:#f0fff7;text-shadow:0 0 18px rgba(57,255,138,.2)}
-  #start-screen h1 strong{color:var(--green)}
-  #start-screen .sub{letter-spacing:clamp(2px,1vw,6px);font-size:10px;opacity:.75;margin:7px 0 18px;color:#bfffe0}
-  .lobby-copy{max-width:440px;font-size:11px;line-height:1.65;color:#c7e7d5;opacity:.72;margin-bottom:15px}
-  .lobby-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px}.lobby-tag{font-size:8px;letter-spacing:1.4px;padding:6px 8px;border:1px solid rgba(57,255,138,.22);background:rgba(57,255,138,.05);color:#a9ffd0}
-  .lobby-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:430px}.lobby-actions .menu-btn{width:100%;margin:0}.lobby-actions .primary{grid-column:1/-1;padding:15px 0;font-size:16px;box-shadow:0 0 18px rgba(57,255,138,.12)}
-  .lobby-status{border:1px solid rgba(57,255,138,.22);background:rgba(0,0,0,.22);padding:14px}.lobby-status h2{font-size:10px;letter-spacing:2px;color:var(--green);margin:0 0 12px}.status-line{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:9px;letter-spacing:.8px}.status-line:last-child{border-bottom:0}.status-line span:last-child{color:#bfffe0}
-  .lobby #menu-panel{grid-column:1/-1;max-width:none;width:100%;margin:0;text-align:left}.lobby .foot{grid-column:1/-1;position:relative;margin:0;font-size:8px;letter-spacing:3px;opacity:.45;text-align:center}
-  @media (max-width:620px){#start-screen .lobby{grid-template-columns:1fr;max-height:calc(100dvh - 20px);overflow:auto}.lobby-brand{text-align:center}.lobby-copy{margin-left:auto;margin-right:auto}.lobby-tags{justify-content:center}.lobby-actions{margin:auto}.lobby-status{order:2}.lobby #menu-panel{order:3}.lobby .foot{order:4}}
-  @media (max-height:500px) and (orientation:landscape){#start-screen{justify-content:flex-start}.lobby{margin:10px auto;padding:16px}.lobby-copy{margin-bottom:9px}.lobby-tags{margin-bottom:10px}.lobby-actions{gap:5px}.lobby-actions .menu-btn{padding:9px 0}.lobby-status{padding:10px}.status-line{padding:5px 0}}
-  #alien-portrait canvas,#alien-portrait img{width:100%;height:100%;display:block;object-fit:cover;object-position:center}
-  #alien-portrait img{background:#081b12}
-  .od img{object-fit:cover;object-position:center}
 </style>
 </head>
 <body>
 
-<div id="boot-screen">
-  <div class="boot-core">
-    <svg class="boot-mark" viewBox="0 0 100 100"><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#03130c" stroke="#39ff8a" stroke-width="5"/><path d="M30 26h40L54 50l16 24H30l16-24z" fill="#39ff8a"/><path d="M36 30h28L50 48z M36 70h28L50 52z" fill="#03130c"/></svg>
-    <div class="boot-title">OMNIVERSE: ZERO</div><div class="boot-sub">OFFLINE VOXEL PROTOCOL</div>
-    <div class="boot-track"><div id="boot-fill"></div></div><div id="boot-status">INITIALIZING LOCAL WORLD...</div>
-  </div>
-</div>
 <div id="start-screen">
-  <div class="lobby">
-    <div class="lobby-brand">
-      <svg id="logo-hex" viewBox="0 0 100 100"><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#03130c" stroke="#39ff8a" stroke-width="5"/><path d="M30 26h40L54 50l16 24H30l16-24z" fill="#39ff8a"/><path d="M36 30h28L50 48z M36 70h28L50 52z" fill="#03130c"/></svg>
-      <h1>OMNIVERSE: <strong>ZERO</strong></h1><div class="sub">A LIVING VOXEL UNIVERSE</div>
-      <div class="lobby-copy">Explore a persistent-scale city, transform on the fly, fight, drive and move through a fully local game world. No login. No cloud save. No internet required.</div>
-      <div class="lobby-tags"><span class="lobby-tag">OFFLINE</span><span class="lobby-tag">LANDSCAPE</span><span class="lobby-tag">ANDROID</span><span class="lobby-tag">VOXEL CITY</span></div>
-      <div class="lobby-actions"><button class="menu-btn primary" id="btn-start">ENTER ZERO</button><button class="menu-btn" id="btn-settings">SETTINGS</button><button class="menu-btn" id="btn-controls">HOW TO PLAY</button><button class="menu-btn" id="btn-about">ABOUT</button></div>
-    </div>
-    <div class="lobby-status"><h2>SYSTEM STATUS</h2><div class="status-line"><span>WORLD</span><span>READY</span></div><div class="status-line"><span>MODELS</span><span>LOCAL GLB</span></div><div class="status-line"><span>ALIEN PORTRAITS</span><span>LOCAL PNG</span></div><div class="status-line"><span>NETWORK</span><span>NOT REQUIRED</span></div><div class="status-line"><span>BUILD</span><span>ZERO / 01</span></div></div>
-    <div id="menu-panel"></div><div class="foot">CHOOSE YOUR PATH // BUILD YOUR ZERO</div>
-  </div>
+  <svg id="logo-hex" viewBox="0 0 100 100"><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#03130c" stroke="#39ff8a" stroke-width="5"/><path d="M30 26h40L54 50l16 24H30l16-24z" fill="#39ff8a"/><path d="M36 30h28L50 48z M36 70h28L50 52z" fill="#03130c"/></svg>
+  <h1>OMNITRIX</h1>
+  <div class="sub">VOXEL PROTOCOL</div>
+  <button class="menu-btn" id="btn-start">PLAY</button>
+  <button class="menu-btn" id="btn-settings">SETTINGS</button>
+  <button class="menu-btn" id="btn-controls">HOW TO PLAY</button>
+  <button class="menu-btn" id="btn-about">ABOUT</button>
+  <div id="menu-panel"></div>
+  <div class="foot">CHOOSE YOUR PATH</div>
 </div>
 
 <div id="hud">
@@ -414,10 +376,151 @@ window.addEventListener('error',function(e){
 });
 </script>
 <script src="three.min.js"></script>
-<script src="gltf-mini-loader.js"></script>
+
 <script>
-(function(){
+/* Offline GLB body loader: keeps the game's existing procedural animation system and
+   exposes the supplied alien bodies as skinned Three.js objects. */
+window.__ALIEN_GLB_READY = (async function(){
+  const BASE='assets/aliens/';
+  const FILES={heatblast:'heatblast.glb',xlr8:'xlr8_rigged.glb',four_arms:'fourarms.glb',echo_echo:'echoecho.glb',cannonbolt:'cannonbolt.glb'};
+  const assets={};
+
+  function readChunk(ab){
+    const dv=new DataView(ab), magic=new TextDecoder().decode(new Uint8Array(ab,0,4));
+    if(magic!=='glTF') throw new Error('Invalid GLB');
+    let p=12, json=null, bin=null;
+    while(p<dv.byteLength){
+      const n=dv.getUint32(p,true), t=dv.getUint32(p+4,true); p+=8;
+      const chunk=ab.slice(p,p+n); p+=n;
+      if(t===0x4e4f534a) json=JSON.parse(new TextDecoder().decode(chunk).replace(/\0+$/,''));
+      else if(t===0x004e4942) bin=chunk;
+    }
+    return {json,bin};
+  }
+  function comps(type){return {SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT2:4,MAT3:9,MAT4:16}[type]||1}
+  function csize(t){return {5120:1,5121:1,5122:2,5123:2,5125:4,5126:4}[t]}
+  function readAccessor(g,aidx){
+    const a=g.accessors[aidx], bv=g.bufferViews[a.bufferView], n=a.count, nc=comps(a.type), sz=csize(a.componentType);
+    const stride=bv.byteStride||nc*sz, off=(bv.byteOffset||0)+(a.byteOffset||0), out=new Float32Array(n*nc);
+    const dv=new DataView(g._bin,0,g._bin.byteLength);
+    const getter={5120:(o)=>dv.getInt8(o),5121:(o)=>dv.getUint8(o),5122:(o)=>dv.getInt16(o,true),5123:(o)=>dv.getUint16(o,true),5125:(o)=>dv.getUint32(o,true),5126:(o)=>dv.getFloat32(o,true)}[a.componentType];
+    const max={5120:127,5121:255,5122:32767,5123:65535}[a.componentType];
+    for(let i=0;i<n;i++) for(let c=0;c<nc;c++){
+      let v=getter(off+i*stride+c*sz);
+      if(a.normalized) v = a.componentType===5120 ? Math.max(v/max,-1) : v/max;
+      out[i*nc+c]=v;
+    }
+    return {data:out,count:n,nc};
+  }
+  function readIndices(g,aidx){
+    const a=g.accessors[aidx], bv=g.bufferViews[a.bufferView], n=a.count, sz=csize(a.componentType), off=(bv.byteOffset||0)+(a.byteOffset||0);
+    const C=a.componentType===5121?Uint8Array:a.componentType===5123?Uint16Array:Uint32Array;
+    const out=new C(n), dv=new DataView(g._bin,0,g._bin.byteLength), getter=a.componentType===5121?(o)=>dv.getUint8(o):a.componentType===5123?(o)=>dv.getUint16(o,true):(o)=>dv.getUint32(o,true);
+    const stride=bv.byteStride||sz;
+    for(let i=0;i<n;i++) out[i]=getter(off+i*stride);
+    return out;
+  }
+  async function makeTextures(g){
+    const out=[];
+    for(const im of (g.images||[])){
+      let blob;
+      if(im.bufferView!=null){
+        const bv=g.bufferViews[im.bufferView], bytes=g._bin.slice((bv.byteOffset||0),(bv.byteOffset||0)+(bv.byteLength||0));
+        blob=new Blob([bytes],{type:im.mimeType||'application/octet-stream'});
+      } else if(im.uri) {
+        const r=await fetch(im.uri); blob=await r.blob();
+      }
+      if(!blob){out.push(null);continue}
+      const url=URL.createObjectURL(blob);
+      out.push(await new Promise((resolve,reject)=>{
+        const img=new Image(); img.onload=()=>{const t=new THREE.Texture(img);t.flipY=false;t.needsUpdate=true;resolve(t);URL.revokeObjectURL(url)}; img.onerror=reject; img.src=url;
+      }));
+    }
+    return out;
+  }
+  function matFor(g,mi,textures){
+    const m=g.materials&&g.materials[mi], p=m&&m.pbrMetallicRoughness||{}, bc=p.baseColorFactor||[1,1,1,1];
+    const params={color:new THREE.Color(bc[0],bc[1],bc[2]),opacity:bc[3],transparent:bc[3]<.999,roughness:p.roughnessFactor==null?1:p.roughnessFactor,metalness:p.metallicFactor||0,side:THREE.DoubleSide};
+    if(p.baseColorTexture && textures[p.baseColorTexture.index]) params.map=textures[p.baseColorTexture.index];
+    if(m&&m.emissiveFactor) params.emissive=new THREE.Color(m.emissiveFactor[0],m.emissiveFactor[1],m.emissiveFactor[2]);
+    if(m&&m.alphaMode==='BLEND') params.transparent=true;
+    if(m&&m.alphaMode==='MASK') params.alphaTest=m.alphaCutoff==null?.5:m.alphaCutoff;
+    if(m&&m.extensions&&m.extensions.KHR_materials_unlit) return new THREE.MeshBasicMaterial(params);
+    return new THREE.MeshStandardMaterial(params);
+  }
+  function applyNodeTRS(o,n){
+    if(n.matrix){
+      o.matrix.fromArray(n.matrix); o.matrix.decompose(o.position,o.quaternion,o.scale);
+    } else {
+      if(n.translation)o.position.fromArray(n.translation);
+      if(n.rotation)o.quaternion.fromArray(n.rotation);
+      if(n.scale)o.scale.fromArray(n.scale);
+    }
+  }
+  function build(g,textures){
+    const skinJoints=new Set();
+    (g.skins||[]).forEach(s=>(s.joints||[]).forEach(i=>skinJoints.add(i)));
+    const nodes=(g.nodes||[]).map((n,i)=>{const o=skinJoints.has(i)?new THREE.Bone():new THREE.Object3D();o.name=n.name||('node_'+i);o.userData.gltfNode=i;applyNodeTRS(o,n);return o});
+    nodes.forEach((o,i)=>((g.nodes[i].children||[]).forEach(c=>nodes[i].add(nodes[c]))));
+    const materials=(g.materials||[]).map((_,i)=>matFor(g,i,textures));
+    const meshOwners=[];
+    (g.nodes||[]).forEach((n,ni)=>{
+      if(n.mesh==null)return;
+      const md=g.meshes[n.mesh];
+      (md.primitives||[]).forEach(pr=>{
+        const geo=new THREE.BufferGeometry(), at=pr.attributes||{};
+        const add=(name,attr,Item)=>{if(attr==null)return;const r=readAccessor(g,attr);geo.setAttribute(name,new Item(r.data,r.nc));};
+        if(at.POSITION!=null)add('position',at.POSITION,THREE.Float32BufferAttribute);
+        if(at.NORMAL!=null)add('normal',at.NORMAL,THREE.Float32BufferAttribute);
+        if(at.TEXCOORD_0!=null)add('uv',at.TEXCOORD_0,THREE.Float32BufferAttribute);
+        if(at.TEXCOORD_1!=null)add('uv1',at.TEXCOORD_1,THREE.Float32BufferAttribute);
+        if(at.JOINTS_0!=null){const r=readAccessor(g,at.JOINTS_0);geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(r.data,r.nc));}
+        if(at.WEIGHTS_0!=null)add('skinWeight',at.WEIGHTS_0,THREE.Float32BufferAttribute);
+        if(pr.indices!=null)geo.setIndex(new THREE.BufferAttribute(readIndices(g,pr.indices),1));
+        geo.computeBoundingSphere();
+        const mat=materials[pr.material==null?0:pr.material]||new THREE.MeshStandardMaterial({color:0xffffff});
+        let mesh;
+        if(n.skin!=null && geo.getAttribute('skinIndex') && geo.getAttribute('skinWeight')) mesh=new THREE.SkinnedMesh(geo,mat);
+        else mesh=new THREE.Mesh(geo,mat);
+        mesh.name=(n.name||'mesh')+'_primitive';
+        mesh.castShadow=true; mesh.receiveShadow=true;
+        nodes[ni].add(mesh); meshOwners.push({mesh,node:ni,skin:n.skin});
+      });
+    });
+    const root=new THREE.Group(); root.name='GLB_'+(g.scenes&&g.scene!=null?g.scene:'0');
+    const sceneDef=g.scenes&&g.scenes[g.scene==null?0:g.scene];
+    ((sceneDef&&sceneDef.nodes)||[]).forEach(i=>root.add(nodes[i]));
+    root.traverse(o=>{if(o.isObject3D)o.updateMatrixWorld(true)});
+    (g.skins||[]).forEach((s,si)=>{
+      const bones=(s.joints||[]).map(i=>nodes[i]);
+      let inv=[];
+      if(s.inverseBindMatrices!=null){
+        const r=readAccessor(g,s.inverseBindMatrices);
+        for(let i=0;i<bones.length;i++){const m=new THREE.Matrix4();m.fromArray(r.data,i*16);inv.push(m)}
+      } else bones.forEach(()=>inv.push(new THREE.Matrix4()));
+      const skel=new THREE.Skeleton(bones,inv);
+      meshOwners.filter(x=>x.skin===si).forEach(x=>{
+        x.mesh.bind(skel,x.mesh.matrixWorld.clone());
+        x.mesh.normalizeSkinWeights();
+      });
+    });
+    root.updateMatrixWorld(true);
+    return root;
+  }
+  async function loadOne(kind,file){
+    const r=await fetch(BASE+file), ab=await r.arrayBuffer(), q=readChunk(ab); q.json._bin=q.bin;
+    const textures=await makeTextures(q.json);
+    assets[kind]={json:q.json,textures,build:()=>build(q.json,textures)};
+  }
+  await Promise.all(Object.entries(FILES).map(([k,f])=>loadOne(k,f)));
+  window.__ALIEN_GLB_ASSETS=assets;
+  return assets;
+})();
+</script>
+<script>
+(async function(){
 'use strict';
+await window.__ALIEN_GLB_READY;
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 /* =========================================================================
@@ -1533,7 +1636,6 @@ function animateRig(parts,dt,inp){
   ap(parts.elbowL,'x',P.eL); ap(parts.elbowR,'x',P.eR); if(parts.elbow2L){ ap(parts.elbow2L,'x',P.e2L); ap(parts.elbow2R,'x',P.e2R); }
   ap(parts.leftLeg,'x',P.tLx); ap(parts.rightLeg,'x',P.tRx); ap(parts.leftLeg,'z',P.tLz); ap(parts.rightLeg,'z',P.tRz);
   ap(parts.kneeL,'x',-P.kL); ap(parts.kneeR,'x',-P.kR); ap(parts.footL,'x',P.fL); ap(parts.footR,'x',P.fR);
-  poseImportedAlien(parts,dt,inp,P);
 }
 // Helper: turn a timer-driven attack ({kind,dur,t}) into the attack input for animateRig.
 function atkInput(kind,left,dur,extra){ if(!(left>0)||!kind) return null; const o={kind,t:1-Math.max(0,Math.min(1,left/dur))}; if(extra) Object.assign(o,extra); return o; }
@@ -1710,405 +1812,106 @@ function buildCharacter(kind){
     shell.position.y=shellCenterY; shell.scale.setScalar(0.001); g.add(shell); parts.shell=shell; parts.shellBaseY=shellCenterY;
   }
   const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
-  o.userData.parts=parts; o.userData.kind=kind; o.userData.proceduralRoot=g;
-  if(IMPORTED_ALIEN_ASSETS[kind]) attachImportedAlienVisual(o,kind);
+  o.userData.parts=parts; o.userData.kind=kind;
   return o;
 }
 
-// tiny portrait renderer (renders each alien to a mini canvas for the HUD)
-const IMPORTED_ALIEN_ASSETS={
-  four_arms:{file:'fourarms.glb',height:4.25},
-  heatblast:{file:'heatblast.glb',height:3.20},
-  xlr8:{file:'xlr8_rigged.glb',height:2.80},
-  echo_echo:{file:'echoecho.glb',height:2.55},
-  cannonbolt:{file:'cannonbolt.glb',height:2.70}
-};
-const importedAlienCache=Object.create(null);
-const importedAlienPromises=Object.create(null);
-function importedMeshFilter(kind){
-  if(kind!=='echo_echo') return null;
-  return (n,ni,json)=>{ const m=json.nodes[ni].mesh; return m===55||m===56||m===57; };
+
+// --- Supplied GLB alien bodies ---
+// The original procedural rig/animation code remains the single animation driver.
+// GLB skeleton bones are wrapped in zeroed control nodes so the existing pose math
+// can drive them without destroying their authored rest pose.
+function __glbFind(root,re){ let hit=null; root.traverse(o=>{if(!hit && o.isBone && re.test(o.name)) hit=o}); return hit; }
+function __glbCtrl(bone,name){
+  if(!bone) return null;
+  const p=bone.parent;
+  if(!p) return bone;
+  const c=new THREE.Object3D(); c.name=name||('ctrl_'+bone.name);
+  p.add(c); p.remove(bone); c.add(bone);
+  return c;
 }
-function importedVisualBounds(root){
-  root.updateMatrixWorld(true);
-  const out=new THREE.Box3(); let has=false;
-  root.traverse(o=>{
-    if(!o.isMesh) return;
-    let bb=null;
-    if(o.isSkinnedMesh){
-      o.skeleton&&o.skeleton.update();
-      if(o.computeBoundingBox){ o.computeBoundingBox(); bb=o.boundingBox; }
-      else {
-        const pos=o.geometry&&o.geometry.attributes&&o.geometry.attributes.position;
-        if(pos){
-          const mn=new THREE.Vector3(Infinity,Infinity,Infinity), mx=new THREE.Vector3(-Infinity,-Infinity,-Infinity), v=new THREE.Vector3();
-          for(let i=0;i<pos.count;i++){ v.fromBufferAttribute(pos,i); if(o.boneTransform) o.boneTransform(i,v); mn.min(v); mx.max(v); }
-          bb=new THREE.Box3(mn,mx);
-        }
-      }
-    } else if(o.geometry){
-      if(!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-      bb=o.geometry.boundingBox;
-    }
-    if(!bb||!isFinite(bb.min.x)||!isFinite(bb.max.x)) return;
-    const wb=bb.clone().applyMatrix4(o.matrixWorld);
-    if(!has){out.copy(wb);has=true;}else out.union(wb);
-  });
-  return has?out:null;
-}
-async function getImportedAlien(kind){
-  if(!IMPORTED_ALIEN_ASSETS[kind]||!window.MiniGLTF) return null;
-  if(importedAlienCache[kind]) return importedAlienCache[kind];
-  if(!importedAlienPromises[kind]){
-    const spec=IMPORTED_ALIEN_ASSETS[kind];
-    importedAlienPromises[kind]=MiniGLTF.load('assets/aliens/'+spec.file,{meshFilter:importedMeshFilter(kind)}).then(root=>{
-      root.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });
-      // Cannonbolt's supplied bind pose is authored on its side. Rotate the entire imported
-      // rig before height fitting so its long shell axis becomes the game's Y/up axis.
-      if(kind==='cannonbolt'){ root.rotation.z=Math.PI/2; root.userData.axisCorrection='Z+90'; }
-      root.updateMatrixWorld(true);
-      const box=importedVisualBounds(root) || new THREE.Box3().setFromObject(root);
-      const h=Math.max(.0001,box.max.y-box.min.y);
-      // Normalize from the ACTUAL SKINNED bounds, not the bind-pose geometry bounds.
-      // The supplied FBX exports contain armature scales and large offsets; using a raw
-      // Box3 can place or size the final character wildly incorrectly.
-      const center=new THREE.Vector3((box.min.x+box.max.x)*.5,0,(box.min.z+box.max.z)*.5);
-      const k=spec.height/h; root.scale.setScalar(k);
-      // Object3D position is not multiplied by its own scale, so apply the
-      // scaled center offset explicitly.
-      root.position.x-=center.x*k; root.position.z-=center.z*k; root.updateMatrixWorld(true);
-      const b2=importedVisualBounds(root) || new THREE.Box3().setFromObject(root); root.position.y-=b2.min.y; root.updateMatrixWorld(true);
-      root.userData.importedKind=kind; root.userData.targetHeight=spec.height;
-      importedAlienCache[kind]=root;
-      return root;
-    }).catch(err=>{ console.warn('[ALIEN GLB] '+kind+' failed:',err); return null; });
-  }
-  return importedAlienPromises[kind];
-}
-function _boneFind(bones,tests){
-  for(const re of tests){ const b=bones.find(x=>re.test((x.name||'').toLowerCase())); if(b) return b; }
-  return null;
-}
-function buildImportedBoneMap(root,kind){
-  // MiniGLTF preserves glTF joint nodes as Object3D/Group instances rather than
-  // THREE.Bone instances. Three's SkinnedMesh/Skeleton accepts these as bone objects
-  // because it consumes their matrixWorld, so collect the actual skeleton.bones instead
-  // of filtering on isBone (the previous filter silently produced an empty map).
-  const bones=[]; const seen=new Set();
-  root.traverse(o=>{
-    if(!o.isSkinnedMesh || !o.skeleton) return;
-    for(const b of (o.skeleton.bones||[])){ if(b && !seen.has(b)){ seen.add(b); bones.push(b); } }
-  });
-  const all=bones.map(b=>(b.name||'').toLowerCase());
-  const map={kind,bones,base:new Map()};
-  bones.forEach(b=>map.base.set(b,b.quaternion.clone()));
-  const pick=(...tests)=>_boneFind(bones,tests);
-  if(kind==='xlr8'){
-    map.hips=pick(/^_?rootjoint/,/^spine_01/); map.chest=pick(/^spine\.001_02/,/^spine\.002_03/); map.head=pick(/^spine\.006_07/,/^head/);
-    map.lUpper=pick(/upper_arm\.l/); map.lFore=pick(/forearm\.l/); map.rUpper=pick(/upper_arm\.r/); map.rFore=pick(/forearm\.r/);
-    map.lThigh=pick(/thigh\.l/,/upper_leg\.l/); map.lShin=pick(/shin\.l/,/calf\.l/); map.rThigh=pick(/thigh\.r/,/upper_leg\.r/); map.rShin=pick(/shin\.r/,/calf\.r/);
-  } else if(kind==='heatblast'){
-    map.hips=pick(/bip_pelvis/); map.chest=pick(/bip_spine_2/,/bip_spine_1/); map.head=pick(/bip_head/);
-    map.lUpper=pick(/bip_upperarm_l/); map.lFore=pick(/bip_lowerarm_l/); map.rUpper=pick(/bip_upperarm_r/); map.rFore=pick(/bip_lowerarm_r/);
-    map.lThigh=pick(/bip_hip_l/,/bip_thigh_l/,/bip_upperleg_l/); map.lShin=pick(/bip_knee_l/,/bip_calf_l/,/bip_lowerleg_l/); map.rThigh=pick(/bip_hip_r/,/bip_thigh_r/,/bip_upperleg_r/); map.rShin=pick(/bip_knee_r/,/bip_calf_r/,/bip_lowerleg_r/);
+function __glbParts(model,kind){
+  const b=(re)=>__glbFind(model,re);
+  let hips,chest,head,lA,rA,eL,eR,lL,rL,kL,kR,fL,fR;
+  if(kind==='heatblast'){
+    hips=b(/^bip_pelvis_01$/); chest=b(/^bip_spine_2_04$/); head=b(/^bip_head_07$/);
+    lA=b(/^bip_upperArm_L_029$/); rA=b(/^bip_upperArm_R_010$/);
+    eL=b(/^bip_lowerArm_L_030$/); eR=b(/^bip_lowerArm_R_011$/);
+    lL=b(/^bip_hip_L_052$/); rL=b(/^bip_hip_R_047$/); kL=b(/^bip_knee_L_053$/); kR=b(/^bip_knee_R_048$/);
+    fL=b(/^bip_foot_L_054$/); fR=b(/^bip_foot_R_049$/);
+  } else if(kind==='xlr8'){
+    hips=b(/^_rootJoint$/); chest=b(/^spine\.003_04$/); head=b(/^spine\.006_07$/);
+    lA=b(/^upper_arm\.L_010$/); rA=b(/^upper_arm\.R_019$/);
+    eL=b(/^forearm\.L_011$/); eR=b(/^forearm\.R_020$/);
+    lL=b(/^thigh\.L_035$/); rL=b(/^thigh\.R_040$/); kL=b(/^shin\.L_036$/); kR=b(/^shin\.R_041$/);
+    fL=b(/^foot\.L_037$/); fR=b(/^foot\.R_042$/);
   } else if(kind==='cannonbolt'){
-    map.hips=pick(/^hips_01/); map.chest=pick(/^chest_07/,/^spine_06/); map.head=pick(/head/,/^spine_06/,/^chest_07/);
-    map.lUpper=pick(/^left arm_029/); map.lFore=pick(/^left elbow_030/); map.rUpper=pick(/^right arm_09/); map.rFore=pick(/^right elbow_010/);
-    map.lThigh=pick(/wideleg[_\.].*l_/,/wideleg_l/); map.lShin=pick(/wideknee[_\.].*l_/,/wideknee_l/); map.rThigh=pick(/wideleg[_\.].*r_/,/wideleg_r/); map.rShin=pick(/wideknee[_\.].*r_/,/wideknee_r/);
+    hips=b(/^Hips_01$/); chest=b(/^Chest_07$/); head=b(/^Chest_07$/);
+    lA=b(/^Left arm_029$/); rA=b(/^Right arm_09$/); eL=b(/^Left elbow_030$/); eR=b(/^Right elbow_010$/);
+    lL=b(/^Right_WideLeg_L_048$/); rL=b(/^Right_WideLeg_R_02$/); kL=b(/^Right_WideKnee_L_049$/); kR=b(/^Right_WideKnee_R_03$/);
+    fL=b(/^Right_WideAnkle_L_050$/); fR=b(/^Right_WideAnkle_R_04$/);
   } else if(kind==='echo_echo'){
-    // Echo Echo's exporter contains three duplicated 57-joint skins and numbered Blender
-    // bones. The local X of these joints is effectively zero, so the old mapper could not
-    // identify limbs from local positions. Use their authored WORLD positions after the
-    // complete hierarchy has been updated: negative X is the character's left side and
-    // positive X is the right side. The chain names are stable across all three skins.
-    const named=(re)=>bones.find(b=>re.test(b.name||''))||null;
-    map.hips=named(/^Bone\.043_/i)||bones[0]||null;
-    map.chest=named(/^Bone\.002_/i)||named(/^Bone\.003_/i)||bones[3]||null;
-    map.head=named(/^Bone\.004_/i)||bones[6]||null;
-    map.lUpper=named(/^Bone\.021_/i); map.lFore=named(/^Bone\.022_/i);
-    map.rUpper=named(/^Bone\.006_/i); map.rFore=named(/^Bone\.007_/i);
-    map.lThigh=named(/^Bone\.010_/i); map.lShin=named(/^Bone\.011_/i);
-    map.rThigh=named(/^Bone\.013_/i); map.rShin=named(/^Bone\.014_/i);
+    hips=b(/^_rootJoint$/); chest=b(/^Bone\.004_05$/); head=b(/^Bone\.022_07$/);
+    lA=b(/^Bone\.005_017$/); rA=b(/^Bone\.023_08$/); eL=b(/^Bone\.006_018$/); eR=b(/^Bone\.024_09$/);
+    lL=b(/^Bone\.009_037$/); rL=b(/^Bone\.012_041$/); kL=b(/^Bone\.010_038$/); kR=b(/^Bone\.013_042$/);
+    fL=b(/^Bone\.011_039$/); fR=b(/^Bone\.014_043$/);
   }
-  map.ready=!!(map.hips||map.chest||map.lUpper||map.rUpper);
-  return map;
-}
-function cloneImportedAlienRig(source,kind){
-  // Clone the hierarchy and explicitly map every source bone object to its clone.
-  // Name-based remapping is unsafe for Echo Echo because several exported skins can
-  // contain duplicate/generated bone names.
-  const cloned=source.clone(true);
-  const srcObjects=[], cloneObjects=[];
-  source.traverse(o=>srcObjects.push(o));
-  cloned.traverse(o=>cloneObjects.push(o));
-  const objectMap=new Map();
-  const n=Math.min(srcObjects.length,cloneObjects.length);
-  for(let i=0;i<n;i++) objectMap.set(srcObjects[i],cloneObjects[i]);
+  // Four Arms is supplied as a single static mesh, so use its model root as a
+  // control surface. Its movement/rotation still follows the game's animation state.
+  if(!hips) hips=model;
+  if(!chest) chest=hips;
+  if(!head) head=chest;
+  if(!lA) lA=hips; if(!rA) rA=hips; if(!eL) eL=lA; if(!eR) eR=rA;
+  if(!lL) lL=hips; if(!rL) rL=hips; if(!kL) kL=lL; if(!kR) kR=rL; if(!fL) fL=kL; if(!fR) fR=kR;
 
-  const srcSkins=[], cloneSkins=[];
-  source.traverse(o=>{if(o.isSkinnedMesh) srcSkins.push(o);});
-  cloned.traverse(o=>{if(o.isSkinnedMesh) cloneSkins.push(o);});
+  // Wrap each target in a zero-transform controller, preserving the GLB rest pose.
+  hips=__glbCtrl(hips,'anim_hips');
+  if(chest!==hips) chest=__glbCtrl(chest,'anim_chest');
+  if(head!==chest && head!==hips) head=__glbCtrl(head,'anim_head');
+  if(lA!==hips && lA!==chest) lA=__glbCtrl(lA,'anim_leftArm');
+  if(rA!==hips && rA!==chest) rA=__glbCtrl(rA,'anim_rightArm');
+  if(eL!==lA) eL=__glbCtrl(eL,'anim_elbowL'); if(eR!==rA) eR=__glbCtrl(eR,'anim_elbowR');
+  if(lL!==hips) lL=__glbCtrl(lL,'anim_leftLeg'); if(rL!==hips) rL=__glbCtrl(rL,'anim_rightLeg');
+  if(kL!==lL) kL=__glbCtrl(kL,'anim_kneeL'); if(kR!==rL) kR=__glbCtrl(kR,'anim_kneeR');
+  if(fL!==kL) fL=__glbCtrl(fL,'anim_footL'); if(fR!==kR) fR=__glbCtrl(fR,'anim_footR');
 
-  cloneSkins.forEach((sm,i)=>{
-    const src=srcSkins[i]; if(!src||!src.skeleton) return;
-    const srcSkel=src.skeleton;
-    const bones=(srcSkel.bones||[]).map((b,bi)=>objectMap.get(b)||null);
-    const valid=bones.every(Boolean);
-    if(!valid){ console.warn('[ALIEN GLB] '+kind+' skeleton remap incomplete on skin '+i); return; }
-    const inverses=(srcSkel.boneInverses||[]).map(m=>m.clone());
-    const skeleton=new THREE.Skeleton(bones,inverses);
-    sm.bind(skeleton,src.bindMatrix.clone());
-    sm.bindMode=src.bindMode||'attached';
-    sm.frustumCulled=false;
-    if(sm.normalizeSkinWeights) sm.normalizeSkinWeights();
-    const mats=Array.isArray(sm.material)?sm.material:[sm.material];
-    mats.forEach(mat=>{if(mat){mat.side=THREE.DoubleSide;mat.transparent=false;mat.opacity=1;mat.depthWrite=true;mat.needsUpdate=true;}});
-    sm.userData.gltfSkinned=true;
-  });
-  cloned.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.castShadow=true;o.receiveShadow=true;}});
-  cloned.updateMatrixWorld(true);
-  return cloned;
-}
-function attachImportedAlienVisual(model,kind){
-  if(!IMPORTED_ALIEN_ASSETS[kind]) return;
-  getImportedAlien(kind).then(imported=>{
-    if(!imported || !model || model.userData.kind !== kind) return;
-    const old=model.userData.importedVisual; if(old) model.remove(old);
-    let hasSkinned=false,meshCount=0; imported.traverse(o=>{ if(o.isSkinnedMesh) hasSkinned=true; if(o.isMesh) meshCount++; });
-    // Four Arms' supplied GLB is intentionally preserved as an asset, but it has no skeleton.
-    // Keep the game's live procedural rig active for that model instead of replacing it with a frozen mesh.
-    if(!hasSkinned){
-      console.warn('[ALIEN GLB] '+kind+' has no skin; keeping procedural articulated rig.');
-      return;
-    }
-    const rig=cloneImportedAlienRig(imported,kind);
-    let validSkin=true; rig.traverse(o=>{ if(o.isSkinnedMesh && (!o.geometry.getAttribute('skinIndex') || !o.geometry.getAttribute('skinWeight'))) validSkin=false; });
-    if(!rig||!meshCount||!validSkin){ console.warn('[ALIEN GLB] '+kind+' produced an invalid skin/render state; keeping procedural fallback.'); return; }
-    model.add(rig); model.userData.importedVisual=rig;
-    const map=buildImportedBoneMap(rig,kind); rig.userData.bonePoseMap=map;
-    const parts=model.userData.parts; if(parts){ parts.importedVisual=rig; parts.importedBoneMap=map; }
-    rig.updateMatrixWorld(true);
-    // Only retire the old body after the imported rig has been attached and rebound.
-    const procedural=model.userData.proceduralRoot; if(procedural) procedural.visible=false;
-    console.log('[ALIEN GLB] '+kind+' ready: '+meshCount+' meshes, '+map.bones.length+' bones, live skin binding.', rig.getWorldPosition(new THREE.Vector3()), rig.getWorldScale(new THREE.Vector3()));
-  });
-}
-// Translate the game's mature procedural pose into the imported GLB skeleton. We reset each
-// bone to its authored bind rotation first, then add the current game pose. This means the
-// supplied anatomy stays intact while walk/run/jump/attack/hurt/death all drive real joints.
-function poseImportedAlien(parts,dt,inp,P){
-  const m=parts&&parts.importedBoneMap; if(!m||!m.ready) return;
-  const d=dt>0?Math.min(1,dt*32):1;
-  // Apply an additive local-space pose on top of the authored bind orientation.
-  // This preserves the supplied mesh's anatomical axes while letting the shared game rig drive real bones.
-  const smooth=(b,tx,ty=0,tz=0,rate=d)=>{
-    if(!b) return;
-    const base=m.base.get(b); if(!base) return;
-    const delta=new THREE.Quaternion().setFromEuler(new THREE.Euler(tx,ty,tz,'XYZ'));
-    const target=base.clone().multiply(delta);
-    b.quaternion.slerp(target,Math.min(1,rate));
+  // Normalize imported bodies against their actual character silhouette. Heatblast's GLB
+  // contains separate flame/effect meshes with a much larger authored bounding box, so using
+  // the total GLB bounds would shrink the character itself. The other supplied bodies can use
+  // their complete bounds.
+  const box=new THREE.Box3().setFromObject(model);
+  const rawH=Math.max(.001,box.max.y-box.min.y);
+  const silhouetteH=(kind==='heatblast') ? 135.13 : rawH;
+  const target=2.35, sc=target/silhouetteH;
+  model.scale.multiplyScalar(sc);
+  // Put the lowest imported geometry on the model's local ground plane. This prevents different
+  // GLB origin conventions from making one alien float while another sinks into the terrain.
+  model.updateMatrixWorld(true);
+  const groundedBox=new THREE.Box3().setFromObject(model);
+  if(isFinite(groundedBox.min.y)) model.position.y -= groundedBox.min.y;
+  model.updateMatrixWorld(true);
+  const parts={
+    hips,chest,head,leftArm:lA,rightArm:rA,elbowL:eL,elbowR:eR,leftLeg:lL,rightLeg:rL,kneeL:kL,kneeR:kR,footL:fL,footR:fR,
+    hipY:hips.position.y, anim:{t:0,px:null,pz:null,spd:0,vyS:0,wasGround:false,lastVy:0,land:0,ph:0,climbPh:0},
+    dims:{total:target,headS:.52,torsoW:.7,torsoD:.4,torsoH:1.15,armLen:.85,legLen:1},
+    all:[],fx:[],cfg:{},mats:{}
   };
-  const A=parts.anim||{};
-  const ph=A.ph||0;
-  const combat=(inp.atk||inp.hurt||inp.dead)?0.35:1;
-  const combatScale=combat;
-  const kind=m.kind;
-  const sign=kind==='cannonbolt'?-1:1;
-
-  let hipsX=P.hipsRX, hipsY=P.hipsRY*.55, hipsZ=P.hipsRZ*.55;
-  let chestX=P.chX*.9, chestY=P.chY*.55, chestZ=P.chZ*.8;
-  let headX=P.hdX*.85, headY=P.hdY*.75, headZ=P.hdZ*.6;
-  let lUpperX=P.sL.x*sign, lUpperY=P.sL.y, lUpperZ=P.sL.z;
-  let rUpperX=P.sR.x*sign, rUpperY=P.sR.y, rUpperZ=P.sR.z;
-  let lForeX=P.eL*sign, rForeX=P.eR*sign;
-  let lThighX=P.tLx*sign, rThighX=P.tRx*sign;
-  let lShinX=-P.kL*sign, rShinX=-P.kR*sign;
-
-  // -----------------------------------------------------------------------
-  // XLR8 calibration: convert the shared sprint cycle into the long-legged,
-  // aerodynamic stride the supplied rig was built for. The extra phase term
-  // makes the hips and knees alternate visibly instead of simply scaling the
-  // same walk pose upward.
-  // -----------------------------------------------------------------------
-  if(kind==='xlr8'){
-    const sprint=_ez((inp.superT||0)*1.15);
-    const agile=_ez((sprint*.8)+(inp.moving?.32:0));
-    const strideGain=1.18+.52*sprint;
-    const kneeGain=1.10+.42*sprint;
-    const gait=Math.sin(ph)*(.07+.14*sprint);
-    lThighX=Math.max(-2.15,Math.min(2.15,lThighX*strideGain + gait*combatScale));
-    rThighX=Math.max(-2.15,Math.min(2.15,rThighX*strideGain - gait*combatScale));
-    lShinX=Math.max(-2.3,Math.min(2.3,lShinX*kneeGain + Math.max(0,Math.sin(ph))*0.16*sprint*combatScale));
-    rShinX=Math.max(-2.3,Math.min(2.3,rShinX*kneeGain + Math.max(0,-Math.sin(ph))*0.16*sprint*combatScale));
-
-    // Arms are swept farther behind the COM at true super-speed; elbows stay slightly flexed
-    // so the rig reads as a runner rather than a mannequin with straight rods.
-    const sweepTarget=-1.72-.28*sprint;
-    lUpperX=_lerp(lUpperX,sweepTarget,Math.min(1,.45+.45*sprint)*combatScale);
-    rUpperX=_lerp(rUpperX,sweepTarget,Math.min(1,.45+.45*sprint)*combatScale);
-    lForeX=_lerp(lForeX,.18+.10*sprint,.65*sprint*combatScale);
-    rForeX=_lerp(rForeX,.18+.10*sprint,.65*sprint*combatScale);
-    lUpperY+=-0.04-0.06*sprint;
-    rUpperY+= 0.04+0.06*sprint;
-    lUpperZ+=-0.05-0.05*sprint;
-    rUpperZ+= 0.05+0.05*sprint;
-
-    // The pelvis/chest chain folds into the run. The head counters the chest enough to keep the visor readable.
-    chestX += (-.09-.24*sprint)*combatScale;
-    headX += (.08+.18*sprint)*combatScale;
-    hipsY += -Math.sin(ph*2)*.05*sprint*combatScale;
-    hipsZ += -Math.sin(ph)*.06*sprint*combatScale;
-    chestY += -Math.sin(ph)*(.055+.035*sprint)*combatScale;
-    chestZ += Math.sin(ph)*.025*sprint*combatScale;
-    if(agile<0.2){ headY+=Math.sin(ph*.45)*.035; }
+  model.traverse(o=>{if(o.isMesh&&o.material){const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(parts.all.indexOf(m)<0&&m.emissive)parts.all.push(m)})}});
+  model.userData.parts=parts; model.userData.kind=kind; model.userData.glbBody=true;
+  return model;
+}
+function buildCharacter(kind){
+  if(!window.__ALIEN_GLB_ASSETS || !window.__ALIEN_GLB_ASSETS[kind]){
+    // Should only be reached during a failed asset load; retain a visible fallback.
+    return new THREE.Group();
   }
-
-  // -----------------------------------------------------------------------
-  // Heatblast calibration: flight becomes a body state, not just a static
-  // Superman pose. The shoulders lead the motion, forearms float with the
-  // air stream, and small asymmetric turbulence keeps the flames/limbs alive.
-  // -----------------------------------------------------------------------
-  if(kind==='heatblast' && inp.flying){
-    const flight=_ez((inp.moving?1:0)+(inp.hover?.35:0));
-    const moving=inp.moving?1:0;
-    const gust=inp.moving ? Math.sin((A.t||0)*5.4) : Math.sin((A.t||0)*2.1)*.45;
-    const g2=Math.sin((A.t||0)*7.1+.9);
-    const influence=flight*combatScale;
-
-    if(moving){
-      lUpperX=_lerp(lUpperX,2.78+gust*.10,influence*.75);
-      rUpperX=_lerp(rUpperX,2.78-gust*.10,influence*.75);
-      lForeX=_lerp(lForeX,.16+g2*.07,influence*.7);
-      rForeX=_lerp(rForeX,.16-g2*.07,influence*.7);
-      lUpperY+=(-.08-gust*.035)*influence;
-      rUpperY+=( .08+gust*.035)*influence;
-      lUpperZ+=(-.10-g2*.035)*influence;
-      rUpperZ+=( .10+g2*.035)*influence;
-      chestX+=(-.10-.08*Math.abs(gust))*influence;
-      chestZ+=gust*.035*influence;
-      headX+=(.10+.03*g2)*influence;
-      headZ+=g2*.025*influence;
-      lThighX=_lerp(lThighX,.10+gust*.08,influence*.45);
-      rThighX=_lerp(rThighX,.10-gust*.08,influence*.45);
-      lShinX=_lerp(lShinX,-.25,influence*.35);
-      rShinX=_lerp(rShinX,-.25,influence*.35);
-    } else {
-      // Hover: relaxed shoulders and slightly bent elbows so the character is not frozen in place.
-      lUpperX=_lerp(lUpperX,.55+gust*.06,influence*.55);
-      rUpperX=_lerp(rUpperX,.55-gust*.06,influence*.55);
-      lForeX=_lerp(lForeX,.45+g2*.04,influence*.55);
-      rForeX=_lerp(rForeX,.45-g2*.04,influence*.55);
-      lUpperZ+=(-.24-gust*.03)*influence;
-      rUpperZ+=( .24+gust*.03)*influence;
-      chestX+=.035*influence;
-      headX+=.02*influence;
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Echo Echo calibration: lighter, springier gait with more expressive head
-  // and shoulder opposition. It stays compatible with the shared combat poses.
-  // -----------------------------------------------------------------------
-  if(kind==='echo_echo' && inp.grounded!==false && !inp.flying && !inp.swimming){
-    const agile=_ez((inp.moving?.55:0)+(A.spd||0)/16*.35);
-    const bounce=Math.sin(ph*2)*.035*agile;
-    lThighX*=1.12+.12*agile; rThighX*=1.12+.12*agile;
-    lShinX*=1.10+.12*agile; rShinX*=1.10+.12*agile;
-    lUpperX*=1.06+.10*agile; rUpperX*=1.06+.10*agile;
-    lForeX+=.08*Math.max(0,Math.sin(ph))*agile;
-    rForeX+=.08*Math.max(0,-Math.sin(ph))*agile;
-    chestZ+=Math.sin(ph)*.045*agile;
-    headY+=Math.sin(ph*.5)*.08*agile;
-    hipsY+=bounce;
-  }
-
-  // -----------------------------------------------------------------------
-  // Cannonbolt calibration: when rolling, fold the real skeleton around its
-  // centre of mass instead of merely spinning an upright humanoid. Arms fold
-  // inward, elbows wrap the shell, thighs pull up, shins close the gap, and
-  // the spine/head tuck progressively as rollT approaches 1.
-  // -----------------------------------------------------------------------
-  if(kind==='cannonbolt' && (inp.rolling || (inp.rollT||0)>.04)){
-    const roll=_ez(inp.rollT||0);
-    const tuck=_sm(Math.max(0,Math.min(1,(roll-.04)/.96)));
-    const coil=Math.sin((A.t||0)*10.5)*.035*tuck;
-    lUpperX=_lerp(lUpperX,1.02+coil,tuck);
-    rUpperX=_lerp(rUpperX,1.02-coil,tuck);
-    lForeX=_lerp(lForeX,1.82+.06*Math.sin((A.t||0)*8.2),tuck);
-    rForeX=_lerp(rForeX,1.82-.06*Math.sin((A.t||0)*8.2),tuck);
-    lUpperY=_lerp(lUpperY,-.38,tuck); rUpperY=_lerp(rUpperY,.38,tuck);
-    lUpperZ=_lerp(lUpperZ,-.12,tuck); rUpperZ=_lerp(rUpperZ,.12,tuck);
-
-    lThighX=_lerp(lThighX,.72,tuck); rThighX=_lerp(rThighX,.58,tuck);
-    lShinX=_lerp(lShinX,1.72,tuck); rShinX=_lerp(rShinX,1.58,tuck);
-    hipsX+=-.28*tuck;
-    chestX+=(-.38-.24*roll)*tuck;
-    headX+=.42*tuck; headY+=Math.sin((A.t||0)*2.4)*.035*tuck;
-
-    // Spread the curl across the spine so the torso rounds instead of hinging at one vertebra.
-    if(m.bones&&m.bones.length){
-      const spine=m.bones.filter(b=>/spine/i.test(b.name||'')&&!/end/i.test(b.name||''));
-      if(spine.length){
-        for(let i=0;i<spine.length;i++){
-          const base=m.base.get(spine[i]); if(!base) continue;
-          const f=(i+1)/spine.length;
-          const delta=new THREE.Quaternion().setFromEuler(new THREE.Euler((-.18-.26*f)*tuck,0,0,'XYZ'));
-          const target=base.clone().multiply(delta);
-          spine[i].quaternion.slerp(target,Math.min(1,d*.95));
-        }
-      }
-    }
-  }
-
-  // Imported-rig idle: keep the character visibly alive even when gameplay input is zero.
-  // This is deliberately tiny and is layered on top of the authored bind pose.
-  if(!inp.moving && !inp.atk && !inp.hurt && !inp.dead && !inp.flying && !inp.rolling){
-    const idle=Math.sin((A.t||0)*2.1);
-    chestX += idle*.018; headY += idle*.028;
-    lUpperZ += idle*.014; rUpperZ -= idle*.014;
-  }
-
-  smooth(m.hips,hipsX,hipsY,hipsZ);
-  smooth(m.chest,chestX,chestY,chestZ);
-  smooth(m.head,headX,headY,headZ);
-  smooth(m.lUpper,lUpperX,lUpperY,lUpperZ); smooth(m.rUpper,rUpperX,rUpperY,rUpperZ);
-  smooth(m.lFore,lForeX,0,0); smooth(m.rFore,rForeX,0,0);
-  smooth(m.lThigh,lThighX,0,P.tLz||0); smooth(m.rThigh,rThighX,0,P.tRz||0);
-  smooth(m.lShin,lShinX,0,0); smooth(m.rShin,rShinX,0,0);
-
-  // Non-Cannonbolt spines share a little of the chest bend. Cannonbolt's dedicated
-  // curl above replaces this with a stronger distributed compression.
-  if(kind!=='cannonbolt' && m.bones&&m.bones.length){
-    const spine=m.bones.filter(b=>/spine/i.test(b.name||'')&&!/end/i.test(b.name||''));
-    if(spine.length>1){
-      for(let i=0;i<spine.length;i++){
-        const base=m.base.get(spine[i]); if(!base) continue;
-        const f=(i+1)/spine.length;
-        const delta=new THREE.Quaternion().setFromEuler(new THREE.Euler(chestX*f*.45,chestY*f*.22,chestZ*f*.25,'XYZ'));
-        const target=base.clone().multiply(delta);
-        spine[i].quaternion.slerp(target,Math.min(1,d*.8));
-      }
-    }
-  }
-
-  // The custom offline loader uses the actual glTF joint Object3D nodes as the
-  // Skeleton bones. Explicitly refresh their matrices after the gameplay pose so
-  // the skinning palette is current even on WebView render paths that defer it.
-  if(parts.importedVisual){
-    parts.importedVisual.updateMatrixWorld(true);
-    parts.importedVisual.traverse(o=>{ if(o.isSkinnedMesh&&o.skeleton) o.skeleton.update(); });
-  }
+  const model=window.__ALIEN_GLB_ASSETS[kind].build();
+  model.rotation.order='YXZ';
+  __glbParts(model,kind);
+  return model;
 }
 
-/* Local alien artwork: place PNGs in assets/alien-images/. The HUD card and selector use these first. */
-const ALIEN_IMAGE_FILES={
-  ben:['Ben.png','ben.png'],four_arms:['FourArms.png','fourarms.png','four_arms.png'],heatblast:['Heatblast.png','heatblast.png'],
-  xlr8:['XLR8.png','xlr8.png'],diamondhead:['Diamondhead.png','diamondhead.png'],echo_echo:['EchoEcho.png','echoecho.png','echo_echo.png'],cannonbolt:['Cannonbolt.png','cannonbolt.png']
-};
-function alienImageCandidates(kind){return (ALIEN_IMAGE_FILES[kind]||[]).map(f=>'assets/alien-images/'+f)}
-function alienImageElement(kind,onFallback){const list=alienImageCandidates(kind);if(!list.length)return null;const img=document.createElement('img');let i=0;img.alt=(ALIENS.find(a=>a.id===kind)||BEN).name+' portrait';img.decoding='async';
- const next=()=>{if(i>=list.length){if(onFallback)onFallback(img);return}img.src=list[i++]};img.onerror=next;next();return img}
-function setAlienPortrait(el,kind){el.innerHTML='';const img=alienImageElement(kind,()=>{el.innerHTML='';try{el.appendChild(getPortraitCanvas(kind))}catch(e){}});if(img)el.appendChild(img);else el.appendChild(getPortraitCanvas(kind))}
+// tiny portrait renderer (renders each alien to a mini canvas for the HUD)
 const portraitThumb={};
 // Frame head + shoulders from the model's real bounding box so hair, flames and crystal crowns are never cropped.
 function portraitFraming(model,kind){
@@ -2269,7 +2072,8 @@ function setForm(formDef, kind){
   document.getElementById('alien-tag').textContent = FORM_TAG[formDef.id]||'';
   document.body.style.setProperty('--theme', FORM_THEME[formDef.id]||'#39ff8a');
   const portWrap = document.getElementById('alien-portrait');
-  setAlienPortrait(portWrap,kind);
+  portWrap.innerHTML = '';
+  portWrap.appendChild(getPortraitCanvas(kind));
   flashTransform(formDef===BEN?.35:.6);
   bannerText(formDef.name);
   Audio_.transform();
@@ -2368,7 +2172,7 @@ function buildDial(){
     const cx=150, cy=150, R=104, ang=(-90+(i-1)*60)*Math.PI/180;
     el.style.left=(i?cx+Math.cos(ang)*R:cx)+'px'; el.style.top=(i?cy+Math.sin(ang)*R:cy)+'px'; el.style.setProperty('--c',FORM_THEME[def.id]);
     const inn=document.createElement('div'); inn.className='in'; el.appendChild(inn);
-    if(i){ const img=alienImageElement(def.id,()=>{ if(img.parentNode){ img.replaceWith(getPortraitCanvas(def.id)); } }); if(img) inn.appendChild(img); else if(portraitThumb[def.id]){ const c=document.createElement('img'); c.src=portraitThumb[def.id]; inn.appendChild(c); } }
+    if(i){ const img=document.createElement('img'); if(portraitThumb[def.id]) img.src=portraitThumb[def.id]; inn.appendChild(img); }
     else inn.innerHTML='<svg viewBox="0 0 100 100"><path d="M26 18h48L54 50l20 32H26l20-32z" fill="#39ff8a"/><path d="M34 24h32L50 46z M34 76h32L50 54z" fill="#03130c"/></svg>';
     const b=document.createElement('b'); b.textContent=DIAL_SHORT[def.id]||def.name; inn.appendChild(b);
     const pick=e=>{ e.preventDefault(); e.stopPropagation(); Audio_.resume(); if(tryTransform(def)) closeDial(); };
@@ -4245,7 +4049,7 @@ function playerAnimate(parts,dt,moving){
   const atk = player.punchAnimT>0 ? atkInput(player.punchKind,player.punchAnimT,player.punchAnimDur||.25,{side:player.punchSide,id,amp:id==='echo_echo'?.85:1}) : null;
   const climb=!!player.onLadder;
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb,vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,carrying:!!carried,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0,rolling:id==='cannonbolt'&&!!player.rolling,rollT:id==='cannonbolt'?(player.rollT||0):0});
+    swimming:player.swimming,carrying:!!carried,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.
@@ -4493,7 +4297,7 @@ function updatePlayerOnFoot(dt){
     const curl = player.rollT||0;
     const bodyScale = 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
     if(parts.hips) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
-    playerAnimate(parts, dt, moving); // keep the imported skeleton alive even after the curl becomes a full roll
+    if(curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
     if(parts.shell){ parts.shell.scale.setScalar(Math.max(0.001, curl)); parts.shell.position.y = parts.shellBaseY; }
     if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
     else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
@@ -4651,7 +4455,7 @@ document.getElementById('btn-controls').addEventListener('click', ()=> showPanel
   : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben, V = enter/exit vehicle (Space = handbrake). L / Tab / middle-click = Lock-on. Fly/swim: look up or down while moving.'
 ));
 document.getElementById('btn-about').addEventListener('click', ()=> showPanel(
-  'OMNIVERSE: ZERO — an original fan-made prototype blending a Minecraft-style voxel world with Ben 10 Alien Force-inspired transformation and combat mechanics. All characters, names and visuals here are original interpretations.'
+  'OMNITRIX: VOXEL PROTOCOL — an original fan-made prototype blending a Minecraft-style voxel world with Ben 10 Alien Force-inspired transformation and combat mechanics. All characters, names and visuals here are original interpretations.'
 ));
 document.getElementById('btn-settings').addEventListener('click', ()=>{
   showPanel('<div>GRAPHICS QUALITY</div><div id="quality-row"></div><div style="margin-top:14px">OMNITRIX TIMER</div><div id="omni-row"></div><div style="margin-top:14px">PERFORMANCE STATS</div><div id="perf-row"></div>');
@@ -4683,8 +4487,7 @@ document.getElementById('btn-start').addEventListener('click', startOnce);
 document.getElementById('btn-start').addEventListener('touchend', startOnce, {passive:false});
 
 // initial portrait render for Ben so card isn't empty before start
-setAlienPortrait(document.getElementById('alien-portrait'),'ben');
-(function bootLobby(){const boot=document.getElementById('boot-screen'),fill=document.getElementById('boot-fill'),status=document.getElementById('boot-status');if(!boot)return;const marks=[[18,'LOADING LOCAL ASSETS...'],[42,'BUILDING CITY STREAM...'],[68,'MOUNTING ALIEN SYSTEM...'],[86,'CALIBRATING CONTROLS...'],[100,'ZERO SYSTEM READY']];let i=0;const tick=()=>{if(i>=marks.length){setTimeout(()=>boot.classList.add('done'),260);return}const m=marks[i++];fill.style.width=m[0]+'%';status.textContent=m[1];setTimeout(tick,i===1?220:180)};requestAnimationFrame(()=>requestAnimationFrame(tick))})();
+document.getElementById('alien-portrait').appendChild(getPortraitCanvas('ben'));
 })();
 </script>
 </body>
