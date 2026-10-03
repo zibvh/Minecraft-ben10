@@ -33,7 +33,7 @@ const GLBBODY=(function(){
         sL:['Bone006_018'], eL:['Bone007_019'], sR:['Bone002_03'], eR:['Bone003_04'],
         tL:['Bone013_042'], kL:['Bone014_043'], fL:['Bone016_044'], tR:['Bone010_038'], kR:['Bone011_039'], fR:['Bone015_040'] },
       down:{} },
-    cannonbolt:{ face:Math.PI, map:{ hips:['Hips_01'], chest:['Spine_06'],
+    cannonbolt:{ curl:{ Chest_07:-1.0 }, face:Math.PI, map:{ hips:['Hips_01'], chest:['Spine_06'],
         sL:['Left_arm_029'], eL:['Left_elbow_030'], sR:['Right_arm_09'], eR:['Right_elbow_010'],
         tL:['Right_WideLeg_L_048'], kL:['Right_WideKnee_L_049'], fL:['Right_WideAnkle_L_050'],
         tR:['Right_WideLeg_R_02'], kR:['Right_WideKnee_R_03'], fR:['Right_WideAnkle_R_04'] },
@@ -131,7 +131,7 @@ const GLBBODY=(function(){
         const phi=deg*Math.PI/180, t=h.multiplyScalar(Math.sin(phi)).add(new THREE.Vector3(0,-Math.cos(phi),0));
         const A=new THREE.Quaternion().setFromUnitVectors(d,t.normalize()); ent[i].qb0.premultiply(A); }
       const tail=(C.tail||[]).map(nm=>idx.get(byName[nm])).filter(i=>i!=null);
-      const G={ kind, gain:C.gain||null, pivot, k, base:pivot.position.clone(), bones, par, qBind, pBind, qParRel, sPar, ent, tail, qw:bones.map(()=>new THREE.Quaternion()),
+      const G={ kind, gain:C.gain||null, curl:C.curl||null, pivot, k, base:pivot.position.clone(), bones, par, qBind, pBind, qParRel, sPar, ent, tail, qw:bones.map(()=>new THREE.Quaternion()),
         t:{hips:new THREE.Quaternion(),chest:new THREE.Quaternion(),head:new THREE.Quaternion(),sL:new THREE.Quaternion(),eL:new THREE.Quaternion(),sR:new THREE.Quaternion(),eR:new THREE.Quaternion(),
            s2L:new THREE.Quaternion(),e2L:new THREE.Quaternion(),s2R:new THREE.Quaternion(),e2R:new THREE.Quaternion(),
            tL:new THREE.Quaternion(),kL:new THREE.Quaternion(),fL:new THREE.Quaternion(),tR:new THREE.Quaternion(),kR:new THREE.Quaternion(),fR:new THREE.Quaternion()}, clock:Math.random()*10 };
@@ -168,8 +168,10 @@ const GLBBODY=(function(){
         b.position.copy(G.pBind[i]);
         if(e.hipsT && (dx||dy||dz)){ _v.set(dx,dy,dz).applyQuaternion(_q2.copy(pq).invert()).multiplyScalar(1/G.sPar[i]); b.position.add(_v); }
       } else {
-        b.quaternion.copy(G.qBind[i]); b.position.copy(G.pBind[i]);
-        G.qw[i].copy(pq).multiply(G.qBind[i]);
+        b.position.copy(G.pBind[i]);
+        const cv=G.curl&&p.ballK>0?G.curl[b.name]:null;
+        if(cv){ b.quaternion.copy(G.qBind[i]).multiply(_q2.setFromAxisAngle(_v.set(1,0,0),cv*p.ballK)); G.qw[i].copy(pq).multiply(b.quaternion); }
+        else { b.quaternion.copy(G.qBind[i]); G.qw[i].copy(pq).multiply(G.qBind[i]); }
       }
     }
     // tails: gentle travelling sway that widens with speed

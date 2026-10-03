@@ -1447,6 +1447,7 @@ function attackPose(P,parts,at,dt){
 /* Main animator. inp: {pos, fwd:{x,z}, grounded, vy, flying, hover, swimming, carrying, superT, atk:{kind,t,side,id,amp,tc},
    aim, flee, hurt(0..1), dead(0..1), hp, id, powerScale} */
 function animateRig(parts,dt,inp){
+  parts.ballK=inp.ball||0;
   if(!parts||!parts.hips||dt<=0) return;
   if(parts.fx) tickFx(parts,dt);
   const A=parts.anim, P=_P; resetPose(P);
@@ -1516,13 +1517,14 @@ function animateRig(parts,dt,inp){
     const sw=A.t*6; P.sL.x=1.4+Math.sin(sw)*1.4; P.sR.x=1.4-Math.sin(sw)*1.4; P.eL=.5+Math.max(0,Math.sin(sw))*.6; P.eR=.5+Math.max(0,-Math.sin(sw))*.6;
     P.tLx=Math.sin(sw*2)*.45; P.tRx=-Math.sin(sw*2)*.45; P.kL=.3+Math.max(0,Math.sin(sw*2))*.4; P.kR=.3+Math.max(0,-Math.sin(sw*2))*.4; P.chY=Math.sin(sw)*.25; P.hdX=.5; 
   }
-  if(inp.xl && grounded && !inp.flying && !inp.swimming){ // XLR8: low digitigrade crouch, wide stance, arms bent out to the sides (not swung like a human's)
+  if(inp.xl && grounded && !inp.flying && !inp.swimming){ // XLR8 (from the reference clip): wide splayed crouch, torso hunched slightly, arms held OUT and down to the sides, barely swinging
     const sp=_ez(inp.superT||0), mm=Math.max(mv,.0);
-    P.hipsY -= .32+.1*sp; P.tLx += .5; P.tRx += .5; P.kL += .9*(1-.3*sp); P.kR += .9*(1-.3*sp); P.fL -= .5; P.fR -= .5; P.tLz=-.16; P.tRz=.16;
-    P.chX += -.42-.08*sp; P.hdX += .5+.2*sp;
-    P.sL.x = P.sL.x*.35 - .55*(1-sp); P.sR.x = P.sR.x*.35 - .55*(1-sp);
-    P.eL = _lerp(.55+.2*mm*Math.max(0,-sL),.4,sp); P.eR = _lerp(.55+.2*mm*Math.max(0,-sR),.4,sp);
-    P.sL.z = -.5*(1-sp); P.sR.z = .5*(1-sp);
+    P.hipsY -= .34+.08*sp; P.tLx += .32; P.tRx += .32; P.kL += .85*(1-.3*sp); P.kR += .85*(1-.3*sp); P.fL -= .4; P.fR -= .4; P.tLz=-.34*(1-sp*.6); P.tRz=.34*(1-sp*.6);
+    P.chX += -.3-.2*sp; P.hdX += .32+.2*sp;
+    P.sL.x = P.sL.x*.2 + .08*(1-sp); P.sR.x = P.sR.x*.2 + .08*(1-sp);
+    P.eL = _lerp(.32+.12*mm*Math.max(0,-sL),.4,sp); P.eR = _lerp(.32+.12*mm*Math.max(0,-sR),.4,sp);
+    P.sL.z = -.38*(1-sp); P.sR.z = .38*(1-sp);
+    P.chZ += 0; P.hipsRZ += 0;
   }
   if(inp.hb && grounded && !inp.flying && !inp.swimming && !(inp.cast>0)){ // Heatblast: confident stride, fists up at a bent elbow
     P.sL.x*=.65; P.sR.x*=.65; P.sL.x+=.12; P.sR.x+=.12; P.eL+=.7*mv+.25*(1-mv); P.eR+=.7*mv+.25*(1-mv); P.sL.z-=.1; P.sR.z+=.1; P.chX+=-.06*mv; P.hdX+=.06*mv;
@@ -1533,8 +1535,8 @@ function animateRig(parts,dt,inp){
     P.tLx*=1.25; P.tRx*=1.25; P.kL*=1.2; P.kR*=1.2;
   }
   if(inp.ball>0){ const b=_sm(inp.ball); // Cannonbolt ball: chin tucked, back rounded, knees drawn up, arms hugging the shins
-    P.chX+=1.6*b; P.hdX+=.7*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
-    P.sL.x=_lerp(P.sL.x,1.0,b); P.sR.x=_lerp(P.sR.x,1.0,b); P.eL=_lerp(P.eL,1.7,b); P.eR=_lerp(P.eR,1.7,b); P.sL.z=_lerp(P.sL.z,.45,b); P.sR.z=_lerp(P.sR.z,-.45,b); P.hipsY-=.12*b; }
+    P.chX+=-1.5*b; P.hdX+=-.5*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
+    P.sL.x=_lerp(P.sL.x,-1.25,b); P.sR.x=_lerp(P.sR.x,-1.25,b); P.eL=_lerp(P.eL,.9,b); P.eR=_lerp(P.eR,.9,b); P.sL.z=_lerp(P.sL.z,.35,b); P.sR.z=_lerp(P.sR.z,-.35,b); P.hipsY-=.12*b; }
   if(inp.carrying){ const _cl=parts.leftArm2?[[P.sL,'eL'],[P.sR,'eR']]:[[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]; for(const [S,ek] of _cl){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
   if(inp.flee){ P.sL.x=2.5+Math.sin(A.t*14)*.35; P.sR.x=2.5-Math.sin(A.t*14)*.35; P.eL=.8; P.eR=.8; P.chX+=-.12; P.hdX+=.25; }
   if(inp.aim){ // pistol/blaster: right arm straight out, left hand supports, head turned down the sight line
@@ -1562,7 +1564,7 @@ function animateRig(parts,dt,inp){
   }
   if(inp.ball>0){ const b=_sm(inp.ball); // Cannonbolt ball: chin tucked, back rounded, knees drawn up, arms hugging the shins
     P.chX+=1.6*b; P.hdX+=.7*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
-    P.sL.x=_lerp(P.sL.x,1.0,b); P.sR.x=_lerp(P.sR.x,1.0,b); P.eL=_lerp(P.eL,1.7,b); P.eR=_lerp(P.eR,1.7,b); P.sL.z=_lerp(P.sL.z,.45,b); P.sR.z=_lerp(P.sR.z,-.45,b); P.hipsY-=.12*b; }
+    P.sL.x=_lerp(P.sL.x,-1.25,b); P.sR.x=_lerp(P.sR.x,-1.25,b); P.eL=_lerp(P.eL,.9,b); P.eR=_lerp(P.eR,.9,b); P.sL.z=_lerp(P.sL.z,.35,b); P.sR.z=_lerp(P.sR.z,-.35,b); P.hipsY-=.12*b; }
   if(inp.carrying){ const _cl=parts.leftArm2?[[P.sL,'eL'],[P.sR,'eR']]:[[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]; for(const [S,ek] of _cl){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
   if(inp.flee){ P.sL.x=2.5+Math.sin(A.t*14)*.35; P.sR.x=2.5-Math.sin(A.t*14)*.35; P.eL=.8; P.eR=.8; P.chX+=-.12; P.hdX+=.25; }
   if(inp.aim){ // pistol/blaster: right arm straight out, left hand supports, head turned down the sight line
@@ -4207,12 +4209,12 @@ function updatePlayerOnFoot(dt){
     // fully cover it, so the silhouette actually reads as a ball rather than a person with tucked limbs.
     const curl = player.rollT||0;
     const useGlb=!!parts.glb; // real model: curl his own body into a ball instead of swapping in the generic shell
-    const bodyScale = 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
+    const bodyScale = useGlb ? 1-curl*.08 : 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
     if(parts.hips && !useGlb) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
     if(useGlb) GLBBODY.scaleBody(parts,bodyScale);
-    player._ball = 0;
-    if(curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
-    if(parts.shell){ parts.shell.scale.setScalar(Math.max(0.001, curl*2.0)); parts.shell.position.y = parts.shellBaseY; }
+    player._ball = useGlb ? Math.min(1,curl*1.25) : 0;
+    if(useGlb || curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
+    if(parts.shell){ parts.shell.scale.setScalar(useGlb?0.001:Math.max(0.001, curl*2.0)); parts.shell.position.y = parts.shellBaseY; }
     if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
     else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
   } else {
