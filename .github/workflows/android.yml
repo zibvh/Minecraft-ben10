@@ -57,6 +57,19 @@ jobs:
       - name: Sync web assets into Android project
         run: npx cap sync android
 
+      - name: Apply app icon, name and landscape lock
+        run: |
+          RES=android/app/src/main/res
+          # remove Capacitor's default adaptive icons + splash, then drop in the game's own
+          rm -rf $RES/mipmap-anydpi-v26 $RES/drawable-v24/ic_launcher_foreground.xml
+          find $RES -name 'ic_launcher*.png' -delete
+          find $RES -name 'splash.png' -delete
+          for d in app-icons/mipmap-*; do mkdir -p $RES/$(basename $d); cp $d/*.png $RES/$(basename $d)/; done
+          mkdir -p $RES/drawable && cp app-icons/splash.png $RES/drawable/splash.png
+          # always landscape (both directions), no rotating needed
+          sed -i 's/<activity\b/<activity android:screenOrientation="sensorLandscape"/' android/app/src/main/AndroidManifest.xml
+          grep -n "screenOrientation" android/app/src/main/AndroidManifest.xml
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
@@ -67,5 +80,5 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ben10-city-debug-apk
+          name: omniverse-zero-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk

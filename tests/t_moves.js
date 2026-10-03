@@ -19,7 +19,7 @@ g.step(5); ok(!foe.alive||foe.hp<hp0,'landing shockwave hurts nearby enemies (hp
 // ---------- XLR8 run vs dash ----------
 d.setForm(d.BEN,'ben'); d.OMNI.charge=100; d.OMNI.lock=0; d.tryTransform(d.ALIENS[2]); g.step(20); place();
 const sp=(n)=>{ const a=d.player.pos.clone(); for(let i=0;i<n;i++) g.step(1); return d.player.pos.distanceTo(a)/(n/60); };
-d.moveInput.y=1; const walk=sp(30); ok(walk>6&&walk<9,'XLR8 base speed '+walk.toFixed(1));
+d.moveInput.y=1; const walk=sp(30); ok(walk>9&&walk<14,'XLR8 base speed '+walk.toFixed(1));
 // DASH = burst
 place(); d.moveInput.y=1; g.step(5); const peak=[]; d.startDash(); for(let i=0;i<30;i++){ const a=d.player.pos.clone(); g.step(1); peak.push(d.player.pos.distanceTo(a)*60); }
 const pk=Math.max(...peak), after=peak[peak.length-1];

@@ -1,4 +1,4 @@
-# Ben 10 City — Android build
+# Omniverse: ZERO — Android build
 
 This wraps `www/index.html` (the game) as an Android app using Capacitor,
 and builds it automatically with GitHub Actions.
@@ -17,7 +17,7 @@ and builds it automatically with GitHub Actions.
 2. Go to the repo's **Actions** tab. The "Build Android APK" workflow runs
    automatically on push (or click "Run workflow" to trigger it by hand).
 3. When it finishes (a few minutes), open the completed run and download
-   the **ben10-city-debug-apk** artifact — that's your installable APK.
+   the **omniverse-zero-debug-apk** artifact — that's your installable APK.
 4. Copy it to your phone and open it (you'll need to allow "install from
    unknown sources" once). This is a debug build, unsigned, fine for your
    own device but not for the Play Store.
@@ -36,8 +36,7 @@ never need Android Studio or a local Android SDK.
   time this workflow runs in GitHub Actions. If `npx cap add android`
   or the Gradle build fails there, paste me the Actions log and I'll fix
   the workflow or config.
-- App icon/splash screen are Capacitor's defaults for now. I can generate
-  a custom Omnitrix-style icon and splash if you want.
+- The app icon, splash screen, name and landscape lock are applied by the workflow step "Apply app icon, name and landscape lock" (icons live in `app-icons/`).
 - The `<meta viewport>` and safe-area handling already in the game HTML
   should carry over fine inside the Android WebView, but I have not
   confirmed that on a real device.

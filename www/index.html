@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>OMNITRIX // Voxel Protocol</title>
+<title>Omniverse: ZERO</title>
 <style>
   :root{
     --green:#39ff8a; --green-dim:#1c7a45; --panel:#0b1210ee; --panel2:#0e1a16dd;
@@ -305,20 +305,63 @@
   .od.cur{filter:drop-shadow(0 0 8px #fff) brightness(1.15);}
   .od.off{opacity:.3;}
   .od:active{transform:scale(.9);}
+
+  /* ===== lobby v3 (responsive) ===== */
+  #start-screen{flex-direction:row;gap:clamp(24px,7vw,90px);padding:max(env(safe-area-inset-top),14px) max(env(safe-area-inset-right),24px) max(env(safe-area-inset-bottom),14px) max(env(safe-area-inset-left),24px);overflow-y:auto;}
+  #start-screen .lobby-left,#start-screen .lobby-right{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1;}
+  #start-screen .lobby-right{flex:0 1 300px;min-width:0;}
+  #logo-hex{width:clamp(48px,14vh,92px);height:clamp(48px,14vh,92px);}
+  #start-screen h1{font-size:clamp(24px,7.2vh,46px);letter-spacing:clamp(2px,.8vw,7px);text-align:center;line-height:1.05;display:flex;flex-direction:column;align-items:center;}
+  #start-screen h1 span{font-size:.62em;letter-spacing:.7em;margin-right:-.7em;color:#fff;text-shadow:0 0 14px #39ff8a,0 0 30px rgba(57,255,138,.5);margin-top:4px;}
+  #start-screen .menu-btn{width:min(280px,100%);padding:clamp(9px,2.6vh,15px) 0;margin:clamp(4px,1.2vh,7px) 0;font-size:clamp(12px,3vh,15px);}
+  #start-screen .menu-btn.primary,.pp-card .menu-btn.primary{background:linear-gradient(180deg,#39ff8a,#12a458);color:#022012;border-color:#aaffd0;box-shadow:0 0 18px rgba(57,255,138,.45);}
+  #start-screen #menu-panel{max-width:min(300px,100%);font-size:12px;max-height:34vh;overflow-y:auto;}
+  @media (orientation:portrait){ #start-screen{flex-direction:column;gap:18px;} #start-screen .lobby-right{flex:0 0 auto;width:100%;max-width:320px;} #start-screen h1{font-size:clamp(26px,9vw,44px);} }
+  /* ===== pause page, extra buttons, hud editor ===== */
+  #cam-btn,#pause-btn{position:absolute;width:34px;height:34px;border-radius:50%;border:2px solid var(--theme);background:rgba(4,18,12,.82);display:flex;align-items:center;justify-content:center;pointer-events:auto;z-index:25;box-shadow:0 0 8px rgba(0,0,0,.6);}
+  #cam-btn svg,#pause-btn svg{width:58%;height:58%;stroke:#eafff2;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+  #pause-btn svg{stroke-width:3.4;}
+  #cam-btn{right:calc(max(12px,env(safe-area-inset-right,12px)) + 51px);top:calc(max(8px,env(safe-area-inset-top,8px)) + 61px);}
+  #pause-btn{right:calc(max(12px,env(safe-area-inset-right,12px)) - 6px);top:calc(max(8px,env(safe-area-inset-top,8px)) + 61px);}
+  #cam-btn.on{background:rgba(57,255,138,.35);box-shadow:0 0 12px var(--theme);}
+  #cam-btn.active,#pause-btn.active{transform:scale(.88);}
+  body.driving #cam-btn{display:none;}
+  #pause-page{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,rgba(8,40,26,.92),rgba(2,8,5,.96));color:#eafff2;}
+  #pause-page.show{display:flex;} #pause-page.editing{background:transparent;align-items:flex-start;pointer-events:none;}
+  .pp-card{width:min(320px,86vw);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;}
+  .pp-card h2{margin:0 0 6px;letter-spacing:8px;color:var(--green);font-size:clamp(20px,5vh,28px);text-shadow:0 0 14px rgba(57,255,138,.6);}
+  .pp-card .menu-btn{width:100%;}
+  #pp-opts-body{text-align:center;font-size:13px;margin-bottom:8px;}
+  #pp-hudbar{pointer-events:auto;margin-top:max(env(safe-area-inset-top),8px);background:rgba(2,10,6,.88);border:1px solid var(--green-dim);padding:8px 12px;max-width:min(560px,94vw);text-align:center;z-index:310;}
+  #pp-omni-fix{}
+  #omni-row,#perf-row{display:flex;gap:8px;justify-content:center;margin-top:8px;}
+  #pp-hudbar{padding:5px 8px !important;max-width:min(470px,60vw) !important;margin-left:0;} #pp-hudbar .qbtn{padding:4px 8px;font-size:10px;} .pp-hint{font-size:9px !important;margin:4px 0 !important;}
+  #pp-hudbar .pp-row{justify-content:center;} #pp-hudbar .pp-row .menu-btn{width:100px;padding:5px 0;font-size:11px;clip-path:none;}
+  #pp-chips{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;} #pp-chips .qbtn{cursor:pointer;}
+  .pp-hint{font-size:11px;opacity:.75;margin:6px 0;} .pp-row{display:flex;gap:8px;} .pp-row .menu-btn{width:130px;margin:2px 0;padding:8px 0;}
+  body.hud-edit [data-hud]{outline:2px dashed #ffe27a;outline-offset:3px;pointer-events:auto !important;touch-action:none;opacity:1 !important;filter:none;z-index:305;}
+  body.hud-edit [data-hud].dragging{outline-color:#39ff8a;}
+  body.hud-edit #hud{display:block !important;}
+  #rotate-warn{display:none;position:fixed;inset:0;z-index:999;background:#020b06;color:#39ff8a;align-items:center;justify-content:center;text-align:center;font-size:22px;letter-spacing:4px;font-weight:700;}
+  #rotate-warn small{display:block;font-size:11px;opacity:.7;letter-spacing:2px;margin-top:8px;}
+  @media (orientation:portrait) and (max-width:900px){ body.playing #rotate-warn{display:flex;} }
 </style>
 </head>
 <body>
 
 <div id="start-screen">
-  <svg id="logo-hex" viewBox="0 0 100 100"><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#03130c" stroke="#39ff8a" stroke-width="5"/><path d="M30 26h40L54 50l16 24H30l16-24z" fill="#39ff8a"/><path d="M36 30h28L50 48z M36 70h28L50 52z" fill="#03130c"/></svg>
-  <h1>OMNITRIX</h1>
-  <div class="sub">VOXEL PROTOCOL</div>
-  <button class="menu-btn" id="btn-start">PLAY</button>
-  <button class="menu-btn" id="btn-settings">SETTINGS</button>
-  <button class="menu-btn" id="btn-controls">HOW TO PLAY</button>
-  <button class="menu-btn" id="btn-about">ABOUT</button>
-  <div id="menu-panel"></div>
-  <div class="foot">CHOOSE YOUR PATH</div>
+  <div class="lobby-left">
+    <svg id="logo-hex" viewBox="0 0 100 100"><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#03130c" stroke="#39ff8a" stroke-width="5"/><path d="M30 26h40L54 50l16 24H30l16-24z" fill="#39ff8a"/><path d="M36 30h28L50 48z M36 70h28L50 52z" fill="#03130c"/></svg>
+    <h1>OMNIVERSE<span>ZERO</span></h1>
+    <div class="sub">CHOOSE YOUR FORM</div>
+  </div>
+  <div class="lobby-right">
+    <button class="menu-btn primary" id="btn-start">PLAY</button>
+    <button class="menu-btn" id="btn-settings">SETTINGS</button>
+    <button class="menu-btn" id="btn-controls">HOW TO PLAY</button>
+    <button class="menu-btn" id="btn-about">ABOUT</button>
+    <div id="menu-panel"></div>
+  </div>
 </div>
 
 <div id="hud">
@@ -350,6 +393,8 @@
   <div id="veh-hud"><span id="veh-spd">0</span><div class="vtrack"><i id="veh-hp"></i></div></div>
   <div id="veh-btn"><svg viewBox="0 0 24 24"><path d="M3 15v-3l2-5h14l2 5v3M3 15h18M3 15v3h3v-3M18 15v3h3v-3"/><circle cx="7.5" cy="15" r="1"/><circle cx="16.5" cy="15" r="1"/></svg><b id="veh-btn-t">ENTER VEHICLE</b></div>
   <div id="lock-btn" title="Lock target"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="1.2"/></svg></div>
+  <div id="cam-btn" title="Camera mode"><svg viewBox="0 0 24 24"><path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.6"/></svg></div>
+  <div id="pause-btn" title="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></div>
   <div id="hotbar"></div>
   <div id="joystick-zone"><div id="joystick-base"></div><div id="joystick-stick"></div></div>
   <div class="abtn" id="btn-run"><svg viewBox="0 0 24 24"><circle cx="14.5" cy="4.5" r="2"/><path d="M6 21l3-6 3-3-2-4 4-2 3 4h3M9 15l4 1 1 5M8 8l-3 3"/></svg><b>RUN</b></div>
@@ -362,6 +407,16 @@
 </div>
 
 <div id="lock-marker"><svg viewBox="-28 -28 56 56"><path class="brk" d="M-20-10V-20H-10M10-20H20V-10M20 10V20H10M-10 20H-20V10"/><circle class="brk" r="2.2" style="fill:#ff4a4a"/></svg><div id="lock-hp"><i></i></div><div id="lock-name"></div></div>
+<div id="pause-page">
+  <div class="pp-card" id="pp-main"><h2>PAUSED</h2>
+    <button class="menu-btn primary" id="pp-continue">CONTINUE</button>
+    <button class="menu-btn" id="pp-options">OPTIONS</button>
+    <button class="menu-btn" id="pp-hud">HUD</button></div>
+  <div class="pp-card" id="pp-opts" style="display:none"><h2>OPTIONS</h2><div id="pp-opts-body"></div><button class="menu-btn" id="pp-opts-back">BACK</button></div>
+  <div id="pp-hudbar" style="display:none"><div id="pp-chips"></div><div class="pp-hint">Drag any button to move it. Each alien keeps its own layout.</div>
+    <div class="pp-row"><button class="menu-btn" id="pp-reset">RESET</button><button class="menu-btn primary" id="pp-done">DONE</button></div></div>
+</div>
+<div id="rotate-warn">ROTATE YOUR DEVICE<br><small>Omniverse: ZERO is played in landscape</small></div>
 <div id="flash-overlay"></div>
 <div id="slow-overlay"></div>
 <div id="damage-overlay"></div>
@@ -1784,11 +1839,11 @@ const ALIENS = [
     special:{ name:'GROUND SLAM', cost:35, cooldown:5,
       run(ctx){ shockwaveAt(ctx.player.pos, 4.5, 40, true); shakeCamera(0.3); } } },
   { id:'heatblast', name:'HEATBLAST', actions:[ACT.fire,ACT.fly,ACT.burn], maxHealth:100, maxEnergy:120, speed:3.0, jump:5.6, flies:true, flySpeed:22,
-    atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.0,
+    atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.3,
     special:{ name:'FIREBALL', cost:20, cooldown:1.2,
       run(ctx){ spawnProjectile(ctx.player, 0xff5a1e, 26, 18, false); } } },
   { id:'xlr8', name:'XLR8', actions:[ACT.dash,ACT.tornado,ACT.slow], maxHealth:90, maxEnergy:110, speed:7.4, jump:6.0,
-    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:0.98,
+    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:1.1,
     special:{ name:'SPEED BURST', cost:8, cooldown:0.1, duration:4, speedMult:1.9, drainPerSec:8,
       run(ctx){ ctx.player.speedBurstT = 4; } } },
   { id:'diamondhead', name:'DIAMONDHEAD', flies:true, flySpeed:9, actions:[ACT.spray,ACT.shard,ACT.shield,ACT.wall,ACT.lev], maxHealth:130, maxEnergy:100, speed:2.9, jump:5.4,
@@ -1801,6 +1856,8 @@ const ALIENS = [
     atkDamage:24, atkRange:1.6, atkCooldown:0.5, modelScale:1.0,
     special:null },
 ];
+const camMode={free:false,yaw:0,pitch:.2}; // free = orbit camera that never steers the character
+const SPEED_SCALE=1.6, FLY_SCALE=1.4; // global pace boost (movement felt sluggish)
 const BEN = { id:'ben', name:'BEN', maxHealth:100, maxEnergy:100, speed:4.0, jump:6.0, modelScale:1.0,
   atkDamage:8, atkRange:1.6, atkCooldown:0.45, special:null };
 [BEN].concat(ALIENS).forEach(a=>{ a.atkRange*=1.2; });
@@ -1859,6 +1916,7 @@ function setForm(formDef, kind){
   const portWrap = document.getElementById('alien-portrait');
   portWrap.innerHTML = '';
   portWrap.appendChild(getPortraitCanvas(kind));
+  if(window.__applyHud) window.__applyHud();
   flashTransform(formDef===BEN?.35:.6);
   bannerText(formDef.name);
   Audio_.transform();
@@ -2018,10 +2076,11 @@ function updateCamera(){
   if(!player.onGround) camDyn.lastVy=player.vel.y;
   else if(!camDyn.wasGround && camDyn.lastVy<-8 && !player.driving) camDyn.kick=Math.min(.5,(-camDyn.lastVy-6)*.022);
   camDyn.wasGround=player.onGround; camDyn.kick*=Math.max(0,1-cdt*7);
+  const _cs=camMode.free?camMode:player;
   const lookDir = new THREE.Vector3(
-    Math.cos(player.pitch) * -Math.sin(player.yaw),
-    Math.sin(player.pitch),
-    Math.cos(player.pitch) * -Math.cos(player.yaw)
+    Math.cos(_cs.pitch) * -Math.sin(_cs.yaw),
+    Math.sin(_cs.pitch),
+    Math.cos(_cs.pitch) * -Math.cos(_cs.yaw)
   );
   const drv = player.driving ? 1 : 0;
   const sp = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
@@ -2555,7 +2614,7 @@ function updateLockOn(dt){
   // ---- camera assist: ease yaw/pitch toward the target; yields to the player's own swipe ----
   const since=(performance.now()-lastUserLookT)/1000;
   const yielding = camTouchId!==null || since<0.35;      // finger on the look area / just stopped swiping
-  if(player.alive && !yielding){
+  if(player.alive && !yielding && !camMode.free){
     const to=lockCenter(t,_lv).clone().sub(player.pos.clone().add(new THREE.Vector3(0,1.1,0)));
     const flat=Math.hypot(to.x,to.z);
     const wantYaw=Math.atan2(-to.x,-to.z);
@@ -3173,11 +3232,12 @@ function useAction(a,k){
 function buildActions(){
   const box=document.getElementById('actions'); box.innerHTML=''; actEls=[];
   (player.form.actions||[]).forEach((a,i)=>{
-    const b=document.createElement('div'); b.className='abtn act'; box.appendChild(b); actEls.push(b);
+    const b=document.createElement('div'); b.className='abtn act'; b.dataset.hud='a'+i; box.appendChild(b); actEls.push(b);
     const go=e=>{ Audio_.resume(); useAction(a,i); e.preventDefault(); };
     b.addEventListener('touchstart',go,{passive:false}); b.addEventListener('mousedown',go);
     if(a.hold){ const up=e=>{ a.hold(false); e.preventDefault(); }; ['touchend','touchcancel'].forEach(n=>b.addEventListener(n,up,{passive:false})); ['mouseup','mouseleave'].forEach(n=>b.addEventListener(n,up)); }
   });
+  if(window.__applyHud) window.__applyHud();
 }
 function poseExtras(parts,moving,dt){
   const m=player.model; let lean=0;
@@ -3373,8 +3433,9 @@ function updateKeyboardMove(){
 }
 addEventListener('mousemove', e=>{
   if(isTouch || document.pointerLockElement !== renderer.domElement) return;
-  player.yaw -= e.movementX*0.0025;
-  player.pitch = THREE.MathUtils.clamp(player.pitch - e.movementY*0.002, -1.3, 1.25);
+  const T=camMode.free?camMode:player;
+  T.yaw -= e.movementX*0.0025;
+  T.pitch = THREE.MathUtils.clamp(T.pitch - e.movementY*0.002, -1.3, 1.25);
 });
 renderer.domElement.addEventListener('click', ()=>{
   if(!isTouch && document.getElementById('start-screen').style.display==='none'){
@@ -3420,7 +3481,7 @@ joyZone.addEventListener('touchcancel', joyEnd,{passive:false});
 // its own dedicated small zone for movement; everything else is look.
 function isUiElement(el){
   while(el && el !== document.body){
-    if(el.id==='joystick-zone' || el.id==='lock-btn' || el.id==='veh-btn' || el.tagName==='BUTTON') return true;
+    if(el.id==='joystick-zone' || el.id==='lock-btn' || el.id==='cam-btn' || el.id==='pause-btn' || el.id==='veh-btn' || el.tagName==='BUTTON') return true;
     if(el.classList && (el.classList.contains('menu-btn') || el.classList.contains('act-btn'))) return true;
     el = el.parentElement;
   }
@@ -3440,8 +3501,9 @@ renderer.domElement.addEventListener('touchmove', e=>{
     if(t.identifier!==camTouchId) continue;
     const dx=t.clientX-lastCam.x, dy=t.clientY-lastCam.y; lastCam={x:t.clientX,y:t.clientY};
     if(camTap){ camTap.moved += Math.abs(dx)+Math.abs(dy); if(camTap.moved>14) noteUserLook(); } // real swipe -> camera assist yields
-    player.yaw -= dx*0.0045;
-    player.pitch = THREE.MathUtils.clamp(player.pitch - dy*0.0035, -1.3, 1.25);
+    const T=camMode.free?camMode:player;
+    T.yaw -= dx*0.0045;
+    T.pitch = THREE.MathUtils.clamp(T.pitch - dy*0.0035, -1.3, 1.25);
   }
 },{passive:true});
 function camEnd(e){
@@ -3915,8 +3977,8 @@ function updatePlayerOnFoot(dt){
   else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*2.2); }
 
   // energy regen (paused briefly right after casting)
-  if(!player.superHeld && (player.specialTimer <= player.form.special?.cooldown - 0.15 || !player.form.special)){
-    player.energy = Math.min(player.form.maxEnergy, player.energy + dt*8);
+  if(!player.superHeld && !(player.speedBurstT>0) && !player.flameHeld && !player.sprayHeld){
+    player.energy = Math.min(player.form.maxEnergy, player.energy + dt*(player.form.id==='xlr8'?14:9));
   }
   if(player.speedBurstT > 0){
     player.speedBurstT -= dt;
@@ -3929,7 +3991,7 @@ function updatePlayerOnFoot(dt){
   let mx = moveInput.x, my = moveInput.y;
   const mag = Math.hypot(mx,my); if(mag>1){ mx/=mag; my/=mag; }
   const speedMult = player.speedBurstT>0 ? (player.form.special.speedMult||1) : 1;
-  const speed = player.form.speed * speedMult * (player.dashT>0 ? ((player.superSpeed||0)>.2 ? 1.3 : 1+3.6*Math.pow(player.dashT/.32,.7)) : 1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*12) * (1+(player.rollT||0)*5) * ((player.runLatch||keys['ShiftLeft']||keys['ShiftRight']) && !player.flying && !player.swimming && !carried && player.form.id!=='xlr8' ? 1.5 : 1) * (player.leapCharging ? 0.35 : 1);
+  const speed = player.form.speed * SPEED_SCALE * speedMult * (player.dashT>0 ? ((player.superSpeed||0)>.2 ? 1.3 : 1+3.6*Math.pow(player.dashT/.32,.7)) : 1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*12) * (1+(player.rollT||0)*5) * ((player.runLatch||keys['ShiftLeft']||keys['ShiftRight']) && !player.flying && !player.swimming && !carried && player.form.id!=='xlr8' ? 1.5 : 1) * (player.leapCharging ? 0.35 : 1);
   let moveX = forward.x*my + right.x*mx;
   let moveZ = forward.z*my + right.z*mx;
   if(player.dashT>0){ moveX=player.dashDir.x; moveZ=player.dashDir.z; player.dashT-=dt; }
@@ -3977,7 +4039,7 @@ function updatePlayerOnFoot(dt){
   } else player.onLadder = null;
 
   if(player.alive && !climbing){
-    const flySpeed = player.flying ? (player.form.flySpeed||speed)*(player.boostT>0?1.7:1) : speed;
+    const flySpeed = player.flying ? (player.form.flySpeed||speed)*FLY_SCALE*(player.boostT>0?1.7:1) : speed;
     const lvx = (player.leapActive && !player.onGround && !player.flying) ? player.leap.x : 0, lvz = (player.leapActive && !player.onGround && !player.flying) ? player.leap.z : 0;
     const nx = player.pos.x + (moveX*flySpeed + lvx)*dt;
     const nz = player.pos.z + (moveZ*flySpeed + lvz)*dt;
@@ -4225,6 +4287,7 @@ function syncHud(){
 const clock = new THREE.Clock();
 function loop(){
   requestAnimationFrame(loop);
+  if(PAUSED){ clock.getDelta(); return; }
   const dt = Math.min(clock.getDelta(), 0.05);
   if(player.slowT>0) player.slowT-=dt;
   timeScale += ((player.slowT>0?0.3:1)*(OMNI.open?0.1:1)-timeScale)*Math.min(1,dt*6);      // world slows to a crawl while the dial is open
@@ -4262,14 +4325,14 @@ document.getElementById('btn-controls').addEventListener('click', ()=> showPanel
   : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben, V = enter/exit vehicle (Space = handbrake). L / Tab / middle-click = Lock-on. Fly/swim: look up or down while moving.'
 ));
 document.getElementById('btn-about').addEventListener('click', ()=> showPanel(
-  'OMNITRIX: VOXEL PROTOCOL — an original fan-made prototype blending a Minecraft-style voxel world with Ben 10 Alien Force-inspired transformation and combat mechanics. All characters, names and visuals here are original interpretations.'
+  'OMNIVERSE: ZERO — an original fan-made prototype blending a Minecraft-style voxel world with Ben 10 Alien Force-inspired transformation and combat mechanics. All characters, names and visuals here are original interpretations.'
 ));
-document.getElementById('btn-settings').addEventListener('click', ()=>{
-  showPanel('<div>GRAPHICS QUALITY</div><div id="quality-row"></div><div style="margin-top:14px">OMNITRIX TIMER</div><div id="omni-row"></div><div style="margin-top:14px">PERFORMANCE STATS</div><div id="perf-row"></div>');
-  { const prow=document.getElementById('perf-row'); [['OFF',false],['ON',true]].forEach(([t,v])=>{ const b=document.createElement('div'); b.className='qbtn'+(PERF.on===v?' active':''); b.textContent=t; b.addEventListener('click',()=>{ setPerf(v); [...prow.children].forEach(c=>c.classList.remove('active')); b.classList.add('active'); }); prow.appendChild(b); }); }
-  { const orow=document.getElementById('omni-row'); [['ON',true],['OFF',false]].forEach(([t,v])=>{ const b=document.createElement('div'); b.className='qbtn'+(OMNI.enabled===v?' active':''); b.textContent=t;
+function fillSettings(host){
+  host.innerHTML=('<div>GRAPHICS QUALITY</div><div id="quality-row"></div><div style="margin-top:14px">OMNITRIX TIMER</div><div id="omni-row"></div><div style="margin-top:14px">PERFORMANCE STATS</div><div id="perf-row"></div>');
+  { const prow=host.querySelector('#perf-row'); [['OFF',false],['ON',true]].forEach(([t,v])=>{ const b=document.createElement('div'); b.className='qbtn'+(PERF.on===v?' active':''); b.textContent=t; b.addEventListener('click',()=>{ setPerf(v); [...prow.children].forEach(c=>c.classList.remove('active')); b.classList.add('active'); }); prow.appendChild(b); }); }
+  { const orow=host.querySelector('#omni-row'); [['ON',true],['OFF',false]].forEach(([t,v])=>{ const b=document.createElement('div'); b.className='qbtn'+(OMNI.enabled===v?' active':''); b.textContent=t;
       b.addEventListener('click',()=>{ OMNI.enabled=v; [...orow.children].forEach(c=>c.classList.remove('active')); b.classList.add('active'); }); orow.appendChild(b); }); }
-  const row = document.getElementById('quality-row');
+  const row = host.querySelector('#quality-row');
   ['LOW','MEDIUM','HIGH'].forEach(q=>{
     const b = document.createElement('div');
     b.className = 'qbtn' + (QUALITY.level===q?' active':'');
@@ -4277,12 +4340,97 @@ document.getElementById('btn-settings').addEventListener('click', ()=>{
     b.addEventListener('click', ()=>{ QUALITY.level=q; applyQuality(); [...row.children].forEach(c=>c.classList.remove('active')); b.classList.add('active'); });
     row.appendChild(b);
   });
+}
+document.getElementById('btn-settings').addEventListener('click', ()=>{ menuPanel.classList.add('show'); fillSettings(menuPanel); });
+
+/* =========================================================================
+   CAMERA MODE BUTTON, PAUSE PAGE, HUD LAYOUT EDITOR
+========================================================================= */
+function setCamFree(v){
+  if(v===camMode.free) return;
+  if(v){ camMode.yaw=player.yaw; camMode.pitch=player.pitch; }
+  else { player.yaw=camMode.yaw; player.pitch=THREE.MathUtils.clamp(camMode.pitch,-1.3,1.25); }
+  camMode.free=v; document.getElementById('cam-btn').classList.toggle('on',v);
+  statusText(v?'FREE CAMERA - LOOK ANYWHERE':'DIRECTIONAL CAMERA');
+}
+bindBtn('cam-btn', ()=>{ if(!PAUSED) setCamFree(!camMode.free); });
+
+let PAUSED=false, gameOn=false, pauseHist=false, ignorePop=0, hudEdit=null;
+const pausePage=document.getElementById('pause-page');
+const ppShow=id=>{ ['pp-main','pp-opts'].forEach(k=>document.getElementById(k).style.display=(k===id?'flex':'none')); document.getElementById('pp-hudbar').style.display='none'; pausePage.classList.remove('editing'); };
+function releaseInputs(){ moveInput.x=0; moveInput.y=0; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.superHeld=false; player.rollHeld=false; player.runLatch=false; joyId=null; joyStick.style.transform='translate(-50%,-50%)'; joyZone.classList.remove('run','held'); camTouchId=null; for(const k in keys) keys[k]=false; try{ if(carried===null) {} }catch(e){} }
+function openPause(){
+  if(PAUSED||!gameOn||!player.alive&&false) return;
+  PAUSED=true; releaseInputs(); ppShow('pp-main'); pausePage.classList.add('show');
+  if(!pauseHist){ history.pushState({p:1},''); pauseHist=true; }
+  if(document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+}
+function closePause(fromPop){
+  if(!PAUSED) return;
+  if(hudEdit) exitHudEdit();
+  PAUSED=false; pausePage.classList.remove('show','editing'); clock.getDelta();
+  if(pauseHist){ pauseHist=false; if(!fromPop){ ignorePop++; history.back(); } }
+}
+addEventListener('popstate',()=>{
+  if(ignorePop>0){ ignorePop--; return; }
+  if(!gameOn) return;
+  pauseHist=false;                                  // the browser already popped our pause entry
+  if(!PAUSED){ openPause(); return; }               // Back while playing opens pause instead of leaving the game
+  if(hudEdit){ exitHudEdit(); ppShow('pp-main'); history.pushState({p:1},''); pauseHist=true; return; }   // Back from HUD editor -> pause menu
+  if(document.getElementById('pp-opts').style.display!=='none'){ ppShow('pp-main'); history.pushState({p:1},''); pauseHist=true; return; }
+  closePause(true);                                 // Back on the pause menu = continue
 });
+bindBtn('pause-btn', ()=>openPause());
+document.getElementById('pp-continue').addEventListener('click',()=>closePause());
+document.getElementById('pp-options').addEventListener('click',()=>{ fillSettings(document.getElementById('pp-opts-body')); ppShow('pp-opts'); });
+document.getElementById('pp-opts-back').addEventListener('click',()=>ppShow('pp-main'));
+addEventListener('keydown',e=>{ if(e.code==='Escape'&&gameOn){ PAUSED?closePause():openPause(); } });
+
+/* ---- HUD layout: every alien (and Ben) remembers its own button positions ---- */
+const HUD_IDS=['joystick-zone','btn-run','btn-attack','btn-jump','btn-special','lock-btn','cam-btn','pause-btn'];
+HUD_IDS.forEach(id=>{ const el=document.getElementById(id); if(el) el.dataset.hud=id; });
+let hudStore={}; try{ hudStore=JSON.parse(localStorage.getItem('omniverse_hud_v1')||'{}')||{}; }catch(e){ hudStore={}; }
+const saveHud=()=>{ try{ localStorage.setItem('omniverse_hud_v1',JSON.stringify(hudStore)); }catch(e){} };
+let hudForm='ben';
+function applyHudLayout(fid){
+  hudForm=fid||hudForm; const L=hudStore[hudForm]||{};
+  document.querySelectorAll('[data-hud]').forEach(el=>{ const v=L[el.dataset.hud]; el.style.translate=v?`${v[0]*innerWidth}px ${v[1]*innerHeight}px`:''; });
+}
+window.__applyHud=()=>applyHudLayout(hudEdit?hudEdit.form:(player.form&&player.form.id)||'ben');
+addEventListener('resize',()=>window.__applyHud());
+function enterHudEdit(){
+  hudEdit={form:(player.form&&player.form.id)||'ben'}; pausePage.classList.add('editing');
+  ['pp-main','pp-opts'].forEach(k=>document.getElementById(k).style.display='none');
+  document.getElementById('pp-hudbar').style.display='block'; document.body.classList.add('hud-edit');
+  const ch=document.getElementById('pp-chips'); ch.innerHTML='';
+  [BEN,...ALIENS].forEach(f=>{ const b=document.createElement('div'); b.className='qbtn'+(f.id===hudEdit.form?' active':''); b.textContent=DIAL_SHORT[f.id]||f.name; b.dataset.f=f.id;
+    b.addEventListener('click',()=>{ hudEdit.form=f.id; [...ch.children].forEach(c=>c.classList.toggle('active',c===b)); applyHudLayout(f.id); }); ch.appendChild(b); });
+  applyHudLayout(hudEdit.form);
+}
+function exitHudEdit(){ hudEdit=null; document.body.classList.remove('hud-edit'); pausePage.classList.remove('editing'); applyHudLayout(player.form.id); }
+document.getElementById('pp-hud').addEventListener('click',enterHudEdit);
+document.getElementById('pp-done').addEventListener('click',()=>{ exitHudEdit(); ppShow('pp-main'); });
+document.getElementById('pp-reset').addEventListener('click',()=>{ if(!hudEdit) return; delete hudStore[hudEdit.form]; saveHud(); applyHudLayout(hudEdit.form); });
+{ let drag=null;
+  const pt=e=>e.touches&&e.touches[0]?e.touches[0]:(e.changedTouches&&e.changedTouches[0]?e.changedTouches[0]:e);
+  const down=e=>{ if(!hudEdit) return; const t=e.target.closest&&e.target.closest('[data-hud]');
+    if(e.target.closest&&e.target.closest('#pp-hudbar')) return;
+    e.stopPropagation(); e.preventDefault(); if(!t) return;
+    const P=pt(e), L=(hudStore[hudEdit.form]=hudStore[hudEdit.form]||{}), cur=L[t.dataset.hud]||[0,0];
+    drag={el:t,id:t.dataset.hud,sx:P.clientX,sy:P.clientY,ox:cur[0]*innerWidth,oy:cur[1]*innerHeight}; t.classList.add('dragging'); };
+  const move=e=>{ if(!hudEdit||!drag) return; e.stopPropagation(); e.preventDefault(); const P=pt(e);
+    const nx=drag.ox+P.clientX-drag.sx, ny=drag.oy+P.clientY-drag.sy; drag.el.style.translate=`${nx}px ${ny}px`; drag.nx=nx; drag.ny=ny; };
+  const up=e=>{ if(!hudEdit) return; e.stopPropagation(); e.preventDefault(); if(!drag) return;
+    if(drag.nx!=null){ hudStore[hudEdit.form][drag.id]=[drag.nx/innerWidth,drag.ny/innerHeight]; saveHud(); }
+    drag.el.classList.remove('dragging'); drag=null; };
+  [['touchstart',down],['touchmove',move],['touchend',up],['touchcancel',up],['mousedown',down],['mousemove',move],['mouseup',up]].forEach(([n,f])=>addEventListener(n,f,{capture:true,passive:false}));
+}
 
 function beginGame(){
   document.getElementById('start-screen').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   Audio_.resume();
+  gameOn=true; document.body.classList.add('playing'); try{ history.pushState({g:1},''); }catch(e){}
   setForm(BEN, 'ben'); setTimeout(warmPortraits,1200);
   if(!isTouch){ renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock(); }
   if(screen.orientation && screen.orientation.lock){ try{ screen.orientation.lock('landscape').catch(()=>{}); }catch(e){} }
