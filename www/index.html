@@ -1446,47 +1446,6 @@ function attackPose(P,parts,at,dt){
 }
 /* Main animator. inp: {pos, fwd:{x,z}, grounded, vy, flying, hover, swimming, carrying, superT, atk:{kind,t,side,id,amp,tc},
    aim, flee, hurt(0..1), dead(0..1), hp, id, powerScale} */
-/* XLR8 locomotion = three blended states driven by one smoothed velocity value A.uV (0..1):
-   WALK (u~.2): semi-upright torso, relaxed roller-glide, lazy tail S-curve.
-   RUN (u~.5): sharp crouch, elbows tucked with claws thrust forward, feet glide at double stride, snappy tail.
-   SPRINT (u=1): near-horizontal bullet, claws forward, stride collapses to a rigid streamlined stance that keeps a
-   high-frequency micro-vibration (so he never looks frozen), tail rigid and straight with a fast shiver.
-   Tilt targets are absolute torso angles from vertical; XL_BIND is the model's own resting hips->head tilt. */
-const XL_D=Math.PI/180, XL_BIND=46.2*XL_D, XL_GAIN=1.45;
-function xlLoco(P,A,parts,mm,dt){
-  // Human-style run at every speed: legs drive and alternate, knees fold on the recovery swing, arms pump opposite the legs.
-  // Only the torso lean differs by state (walk ~30deg, run ~60deg, sprint ~82deg); stride never collapses, so he keeps running at full speed.
-  const u=A.uV||0, ww=1-_sm((u-.2)/.3), ws=_sm((u-.5)/.5), wr=Math.max(0,1-ww-ws);
-  A.wW=ww; A.wR=wr; A.wS=ws;
-  const run=Math.min(1,u*2.2);                                           // 0 = walking, 1 = full running action
-  const tilt=((ww*30+wr*60+ws*82)*XL_D-XL_BIND)*XL_GAIN, hp=tilt*.3, cp=tilt*.7;
-  const sw=Math.sin(A.ph), cw=Math.cos(A.ph);
-  A.vt=(A.vt||0)+dt*Math.min(46,1.5/dt);
-  const amp=.38+.55*run+.12*ws;                                          // thigh swing (rad)
-  const th=.35+.25*run, kmax=.7+1.1*run;
-  const aL=sw*amp, aR=-sw*amp;
-  P.tLx=_lerp(P.tLx,th+hp+aL,mm); P.tRx=_lerp(P.tRx,th+hp+aR,mm);
-  const kf=(c,sn)=>Math.max(0,c*.8+.2*sn)*kmax;                          // knee folds while the leg swings forward
-  const kb=.55+.35*run;
-  P.kL=_lerp(P.kL,kb+kf(cw,sw),mm); P.kR=_lerp(P.kR,kb+kf(-cw,-sw),mm);
-  P.fL=_lerp(P.fL,(P.kL-(th+aL))*.9,mm); P.fR=_lerp(P.fR,(P.kR-(th+aR))*.9,mm);
-  const hy=parts.hipY*.5*(Math.cos(th)+Math.cos(th-kb))-parts.hipY;
-  P.hipsY=_lerp(P.hipsY,hy+Math.cos(A.ph*2)*(.02+.035*run),mm);        // running bounce, two per cycle
-  const sp=ww*.3+(wr+ws)*.12; P.tLz=_lerp(P.tLz,-sp,mm); P.tRz=_lerp(P.tRz,sp,mm);
-  P.hipsRX=_lerp(P.hipsRX,-hp,mm); P.chX=_lerp(P.chX,-cp,mm); P.hdX=_lerp(P.hdX,tilt*.8,mm);
-  P.hipsRY+=sw*.16*run*mm; P.chY+=-sw*.22*run*mm;                        // hips and shoulders counter-rotate
-  P.hipsRZ+=sw*.03*mm;
-  // arms (world pitch: 0 = forward, -90 = down). Upper arm pumps front/back, elbow stays bent ~90deg and closes as the arm comes forward.
-  const cen=ww*-100+(1-ww)*-70, swing=(ww*18+(1-ww)*(38+10*ws))*XL_D;
-  const pU0=cen*XL_D, bend=(ww*85+(1-ww)*(100))*XL_D;
-  const pUL=pU0-sw*swing, pUR=pU0+sw*swing;                              // arm opposite its leg
-  const fold=(c,k)=>Math.max(0,c)*k;
-  const bL=bend+fold(-cw*0+sw,.25)*XL_D*0+ (.2*Math.max(0,-sw))*(1-ww), bR=bend+(.2*Math.max(0,sw))*(1-ww);
-  P.sL.x=_lerp(P.sL.x,pUL+156*XL_D+tilt,mm); P.sR.x=_lerp(P.sR.x,pUR+156*XL_D+tilt,mm);
-  P.eL=_lerp(P.eL,bL-116*XL_D,mm); P.eR=_lerp(P.eR,bR-116*XL_D,mm);
-  const out=ww*.3+(1-ww)*.06;
-  P.sL.z=_lerp(P.sL.z,-out,mm); P.sR.z=_lerp(P.sR.z,out,mm); P.sL.y=_lerp(P.sL.y,0,mm); P.sR.y=_lerp(P.sR.y,0,mm);
-}
 function animateRig(parts,dt,inp){
   parts.ballK=inp.ball||0;
   if(!parts||!parts.hips||dt<=0) return;
@@ -1495,9 +1454,8 @@ function animateRig(parts,dt,inp){
   A.t+=dt;
   // world speed from position delta (works identically for player, replicas, NPCs, enemies; teleports are ignored)
   let spd=0, fwdV=1, latV=0;
-  if(inp.pos){ if(A.px!==null){ const dx=inp.pos.x-A.px, dz=inp.pos.z-A.pz, d=Math.hypot(dx,dz); spd=d/dt; if(spd>(inp.superT>.2?(inp.xl?2400:600):90)){ spd=inp.xl?A.spd:0; } else if(inp.fwd&&d>1e-4){ fwdV=(dx*inp.fwd.x+dz*inp.fwd.z)/d; latV=(dx*-inp.fwd.z+dz*inp.fwd.x)/d; } } A.px=inp.pos.x; A.pz=inp.pos.z; }
+  if(inp.pos){ if(A.px!==null){ const dx=inp.pos.x-A.px, dz=inp.pos.z-A.pz, d=Math.hypot(dx,dz); spd=d/dt; if(spd>(inp.superT>.2?600:90)){ spd=0; } else if(inp.fwd&&d>1e-4){ fwdV=(dx*inp.fwd.x+dz*inp.fwd.z)/d; latV=(dx*-inp.fwd.z+dz*inp.fwd.x)/d; } } A.px=inp.pos.x; A.pz=inp.pos.z; }
   A.spd=_damp(A.spd,spd,14,dt);
-  if(inp.xl){ const v_=A.spd, raw=v_<=12?.5*v_/12:.5+.5*Math.min(1,Math.log(v_/12)/Math.log(12.5)); A.uV=_damp(A.uV||0,Math.max(raw,inp.superT>.2?.5+.5*_ez(inp.superT):0),7,dt); }  // uVelocity: 0 idle, .5 run pace, 1 full sprint
   const sc=Math.max(.4,(parts.dims.total*(inp.ws||PS))/(2.7*PS)); // stride scales with the body's world size
   const s=Math.min(4.2,A.spd/(3.6*sc)); // normalised: 1 = walk, ~2 = run, 3+ = sprint
   const grounded=inp.grounded!==false;
@@ -1507,7 +1465,7 @@ function animateRig(parts,dt,inp){
   if(!A.wasGround && grounded){ A.land=Math.min(1,.35+Math.max(0,-(A.lastVy||0))/22); }
   A.wasGround=grounded; A.lastVy=inp.vy||0; A.land=Math.max(0,A.land-dt*3.4);
   const dir=(fwdV<-.15&&inp.fwd)?-1:1; // backpedal
-  A.ph += dt*(inp.xl?Math.min(1.5/dt,5+9*(A.uV||0)):(5.2+2.5*Math.min(s,3.4)+1.2*q))*dir*mv; 
+  A.ph += dt*(5.2+2.5*Math.min(s,3.4)+1.2*q)*dir*mv; 
   const ph=A.ph, sL=Math.sin(ph), sR=-sL, cL=Math.cos(ph), cR=-cL;
   const dead=inp.dead||0, hurt=inp.hurt||0, chg=inp.charge||0;
   // ---- locomotion ----
@@ -1561,19 +1519,24 @@ function animateRig(parts,dt,inp){
   }
   if(inp.xl && grounded && !inp.flying && !inp.swimming){ // XLR8 (from the reference clip): wide splayed crouch, torso hunched slightly, arms held OUT and down to the sides, barely swinging
     const sp=_ez(inp.superT||0), mm=Math.max(mv,.0);
-    P.hipsY -= .34+.08*sp; P.tLx += .32; P.tRx += .32; P.kL += .85*(1-.3*sp); P.kR += .85*(1-.3*sp); P.fL -= .4; P.fR -= .4; P.tLz=-.34*(1-sp*.6); P.tRz=.34*(1-sp*.6);
+    P.hipsY -= .26+.06*sp; P.tLx -= .08; P.tRx -= .08; P.kL += .42*(1-.3*sp); P.kR += .42*(1-.3*sp); P.fL -= .15; P.fR -= .15; P.tLz=-.1*(1-sp*.6); P.tRz=.1*(1-sp*.6);
     P.chX += -.3-.2*sp; P.hdX += .32+.2*sp;
     P.sL.x = P.sL.x*.2 + .08*(1-sp); P.sR.x = P.sR.x*.2 + .08*(1-sp);
     P.eL = _lerp(.32+.12*mm*Math.max(0,-sL),.4,sp); P.eR = _lerp(.32+.12*mm*Math.max(0,-sR),.4,sp);
     P.sL.z = -.38*(1-sp); P.sR.z = .38*(1-sp);
     P.chZ += 0; P.hipsRZ += 0;
-    xlLoco(P,A,parts,mm,dt);
   }
-  if(inp.hb && grounded && !inp.flying && !inp.swimming && !(inp.cast>0)){ // Heatblast: confident stride, fists up at a bent elbow
-    P.sL.x*=.65; P.sR.x*=.65; P.sL.x+=.12; P.sR.x+=.12; P.eL+=.7*mv+.25*(1-mv); P.eR+=.7*mv+.25*(1-mv); P.sL.z-=.1; P.sR.z+=.1; P.chX+=-.06*mv; P.hdX+=.06*mv;
+  if(inp.hb && grounded && !inp.flying && !inp.swimming && !(inp.cast>0)){ // Heatblast: knees drive, fists pump at a bent elbow, slight forward lean when running
+    P.kL=P.kL*1.55+.28*mv; P.kR=P.kR*1.55+.28*mv; P.tLx*=1.12; P.tRx*=1.12; P.fL-=.2*mv; P.fR-=.2*mv; P.hipsY-=.04*mv;
+    P.eL+=(.55+.7*r)*mv+.2*(1-mv); P.eR+=(.55+.7*r)*mv+.2*(1-mv); P.sL.z-=.08; P.sR.z+=.08; P.chX+=-.05*mv-.16*r; P.hdX+=.05*mv+.12*r;
+  }
+  if(inp.hb && inp.flying && !inp.swimming){ // rock flight: Heatblast surfs standing on a flying lava rock - upright, knees soft, arms out for balance
+    const sw=Math.sin(A.t*2.4);
+    P.tLx=.28; P.tRx=-.22; P.kL=.55; P.kR=.5; P.fL=-.2; P.fR=.1; P.tLz=-.08; P.tRz=.08; P.hipsY-=.09;
+    P.sL.x=.15+sw*.05; P.sR.x=.15-sw*.05; P.sL.z=-.95; P.sR.z=.95; P.eL=.25; P.eR=.25; P.chX+=-.12; P.hdX+=.1; P.chZ+=sw*.03;
   }
   // ---- special stances ----
-  if(inp.superT>.2 && grounded && !inp.flying && !inp.xl){ // XLR8 sprint: arms swept back, deep forward lean, driving knees
+  if(inp.superT>.2 && grounded && !inp.flying){ // XLR8 sprint: arms swept back, deep forward lean, driving knees
     const k=_ez(inp.superT); P.sL.x=_lerp(P.sL.x,-1.5,k); P.sR.x=_lerp(P.sR.x,-1.5,k); P.eL=_lerp(P.eL,.35,k); P.eR=_lerp(P.eR,.35,k); P.chX+=-.35*k; P.hdX+=.3*k; P.sL.z=-.12; P.sR.z=.12;
     P.tLx*=1.25; P.tRx*=1.25; P.kL*=1.2; P.kR*=1.2;
   }
@@ -1638,7 +1601,6 @@ function animateRig(parts,dt,inp){
   ap(parts.elbowL,'x',P.eL); ap(parts.elbowR,'x',P.eR); if(parts.elbow2L){ ap(parts.elbow2L,'x',P.e2L); ap(parts.elbow2R,'x',P.e2R); }
   ap(parts.leftLeg,'x',P.tLx); ap(parts.rightLeg,'x',P.tRx); ap(parts.leftLeg,'z',P.tLz); ap(parts.rightLeg,'z',P.tRz);
   ap(parts.kneeL,'x',-P.kL); ap(parts.kneeR,'x',-P.kR); ap(parts.footL,'x',P.fL); ap(parts.footR,'x',P.fR);
-  A.plantOn=grounded&&!inp.flying&&!inp.swimming&&!inp.climb;
   if(parts.glb) GLBBODY.apply(parts,dt);   // retarget the pivots onto the GLB skeleton
 }
 // Helper: turn a timer-driven attack ({kind,dur,t}) into the attack input for animateRig.
@@ -1819,6 +1781,20 @@ function buildCharacter(kind){
   }
   if(kind!=='ben' && window.GLBBODY) GLBBODY.attach(kind,parts,parts.shell);   // real GLB body on top of the rig (box body stays as fallback)
   const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
+  if(kind==='heatblast'){
+    const rk=new THREE.Group();
+    const rg=new THREE.IcosahedronGeometry(.8,1), pa=rg.attributes.position;
+    for(let i=0;i<pa.count;i++){ const k=1+Math.sin(i*12.9898)*.18; pa.setXYZ(i,pa.getX(i)*k*1.25,pa.getY(i)*k*.4,pa.getZ(i)*k*1.25); }
+    rg.computeVertexNormals();
+    const rock=new THREE.Mesh(rg,new THREE.MeshLambertMaterial({color:0x4a1a10,emissive:0xff4a10,emissiveIntensity:.55}));
+    rk.add(rock);
+    const fl=new THREE.Group(); rk.add(fl); rk.userData.fl=[];
+    for(let i=0;i<4;i++){
+      const c=new THREE.Mesh(new THREE.ConeGeometry(.45-i*.06,2.2,8,1,true),new THREE.MeshBasicMaterial({color:i%2?0xffd84a:0xff6a1a,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
+      c.rotation.x=Math.PI/2; c.position.set((i-1.5)*.28,-.1,.9+i*.12); fl.add(c); rk.userData.fl.push(c);
+    }
+    rk.position.y=-.82; rk.visible=false; o.add(rk); parts.rock=rk;
+  }
   o.userData.parts=parts; o.userData.kind=kind;
   return o;
 }
@@ -2226,6 +2202,7 @@ function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
   }
   mesh.position.copy(startPos);
   scene.add(mesh);
+  if(pl===player && pl._fv && !(opts&&opts.explicitDir)) speed+=Math.max(0,pl._fv.dot(dir));
   projectiles.push({mesh, dir, speed, damage, pierce, style, life:2.2, hitSet:new Set(), hostile: !!(opts && opts.hostile)});
   Audio_.special();
 }
@@ -3131,7 +3108,7 @@ function streamTick(kind,dt){
   if(kind==='fire'){ player._hs=!player._hs; const hp=handWorld(player._hs?1:0); if(hp){ from=hp.addScaledVector(dir,.5); dir=aimDirFrom(from); } player.castHold=.15; }
   const fire=kind==='fire', cols=fire?[0xff4a1a,0xff8a1e,0xffd84a]:[0xd8f8ff,0x8fe0ff,0xffffff];
   for(let i=0;i<2;i++){
-    const v=dir.clone().multiplyScalar(fire?15:17).add(new THREE.Vector3((Math.random()-.5)*2.4,(Math.random()-.5)*2.4,(Math.random()-.5)*2.4));
+    const v=dir.clone().multiplyScalar(fire?15:17).add(player._fv||new THREE.Vector3()).add(new THREE.Vector3((Math.random()-.5)*2.4,(Math.random()-.5)*2.4,(Math.random()-.5)*2.4));
     const f=debris(from.clone(),cols[rnd(3)],fire?.35+Math.random()*.25:.22+Math.random()*.2,v,fire?.5:.55,false);
     if(fire) f.grow=1.8;
   }
@@ -3337,6 +3314,7 @@ function poseExtras(parts,moving,dt){
   if(player.flying){
     const lv=player.form.id==='diamondhead';
     lean=lv?(moving?-.35:0):(moving?THREE.MathUtils.clamp(-(Math.PI/2-player.pitch),-1.0,0.2):-.12);
+    if(player.form.id==='heatblast') lean=THREE.MathUtils.clamp(-.12+(player.pitch||0)*.5,-.5,.6);
     const up=lv?1.0:(moving?2.9+S*.08:.5);
     if(lv&&(player._cl=(player._cl||0)+dt)>.09){ player._cl=0; debris(player.pos.clone().add(new THREE.Vector3(0,-.95,0)),0x9ffcff,.8,new THREE.Vector3(),1.4,false); }
     if(player.form.id==='heatblast'&&moving&&(player._fl=(player._fl||0)+dt)>.03){
@@ -3348,6 +3326,10 @@ function poseExtras(parts,moving,dt){
   // (the old per-frame debris() blue trail was removed: it allocated a new material every frame; speed trails are now pooled in updateSpeedEffects)
   if((player.superT||0)>0.2&&!player.flying&&!player.swimming){ const _gp=m.userData.parts; lean=-.6*player.superT*((_gp&&_gp.glb)?GLBBODY.leanMul(player.form.id):1); }
   m.rotation.x+=(lean-m.rotation.x)*.18;
+  const rk=m.userData.parts&&m.userData.parts.rock;
+  if(rk){ rk.visible=!!player.flying; if(rk.visible){ const t=performance.now()/1000, sp=moving?1:.4;
+    rk.position.y=-.82+Math.sin(t*3)*.05; rk.rotation.z=Math.sin(t*1.7)*.06;
+    rk.userData.fl.forEach((c,i)=>{ const f=1+Math.sin(t*38+i*2)*.18; c.scale.set(1,f*(.5+sp*.9),1); c.position.z=.5+c.scale.y*1.1; c.material.opacity=.45+Math.random()*.3; }); } }
 }
 const raycaster = new THREE.Raycaster();
 const centerNDC = new THREE.Vector2(0,0);
@@ -4388,7 +4370,9 @@ function loop(){
   updateMetropolis(player.pos.x, player.pos.z, dt);
   water.position.x = player.pos.x; water.position.z = player.pos.z;
   updateDayNight(wdt);
+  const _p0=player.pos.clone();
   updatePlayer(dt);
+  if(dt>0){ const fv=player.pos.clone().sub(_p0).divideScalar(dt); if(fv.length()>60) fv.set(0,0,0); player._fv=(player._fv||new THREE.Vector3()).lerp(fv,.5); }
   updateEnemySpawning(wdt); updateEnemies(wdt); animateEnemies(wdt); updateDyingRigs(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
   updateLockOn(dt);
   updateVehicles(wdt);

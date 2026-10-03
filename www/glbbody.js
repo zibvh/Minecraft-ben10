@@ -24,10 +24,10 @@ const GLBBODY=(function(){
         tL:['bip_hip_L_052'], kL:['bip_knee_L_053'], fL:['bip_foot_L_054'], tR:['bip_hip_R_047'], kR:['bip_knee_R_048'], fR:['bip_foot_R_049'] },
       down:{ bip_upperArm_L_029:['bip_lowerArm_L_030',10], bip_lowerArm_L_030:['bip_hand_L_031',10],
              bip_upperArm_R_010:['bip_lowerArm_R_011',10], bip_lowerArm_R_011:['bip_hand_R_012',10] } },
-    xlr8:{ face:Math.PI, plant:true, tailW:true, map:{ hips:['spine_01'], tail0:['tail(1)_045'], c1:['spine001_02'], c2:['spine002_03'], chest:['spine003_04'], head:['spine004_05'],
+    xlr8:{ face:Math.PI, map:{ hips:['spine_01','tail(1)_045'], chest:['spine001_02'], head:['spine004_05'],
         sL:['upper_armL_010'], eL:['forearmL_011'], sR:['upper_armR_019'], eR:['forearmR_020'],
         tL:['thighL_035'], kL:['shinL_036'], fL:['footL_037'], tR:['thighR_040'], kR:['shinR_041'], fR:['footR_042'] },
-      gain:{ head:.9 }, hMul:1.0, leanMul:.2,
+      gain:{ chest:.4, head:.7, sL:.8, sR:.8, tL:.8, tR:.8, kL:.85, kR:.85 }, hMul:1.15, leanMul:.2,
       down:{}, tail:['tail(2)_046','tail(3)_047','tail(4)_048','tail(5)_049','tail(6)_050'] },
     echo_echo:{ face:Math.PI, map:{ hips:['Bone_00','Bone009_037','Bone012_041'], chest:['Bone043_01'], head:['Bone018_034','Bone019_035'],
         sL:['Bone006_018'], eL:['Bone007_019'], sR:['Bone002_03'], eR:['Bone003_04'],
@@ -41,7 +41,7 @@ const GLBBODY=(function(){
              Right_arm_09:['Right_elbow_010',12], Right_elbow_010:['Right_wrist_Cannonbolt_011',12] } }
   };
   const store={}, state={};          // store[kind] = parsed template; state[kind] = 'wait' | 'ok' | 'fail'
-  const _qc=new THREE.Quaternion(), _qd=new THREE.Quaternion(), _qa=new THREE.Quaternion(), _qg=new THREE.Quaternion(), _q=new THREE.Quaternion(), _q2=new THREE.Quaternion(), _v=new THREE.Vector3(), _v2=new THREE.Vector3(), _m=new THREE.Matrix4(), _s=new THREE.Vector3();
+  const _qg=new THREE.Quaternion(), _q=new THREE.Quaternion(), _q2=new THREE.Quaternion(), _v=new THREE.Vector3(), _v2=new THREE.Vector3(), _m=new THREE.Matrix4(), _s=new THREE.Vector3();
 
   function b64ToBuf(s){ const bin=atob(s), n=bin.length, u=new Uint8Array(n); for(let i=0;i<n;i++) u[i]=bin.charCodeAt(i); return u.buffer; }
 
@@ -122,7 +122,7 @@ const GLBBODY=(function(){
       // mapping: bone index -> {key, qb0}
       const ent=new Array(n).fill(null), world=p=>new THREE.Vector3().setFromMatrixPosition(p.matrixWorld);
       const keys=Object.keys(C.map);
-      for(const key of keys) for(const nm of C.map[key]){ const b=byName[nm], i=idx.get(b); ent[i]={key,qb0:qRel0[i].clone(),hipsT:key==='hips'||key==='tail0'}; }
+      for(const key of keys) for(const nm of C.map[key]){ const b=byName[nm], i=idx.get(b); ent[i]={key,qb0:qRel0[i].clone(),hipsT:key==='hips'}; }
       // relax alignment: swing T-posed limbs down beside the body
       for(const nm in (C.down||{})){ const [childName,deg]=C.down[nm], b=byName[nm], i=idx.get(b); if(!ent[i]) continue;
         const p0=world(b); let d;
@@ -135,9 +135,6 @@ const GLBBODY=(function(){
         t:{hips:new THREE.Quaternion(),chest:new THREE.Quaternion(),head:new THREE.Quaternion(),sL:new THREE.Quaternion(),eL:new THREE.Quaternion(),sR:new THREE.Quaternion(),eR:new THREE.Quaternion(),
            s2L:new THREE.Quaternion(),e2L:new THREE.Quaternion(),s2R:new THREE.Quaternion(),e2R:new THREE.Quaternion(),
            tL:new THREE.Quaternion(),kL:new THREE.Quaternion(),fL:new THREE.Quaternion(),tR:new THREE.Quaternion(),kR:new THREE.Quaternion(),fR:new THREE.Quaternion()}, clock:Math.random()*10 };
-      for(const key of keys) if(!G.t[key]) G.t[key]=new THREE.Quaternion();
-      G.qBindW=qRel0; G.ankL=C.map.fL?idx.get(byName[C.map.fL[0]]):-1; G.ankR=C.map.fR?idx.get(byName[C.map.fR[0]]):-1;
-      G.plant=!!C.plant; G.plantY=0; G.tailW=!!C.tailW; G.tailRoot=C.tailW?idx.get(byName[C.map.tail0[0]]):-1;
       // success: only now hide the box anatomy (keeping the cannonbolt roll shell) and mount the GLB body
       g.traverse(o=>{ if(!o.isMesh) return; for(let p=o;p;p=p.parent){ if(p===shellRoot) return; if(p===g) break; } o.visible=false; });
       g.add(pivot); parts.glb=G; apply(parts,0);
@@ -150,9 +147,7 @@ const GLBBODY=(function(){
     const G=parts.glb; if(!G) return; const p=parts, t=G.t, gn=G.gain;
     const Q=(o,k)=>{ const gk=gn&&gn[k]; if(gk==null||gk===1) return o.quaternion; return _qg.identity().slerp(o.quaternion,gk); };
     t.hips.copy(Q(p.hips,'hips'));
-    const cq=_qc.copy(Q(p.chest,'chest')); t.chest.copy(t.hips).multiply(cq);
-    if(t.c1){ t.c1.copy(t.hips).multiply(_qd.identity().slerp(cq,.34)); t.c2.copy(t.hips).multiply(_qd.identity().slerp(cq,.67)); }   // spread the torso bend over the spine so the mesh curves
-    if(t.tail0) t.tail0.setFromAxisAngle(_v.set(0,1,0),p.hips.rotation.y*.5);                                                          // tail root ignores body pitch
+    t.chest.copy(t.hips).multiply(Q(p.chest,'chest'));
     t.head.copy(t.chest).multiply(p.neck.quaternion).multiply(Q(p.head,'head'));
     t.sL.copy(t.chest).multiply(Q(p.leftArm,'sL')); t.eL.copy(t.sL).multiply(Q(p.elbowL,'eL'));
     t.sR.copy(t.chest).multiply(Q(p.rightArm,'sR')); t.eR.copy(t.sR).multiply(Q(p.elbowR,'eR'));
@@ -179,27 +174,9 @@ const GLBBODY=(function(){
         else { b.quaternion.copy(G.qBind[i]); G.qw[i].copy(pq).multiply(G.qBind[i]); }
       }
     }
-    // tails
-    if(G.tail.length){
-      const A=p.anim;
-      if(G.tailW && A && A.wW!==undefined){   // XLR8: world-space horizontal wave, state driven (lazy S-curve -> snappy -> rigid with micro-noise)
-        const amp=A.wW*.24+A.wR*.11+A.wS*.07, fr=A.wW*3.2+A.wR*10+A.wS*16, lag=A.wW*.75+A.wR*.5+A.wS*.2;
-        G.tp=(G.tp||0)+(dt>0?dt*Math.min(fr,1.5/dt):0);
-        let pw=G.qw[G.tailRoot];
-        for(let j=0;j<G.tail.length;j++){ const i=G.tail[j];
-          _qa.setFromAxisAngle(_v.set(0,1,0),Math.sin(G.tp-j*lag)*amp*(1+j*.35)).multiply(G.qBindW[i]);
-          G.bones[i].quaternion.copy(_q2.copy(pw).invert().multiply(_qa)); pw=G.qw[i].copy(_qa); }
-      } else { for(let j=0;j<G.tail.length;j++){ const i=G.tail[j], b=G.bones[i];
-          _q2.setFromAxisAngle(_v.set(0,0,1),Math.sin(sw*(3+3*spd)-j*.7)*(.05+.07*spd)*(1+j*.3)); b.quaternion.multiply(_q2); } }
-    }
-    // ground lock: keep the lowest ankle at its rest height (Y=0) whatever the crouch / tilt, so the feet glide instead of sinking or floating
-    if(G.plant){
-      const A=p.anim, on=!!(A&&A.plantOn); G.pivot.updateMatrixWorld(true); _m.copy(p.g.matrixWorld).invert();
-      const yl=_v.setFromMatrixPosition(G.bones[G.ankL].matrixWorld).applyMatrix4(_m).y, yr=_v.setFromMatrixPosition(G.bones[G.ankR].matrixWorld).applyMatrix4(_m).y, h=Math.min(yl,yr);
-      if(G.H0===undefined) G.H0=h;
-      else if(on) G.plantY+=(G.H0-h)*.8; else G.plantY-=G.plantY*Math.min(1,dt*8);
-      G.pivot.position.y=G.base.y+G.plantY;
-    }
+    // tails: gentle travelling sway that widens with speed
+    if(G.tail.length){ for(let j=0;j<G.tail.length;j++){ const i=G.tail[j], b=G.bones[i];
+        _q2.setFromAxisAngle(_v.set(0,0,1),Math.sin(sw*(3+3*spd)-j*.7)*(.05+.07*spd)*(1+j*.3)); b.quaternion.multiply(_q2); } }
   }
 
   // Echo Echo colouring: the source model is one flat white mesh. Paint it per vertex (bone region + facial position)
