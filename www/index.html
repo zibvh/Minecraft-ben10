@@ -1444,6 +1444,93 @@ function attackPose(P,parts,at,dt){
     const k=1-_sm(t/.55); P.sR.x+=-.35*k; P.eR+=.5*k; P.chX+=.1*k; P.hdX+=-.08*k;
   }
 }
+/* =========================================================================
+   XLR8 SPEED-STATE LOCOMOTION  (WALK -> RUN -> SPRINT)
+   One continuous "velocity" v (0..1) is read from how fast XLR8 is really moving (relative to his plain walking pace, on a log scale so each
+   doubling of speed counts the same). v is split into three weighted states and every pose number below is blended between them, the same
+   idea as crossfading three clips by weight, but done on the rig so it also works with attacks, hits, jumps and the existing retarget.
+     WALK   semi-upright, relaxed roller-glide: soles stay on the floor and slide forward/back, lazy S-curve tail
+     RUN    sharp crouch, claws darting forward, sliding stride doubles, tight snappy tail
+     SPRINT near-horizontal bullet: arms swept back, feet locked almost rigid, tail straight and rigid with a high-frequency shiver
+   The legs are solved with a 2-bone IK against the real GLB skeleton (lengths measured at load, GLBBODY.leg) so the soles really stay at
+   floor height for any torso angle. Every number is in XLR8_LOCO: edit it live (XLR8_LOCO.torso[2]=75 ...) or pin a state with forceV.
+   Arrays are [WALK, RUN, SPRINT]. Angles in degrees unless marked rad.
+========================================================================= */
+const XLR8_LOCO={
+  baseSpeed:11.84,          // world speed of a plain stick-walk (form.speed 7.4 * SPEED_SCALE 1.6); v is measured relative to this
+  topMul:13,                // speed multiplier at max super speed (1 + 12*superSpeed)
+  forceV:null,              // debug: 0 = walk, 0.5 = run, 1 = sprint, null = follow real speed
+  runAt:[.16,.42],          // v range over which WALK fades into RUN
+  sprintAt:[.58,.82],       // v range over which RUN fades into SPRINT
+  torso:[30,60,82],         // forward lean of the pelvis->neck line, from vertical (the model idles at ~46)
+  headLift:[8,4,-12],       // head pitch relative to the spine (deg, + = looks up). Sprint tucks the head in line with the body
+  pelvis:[1.50,1.20,0.95],  // pelvis height in rig units (the model stands at ~1.8)
+  stride:[.34,.68,.05],     // how far each sole slides either side of mid-stance (RUN = 2x WALK, SPRINT nearly rigid)
+  footZ:[.16,.40,.85],      // mid-stance sole position behind the pelvis
+  freq:[1.7,2.8,3.6],       // gait cycles per second
+  twist:[.14,.07,0],        // torso counter-twist amplitude (rad)
+  armBase:[0,-.15,.12],     // shoulder pitch (rad, + = forward). Sprint ~0: arms trail along the horizontal body
+  armSwing:[.45,.10,.04],   // shoulder swing amplitude (rad)
+  elbow:[.35,1.05,-1.5],    // elbow bend (rad). Run: forearms level, claws darting forward. Sprint: negative = forearms swept back in line with the upper arms
+  elbowSwing:[.25,.05,0],
+  armOut:[.12,.04,-.25],    // shoulder splay (rad, negative = pulled in against the body)
+  armTwist:[0,-.8,0],           // upper-arm roll (rad, negative turns the claws inward: run = parallel twin darts, sprint = tucked in)
+  tailAmp:[.16,.10,0],      // lateral swish per tail bone (rad)
+  tailLag:[.9,.55,0],       // wave lag between bones (rad): ~.9 gives a lazy S, small = whole tail moves together
+  tailHz:[1.1,3.4,0],
+  tailSnap:[0,.9,0],        // sharpens the wave into a snappy flick
+  tailJit:[0,0,.014],       // sprint: high-frequency micro-vibration (rad)
+  tailPitch:[0,-3,-6]       // tail rise relative to horizontal after the torso lean is cancelled out (degrees)
+};
+const _XD=Math.PI/180;
+// planar two-bone leg solve in the hips' frame. All limb vectors are {y,z} bind-pose offsets in rig units; rotations about X are
+// complex multiplications on w=y+iz, so the limb lengths and bind angles drop straight out. Returns hip pitch a, knee flex k, flat-foot pitch f.
+function _xlLeg(L,hipsRX,pelvisY,soleY,soleZ,tilt){
+  const rot=(y,z,t)=>{ const c=Math.cos(t), s=Math.sin(t); return [y*c-z*s, y*s+z*c]; };
+  const u3=rot(L.u3.y,L.u3.z,tilt), hipW=rot(L.hip.y,L.hip.z,hipsRX);
+  const tl=rot(soleY-u3[0]-(pelvisY+hipW[0]), soleZ-u3[1]-hipW[1], -hipsRX);     // ankle target relative to the hip joint, in hips space
+  const l1=Math.hypot(L.u1.y,L.u1.z), l2=Math.hypot(L.u2.y,L.u2.z), f1=Math.atan2(L.u1.z,L.u1.y), f2=Math.atan2(L.u2.z,L.u2.y);
+  let psi0=f2-f1; while(psi0>Math.PI) psi0-=2*Math.PI; while(psi0<=-Math.PI) psi0+=2*Math.PI;
+  const D=Math.min(l1+l2-.01,Math.max(Math.abs(l1-l2)+.02,Math.hypot(tl[0],tl[1])));
+  const psi=(psi0<0?-1:1)*Math.acos(Math.max(-1,Math.min(1,(D*D-l1*l1-l2*l2)/(2*l1*l2))));
+  let k=psi0-psi; while(k>Math.PI) k-=2*Math.PI; while(k<=-Math.PI) k+=2*Math.PI;
+  let a=Math.atan2(tl[1],tl[0])-f1-Math.atan2(l2*Math.sin(psi),l1+l2*Math.cos(psi)); while(a>Math.PI) a-=2*Math.PI; while(a<=-Math.PI) a+=2*Math.PI;   // unwrap: 'straight down' sits on atan2's branch cut
+  return {a,k,f:tilt-(hipsRX+a-k)};
+}
+// blend a [WALK,RUN,SPRINT] triple with the two fade amounts
+const _x3=(a,r,s)=>_lerp(_lerp(a[0],a[1],r),a[2],s);
+function xlr8Loco(P,parts,A,inp,dt,dir){
+  const G=parts.glb, LG=G&&G.leg; if(!LG) return;
+  const C=XLR8_LOCO, X=A.xl||(A.xl={ph:0,tp:0,jt:0,v:0,m:0});
+  const m=A.spd/C.baseSpeed, vTarget=C.forceV!=null?C.forceV:Math.min(1,Math.log(Math.max(1,m))/Math.log(C.topMul));
+  X.v=C.forceV!=null?vTarget:_damp(X.v,vTarget,9,dt);
+  const v=X.v, r=_sm((v-C.runAt[0])/(C.runAt[1]-C.runAt[0])), s=_sm((v-C.sprintAt[0])/(C.sprintAt[1]-C.sprintAt[0]));
+  const mvX=C.forceV!=null?1:_sm(m/.12);                                   // 0 when standing: keeps the idle stance, fades the gait in
+  X.ph+=dt*Math.PI*2*_x3(C.freq,r,s)*mvX*(dir||1); X.tp+=dt*Math.PI*2*_x3(C.tailHz,r,s); X.jt+=dt;
+  const sn=Math.sin(X.ph), cs=Math.cos(X.ph);
+  // ---- torso: pitch the whole pelvis (legs are IK'd afterwards, so they stay planted whatever the lean) ----
+  const lean=_x3(C.torso,r,s)*_XD, hipsRX=-(lean-LG.spineBind);
+  const hipsRXm=_lerp(P.hipsRX,hipsRX,mvX); P.hipsRX=hipsRXm;
+  const pelvis=_lerp(LG.pelvisY+P.hipsY,_x3(C.pelvis,r,s),mvX); P.hipsY=pelvis-LG.pelvisY;
+  P.hipsRY=_lerp(P.hipsRY,sn*_x3(C.twist,r,s),mvX); P.chY=_lerp(P.chY,-sn*_x3(C.twist,r,s)*1.4,mvX); P.chX=_lerp(P.chX,0,mvX); P.chZ=_lerp(P.chZ,0,mvX); P.hipsRZ=_lerp(P.hipsRZ,0,mvX);
+  P.hdX=_lerp(P.hdX,_x3(C.headLift,r,s)*_XD,mvX); P.hdY=_lerp(P.hdY,sn*.05*(1-s),mvX);
+  // ---- legs: soles slide on the floor (y locked), out of phase; stride doubles walk->run, then all but vanishes at sprint ----
+  const st=_x3(C.stride,r,s), fz=_x3(C.footZ,r,s), sY=LG.L.soleY;
+  const zL=fz-st*sn, zR=fz+st*sn, hz=P.hipsZ;
+  const sL=_xlLeg(LG.L,hipsRXm,pelvis,sY,zL-hz,0), sR=_xlLeg(LG.R,hipsRXm,pelvis,sY,zR-hz,0);
+  const gn=G.gain||{}, gtL=gn.tL||1, gtR=gn.tR||1, gkL=gn.kL||1, gkR=gn.kR||1;       // the retarget attenuates some joints (glbbody CFG gain): pre-divide so the bones land on the IK angles
+  P.tLx=_lerp(P.tLx,sL.a/gtL,mvX); P.tRx=_lerp(P.tRx,sR.a/gtR,mvX); P.kL=_lerp(P.kL,sL.k/gkL,mvX); P.kR=_lerp(P.kR,sR.k/gkR,mvX); P.fL=_lerp(P.fL,sL.f,mvX); P.fR=_lerp(P.fR,sR.f,mvX);
+  P.tLz=_lerp(P.tLz,0,mvX); P.tRz=_lerp(P.tRz,0,mvX);
+  // ---- arms ----
+  const ab=_x3(C.armBase,r,s), asw=_x3(C.armSwing,r,s), eb=_x3(C.elbow,r,s), esw=_x3(C.elbowSwing,r,s), out=_x3(C.armOut,r,s);
+  P.sL.x=_lerp(P.sL.x,ab-sn*asw,mvX); P.sR.x=_lerp(P.sR.x,ab+sn*asw,mvX);
+  P.sL.z=_lerp(P.sL.z,-out,mvX); P.sR.z=_lerp(P.sR.z,out,mvX); const tw=_x3(C.armTwist,r,s); P.sL.y=_lerp(P.sL.y,tw,mvX); P.sR.y=_lerp(P.sR.y,-tw,mvX);
+  P.eL=_lerp(P.eL,eb+esw*Math.max(0,sn),mvX); P.eR=_lerp(P.eR,eb+esw*Math.max(0,-sn),mvX);
+  // ---- tail (consumed by GLBBODY.apply): cancel the pelvis pitch so it trails the spine, then add the state's wave ----
+  parts.xlTail={ ph:X.tp, lag:_x3(C.tailLag,r,s), amp:_x3(C.tailAmp,r,s)*mvX, snap:_x3(C.tailSnap,r,s), jit:_x3(C.tailJit,r,s)*mvX, jt:X.jt,
+    pitch:_lerp(0,hipsRXm+_x3(C.tailPitch,r,s)*_XD,mvX) };
+  A.xlState={v,r,s,mvX};
+}
 /* Main animator. inp: {pos, fwd:{x,z}, grounded, vy, flying, hover, swimming, carrying, superT, atk:{kind,t,side,id,amp,tc},
    aim, flee, hurt(0..1), dead(0..1), hp, id, powerScale} */
 function animateRig(parts,dt,inp){
@@ -1526,11 +1613,12 @@ function animateRig(parts,dt,inp){
     P.sL.z = -.38*(1-sp); P.sR.z = .38*(1-sp);
     P.chZ += 0; P.hipsRZ += 0;
   }
+  if(inp.xl){ parts.xlTail=null; if(grounded && !inp.flying && !inp.swimming) xlr8Loco(P,parts,A,inp,dt,dir); }   // speed-state gait (walk / run / sprint) layered over the idle stance above
   if(inp.hb && grounded && !inp.flying && !inp.swimming && !(inp.cast>0)){ // Heatblast: confident stride, fists up at a bent elbow
     P.sL.x*=.65; P.sR.x*=.65; P.sL.x+=.12; P.sR.x+=.12; P.eL+=.7*mv+.25*(1-mv); P.eR+=.7*mv+.25*(1-mv); P.sL.z-=.1; P.sR.z+=.1; P.chX+=-.06*mv; P.hdX+=.06*mv;
   }
   // ---- special stances ----
-  if(inp.superT>.2 && grounded && !inp.flying){ // XLR8 sprint: arms swept back, deep forward lean, driving knees
+  if(inp.superT>.2 && grounded && !inp.flying && !(inp.xl && parts.glb && parts.glb.leg)){ // XLR8 sprint: arms swept back, deep forward lean, driving knees (box-body fallback only; the GLB body uses xlr8Loco)
     const k=_ez(inp.superT); P.sL.x=_lerp(P.sL.x,-1.5,k); P.sR.x=_lerp(P.sR.x,-1.5,k); P.eL=_lerp(P.eL,.35,k); P.eR=_lerp(P.eR,.35,k); P.chX+=-.35*k; P.hdX+=.3*k; P.sL.z=-.12; P.sR.z=.12;
     P.tLx*=1.25; P.tRx*=1.25; P.kL*=1.2; P.kR*=1.2;
   }
@@ -1584,7 +1672,7 @@ function animateRig(parts,dt,inp){
   if(dead>0){ const d=_sm(dead); P.sL.x=_lerp(P.sL.x,-.5,d); P.sR.x=_lerp(P.sR.x,.2,d); P.sL.z=_lerp(P.sL.z,-.6,d); P.sR.z=_lerp(P.sR.z,.8,d); P.eL=_lerp(P.eL,.5,d); P.eR=_lerp(P.eR,.9,d);
     P.tLx=_lerp(P.tLx,.4,d); P.tRx=_lerp(P.tRx,-.2,d); P.kL=_lerp(P.kL,.9,d); P.kR=_lerp(P.kR,.3,d); P.hdX=_lerp(P.hdX,.35,d); P.hdY=_lerp(P.hdY,.4,d); P.chX=_lerp(P.chX,.15,d); }
   // ---- apply with per-joint smoothing (attacks & hits use a stiff rate so they stay snappy) ----
-  const fast=(inp.atk||hurt>0||dead>0)?38:(inp.flying||inp.swimming?12:(grounded?26:14)), rt=fast;
+  const fast=(inp.atk||hurt>0||dead>0)?38:(inp.flying||inp.swimming?12:(grounded?((inp.xl&&parts.glb&&parts.glb.leg)?44:26):14)), rt=fast;
   const ap=(o,k,v)=>{ o.rotation[k]=_damp(o.rotation[k],v,rt,dt); };
   const hb=parts.hipY, hy=hb+P.hipsY; parts.hips.position.y=_damp(parts.hips.position.y,hy,rt,dt); parts.hips.position.z=_damp(parts.hips.position.z,P.hipsZ,rt,dt);
   ap(parts.hips,'x',P.hipsRX); ap(parts.hips,'y',P.hipsRY); ap(parts.hips,'z',P.hipsRZ);

@@ -27,8 +27,9 @@ const GLBBODY=(function(){
     xlr8:{ face:Math.PI, map:{ hips:['spine_01','tail(1)_045'], chest:['spine001_02'], head:['spine004_05'],
         sL:['upper_armL_010'], eL:['forearmL_011'], sR:['upper_armR_019'], eR:['forearmR_020'],
         tL:['thighL_035'], kL:['shinL_036'], fL:['footL_037'], tR:['thighR_040'], kR:['shinR_041'], fR:['footR_042'] },
-      gain:{ chest:.4, head:.7, sL:.8, sR:.8, tL:.8, tR:.8, kL:.85, kR:.85 }, hMul:1.15, leanMul:.2,
-      down:{}, tail:['tail(2)_046','tail(3)_047','tail(4)_048','tail(5)_049','tail(6)_050'] },
+      gain:{ chest:.4, head:.7, sL:.8, sR:.8, tL:.8, tR:.8, kL:.85, kR:.85 }, hMul:1.15, leanMul:0,   /* 0: the speed-state gait (xlr8Loco) does all the leaning itself */
+      down:{}, tail:['tail(2)_046','tail(3)_047','tail(4)_048','tail(5)_049','tail(6)_050'],
+      leg:{ hips:'spine_01', head:'spine004_05', L:['thighL_035','shinL_036','footL_037','heel02L_end_039'], R:['thighR_040','shinR_041','footR_042','heel02R_end_044'] } },
     echo_echo:{ face:Math.PI, map:{ hips:['Bone_00','Bone009_037','Bone012_041'], chest:['Bone043_01'], head:['Bone018_034','Bone019_035'],
         sL:['Bone006_018'], eL:['Bone007_019'], sR:['Bone002_03'], eR:['Bone003_04'],
         tL:['Bone013_042'], kL:['Bone014_043'], fL:['Bone016_044'], tR:['Bone010_038'], kR:['Bone011_039'], fR:['Bone015_040'] },
@@ -110,6 +111,16 @@ const GLBBODY=(function(){
         if(kind==='echo_echo'&&o.isSkinnedMesh){ try{ paintEcho(o); m.vertexColors=true; m.color.set(0xffffff); m.map=null; m.needsUpdate=true; }catch(e){ console.warn('paintEcho',e); } }
         o.material=m; });
       pivot.updateMatrixWorld(true);
+      // bind-pose limb geometry in rig units (pivot is not parented yet, so its matrixWorld IS pivot-in-rig): lets the XLR8 locomotion
+      // solve the legs exactly (planar IK) and measure the spine angle instead of guessing at the rig's proportions
+      let LEG=null;
+      if(C.leg){ try{
+        const wp=n=>{ let b=null; inst.traverse(o=>{ if(o.isBone&&o.name===n) b=o; }); if(!b) throw new Error('leg bone '+n); return new THREE.Vector3().setFromMatrixPosition(b.matrixWorld); };
+        const yz=v=>({y:v.y,z:v.z}), hp=wp(C.leg.hips), nk=wp(C.leg.head);
+        LEG={ pelvisY:hp.y, spineBind:Math.atan2(-(nk.z-hp.z),nk.y-hp.y) };           // spineBind: forward lean of pelvis->neck, from vertical
+        for(const side of ['L','R']){ const [a,b,c,d]=C.leg[side].map(wp);
+          LEG[side]={ hip:yz(a.clone().sub(hp)), u1:yz(b.clone().sub(a)), u2:yz(c.clone().sub(b)), u3:yz(d.clone().sub(c)), soleY:d.y }; }
+      }catch(e){ console.warn('GLB leg data '+kind+': '+e.message); LEG=null; } }
       // collect skeleton, bind data
       const bones=[], idx=new Map(), byName={};
       inst.traverse(o=>{ if(o.isBone){ idx.set(o,bones.length); bones.push(o); byName[o.name]=o; } });
@@ -131,7 +142,7 @@ const GLBBODY=(function(){
         const phi=deg*Math.PI/180, t=h.multiplyScalar(Math.sin(phi)).add(new THREE.Vector3(0,-Math.cos(phi),0));
         const A=new THREE.Quaternion().setFromUnitVectors(d,t.normalize()); ent[i].qb0.premultiply(A); }
       const tail=(C.tail||[]).map(nm=>idx.get(byName[nm])).filter(i=>i!=null);
-      const G={ kind, gain:C.gain||null, curl:C.curl||null, pivot, k, base:pivot.position.clone(), bones, par, qBind, pBind, qParRel, sPar, ent, tail, qw:bones.map(()=>new THREE.Quaternion()),
+      const G={ kind, leg:LEG, gain:C.gain||null, curl:C.curl||null, pivot, k, base:pivot.position.clone(), bones, par, qBind, pBind, qParRel, sPar, ent, tail, qw:bones.map(()=>new THREE.Quaternion()),
         t:{hips:new THREE.Quaternion(),chest:new THREE.Quaternion(),head:new THREE.Quaternion(),sL:new THREE.Quaternion(),eL:new THREE.Quaternion(),sR:new THREE.Quaternion(),eR:new THREE.Quaternion(),
            s2L:new THREE.Quaternion(),e2L:new THREE.Quaternion(),s2R:new THREE.Quaternion(),e2R:new THREE.Quaternion(),
            tL:new THREE.Quaternion(),kL:new THREE.Quaternion(),fL:new THREE.Quaternion(),tR:new THREE.Quaternion(),kR:new THREE.Quaternion(),fR:new THREE.Quaternion()}, clock:Math.random()*10 };
@@ -174,8 +185,16 @@ const GLBBODY=(function(){
         else { b.quaternion.copy(G.qBind[i]); G.qw[i].copy(pq).multiply(G.qBind[i]); }
       }
     }
-    // tails: gentle travelling sway that widens with speed
-    if(G.tail.length){ for(let j=0;j<G.tail.length;j++){ const i=G.tail[j], b=G.bones[i];
+    // tails. XLR8 is driven by the speed-state locomotion (p.xlTail, see xlr8Loco in index.html): a pitch correction so the tail follows the
+    // spine angle, plus a travelling lateral wave (lazy S-curve -> snappy spoiler -> rigid with micro-vibration). Everyone else: gentle sway.
+    const XT=p.xlTail;
+    if(G.tail.length && XT){ const nT=G.tail.length;
+      for(let j=0;j<nT;j++){ const b=G.bones[G.tail[j]];
+        const wav=Math.sin(XT.ph-j*XT.lag), shaped=XT.snap>0?Math.sign(wav)*Math.pow(Math.abs(wav),1-.45*XT.snap):wav;
+        const jit=XT.jit*(Math.sin(XT.jt*61+j*2.3)*.6+Math.sin(XT.jt*97+j*5.1)*.4);
+        if(j===0){ _q2.setFromAxisAngle(_v.set(1,0,0),XT.pitch); b.quaternion.multiply(_q2); }            // local X = vertical bend (+ raises the tip); all at the base so the tail stays straight
+        _q2.setFromAxisAngle(_v.set(0,0,1),shaped*XT.amp*(1+j*.28)+jit); b.quaternion.multiply(_q2); } }  // local Z = lateral swish
+    else if(G.tail.length){ for(let j=0;j<G.tail.length;j++){ const i=G.tail[j], b=G.bones[i];
         _q2.setFromAxisAngle(_v.set(0,0,1),Math.sin(sw*(3+3*spd)-j*.7)*(.05+.07*spd)*(1+j*.3)); b.quaternion.multiply(_q2); } }
   }
 

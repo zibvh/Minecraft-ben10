@@ -238,3 +238,17 @@ instead of the box anatomy. Ben, Diamondhead, civilians and enemies still use th
 - Not verified on a real device: performance of Heatblast (77k verts) on low-end phones.
 
 - HUD portraits now share ONE offscreen WebGL renderer (previously one new context per portrait, which made phones drop the main game view - white screen + sad-face icon - when the Omnitrix dial opened).
+
+## Gameplay notes: XLR8 walk / run / sprint gait
+
+XLR8's GLB body now moves in three speed states that blend smoothly (`xlr8Loco` + `XLR8_LOCO` in `www/index.html`, tail in `www/glbbody.js`):
+
+- WALK: torso ~30 deg, relaxed roller-glide (soles slide on the floor, never lift), lazy S-curve tail.
+- RUN: torso ~60 deg, claws level and forward, slide stride doubles, tight snappy tail.
+- SPRINT: torso ~82 deg (near horizontal), arms swept back, feet locked almost rigid, tail straight with a high-frequency shiver.
+
+The state comes from how fast XLR8 is really moving (log scale relative to his walking pace), so it follows the RUN / super-speed build-up automatically.
+The legs use a 2-bone IK solved against the real GLB skeleton, so the soles stay at floor height at any torso angle.
+Tuning: every number lives in `XLR8_LOCO` (arrays are [WALK, RUN, SPRINT]). In the browser console, `XLR8_LOCO.forceV = 0 / 0.5 / 1` pins walk / run / sprint, `null` goes back to real speed.
+Check: `node tests/t_xlr8_gait.js` measures spine angle, sole height, stride and tail on the real skeleton.
+Not included: XLR8's visor and wheel feet are baked into one texture/mesh (no separate visor or foot material in the GLB), so a visor slide or foot-texture spin needs those parts split out in Blender first.
