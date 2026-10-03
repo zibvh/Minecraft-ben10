@@ -183,7 +183,7 @@ const GLBBODY=(function(){
     if(G.tail.length){
       const A=p.anim;
       if(G.tailW && A && A.wW!==undefined){   // XLR8: world-space horizontal wave, state driven (lazy S-curve -> snappy -> rigid with micro-noise)
-        const amp=A.wW*.24+A.wR*.11+A.wS*.035, fr=A.wW*3.2+A.wR*15+A.wS*52, lag=A.wW*.75+A.wR*.5+A.wS*.2;
+        const amp=A.wW*.24+A.wR*.11+A.wS*.07, fr=A.wW*3.2+A.wR*10+A.wS*16, lag=A.wW*.75+A.wR*.5+A.wS*.2;
         G.tp=(G.tp||0)+(dt>0?dt*Math.min(fr,1.5/dt):0);
         let pw=G.qw[G.tailRoot];
         for(let j=0;j<G.tail.length;j++){ const i=G.tail[j];
