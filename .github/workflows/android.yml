@@ -68,7 +68,7 @@ jobs:
           mkdir -p $RES/drawable && cp app-icons/splash.png $RES/drawable/splash.png
           # always landscape (both directions), no rotating needed
           sed -i 's/<activity\b/<activity android:screenOrientation="sensorLandscape"/' android/app/src/main/AndroidManifest.xml
-          grep -n "screenOrientation" android/app/src/main/AndroidManifest.xml
+          grep -q sensorLandscape android/app/src/main/AndroidManifest.xml && echo "landscape lock applied" || { echo "landscape lock FAILED"; exit 1; }
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew

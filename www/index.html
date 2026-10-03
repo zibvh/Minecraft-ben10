@@ -191,7 +191,6 @@
   .chip.mode{width:auto;height:30px;padding:0 10px;border-radius:15px;font-size:9px;border-color:rgba(111,227,255,.5);color:#d8f4ff;}
   .chip.mode::after{display:none;}
   .chip.mode.on{background:rgba(28,143,214,.5);border-color:#6fe3ff;box-shadow:0 0 10px rgba(70,200,255,.7);}
-  @media (orientation:portrait){ #squad-panel{top:242px;} }
 
   /* ---- STAGE 6: LOCK-ON ---- */
   #lock-btn{position:absolute;left:max(20px,env(safe-area-inset-left,20px));bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 132px);
@@ -316,7 +315,6 @@
   #start-screen .menu-btn{width:min(280px,100%);padding:clamp(9px,2.6vh,15px) 0;margin:clamp(4px,1.2vh,7px) 0;font-size:clamp(12px,3vh,15px);}
   #start-screen .menu-btn.primary,.pp-card .menu-btn.primary{background:linear-gradient(180deg,#39ff8a,#12a458);color:#022012;border-color:#aaffd0;box-shadow:0 0 18px rgba(57,255,138,.45);}
   #start-screen #menu-panel{max-width:min(300px,100%);font-size:12px;max-height:34vh;overflow-y:auto;}
-  @media (orientation:portrait){ #start-screen{flex-direction:column;gap:18px;} #start-screen .lobby-right{flex:0 0 auto;width:100%;max-width:320px;} #start-screen h1{font-size:clamp(26px,9vw,44px);} }
   /* ===== pause page, extra buttons, hud editor ===== */
   #cam-btn,#pause-btn{position:absolute;width:34px;height:34px;border-radius:50%;border:2px solid var(--theme);background:rgba(4,18,12,.82);display:flex;align-items:center;justify-content:center;pointer-events:auto;z-index:25;box-shadow:0 0 8px rgba(0,0,0,.6);}
   #cam-btn svg,#pause-btn svg{width:58%;height:58%;stroke:#eafff2;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
@@ -342,9 +340,6 @@
   body.hud-edit [data-hud]{outline:2px dashed #ffe27a;outline-offset:3px;pointer-events:auto !important;touch-action:none;opacity:1 !important;filter:none;z-index:305;}
   body.hud-edit [data-hud].dragging{outline-color:#39ff8a;}
   body.hud-edit #hud{display:block !important;}
-  #rotate-warn{display:none;position:fixed;inset:0;z-index:999;background:#020b06;color:#39ff8a;align-items:center;justify-content:center;text-align:center;font-size:22px;letter-spacing:4px;font-weight:700;}
-  #rotate-warn small{display:block;font-size:11px;opacity:.7;letter-spacing:2px;margin-top:8px;}
-  @media (orientation:portrait) and (max-width:900px){ body.playing #rotate-warn{display:flex;} }
 </style>
 </head>
 <body>
@@ -416,7 +411,6 @@
   <div id="pp-hudbar" style="display:none"><div id="pp-chips"></div><div class="pp-hint">Drag any button to move it. Each alien keeps its own layout.</div>
     <div class="pp-row"><button class="menu-btn" id="pp-reset">RESET</button><button class="menu-btn primary" id="pp-done">DONE</button></div></div>
 </div>
-<div id="rotate-warn">ROTATE YOUR DEVICE<br><small>Omniverse: ZERO is played in landscape</small></div>
 <div id="flash-overlay"></div>
 <div id="slow-overlay"></div>
 <div id="damage-overlay"></div>
@@ -1459,7 +1453,7 @@ function animateRig(parts,dt,inp){
   A.t+=dt;
   // world speed from position delta (works identically for player, replicas, NPCs, enemies; teleports are ignored)
   let spd=0, fwdV=1, latV=0;
-  if(inp.pos){ if(A.px!==null){ const dx=inp.pos.x-A.px, dz=inp.pos.z-A.pz, d=Math.hypot(dx,dz); spd=d/dt; if(spd>90){ spd=0; } else if(inp.fwd&&d>1e-4){ fwdV=(dx*inp.fwd.x+dz*inp.fwd.z)/d; latV=(dx*-inp.fwd.z+dz*inp.fwd.x)/d; } } A.px=inp.pos.x; A.pz=inp.pos.z; }
+  if(inp.pos){ if(A.px!==null){ const dx=inp.pos.x-A.px, dz=inp.pos.z-A.pz, d=Math.hypot(dx,dz); spd=d/dt; if(spd>(inp.superT>.2?600:90)){ spd=0; } else if(inp.fwd&&d>1e-4){ fwdV=(dx*inp.fwd.x+dz*inp.fwd.z)/d; latV=(dx*-inp.fwd.z+dz*inp.fwd.x)/d; } } A.px=inp.pos.x; A.pz=inp.pos.z; }
   A.spd=_damp(A.spd,spd,14,dt);
   const sc=Math.max(.4,(parts.dims.total*(inp.ws||PS))/(2.7*PS)); // stride scales with the body's world size
   const s=Math.min(4.2,A.spd/(3.6*sc)); // normalised: 1 = walk, ~2 = run, 3+ = sprint
@@ -1528,7 +1522,7 @@ function animateRig(parts,dt,inp){
     P.tLx*=1.25; P.tRx*=1.25; P.kL*=1.2; P.kR*=1.2;
   }
   if(inp.ball>0){ const b=_sm(inp.ball); // Cannonbolt ball: chin tucked, back rounded, knees drawn up, arms hugging the shins
-    P.chX+=1.35*b; P.hdX+=.55*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
+    P.chX+=1.6*b; P.hdX+=.7*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
     P.sL.x=_lerp(P.sL.x,1.0,b); P.sR.x=_lerp(P.sR.x,1.0,b); P.eL=_lerp(P.eL,1.7,b); P.eR=_lerp(P.eR,1.7,b); P.sL.z=_lerp(P.sL.z,.45,b); P.sR.z=_lerp(P.sR.z,-.45,b); P.hipsY-=.12*b; }
   if(inp.carrying){ const _cl=parts.leftArm2?[[P.sL,'eL'],[P.sR,'eR']]:[[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]; for(const [S,ek] of _cl){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
   if(inp.flee){ P.sL.x=2.5+Math.sin(A.t*14)*.35; P.sR.x=2.5-Math.sin(A.t*14)*.35; P.eL=.8; P.eR=.8; P.chX+=-.12; P.hdX+=.25; }
@@ -2101,8 +2095,13 @@ function updateCamera(){
   }   // never inside a building
   const desired = pivot.clone().addScaledVector(lookDir, -safeBack);
   // feed-forward: move the camera with the player's own displacement so a huge speed can't build up lag distance
-  if(xlr8Cam && camDyn.pull>0.02 && Math.hypot(_fdx,_fdz)<60){ const ff=Math.min(1,camDyn.pull*2.5); camera.position.x+=_fdx*ff; camera.position.z+=_fdz*ff; }
-  camera.position.lerp(desired, xlr8Cam?0.3:0.18);
+  { const dd=Math.hypot(_fdx,_fdz), sv=dd/Math.max(cdt,1e-3);
+    const ff=xlr8Cam?Math.min(1,camDyn.pull*2.5):Math.min(1,Math.max(0,(sv-12)/18)); // fast movers (flying, rolling) keep their framing
+    if(ff>0.01 && dd<80){ camera.position.x+=_fdx*ff; camera.position.z+=_fdz*ff; camera.position.y+=(player.pos.y-(camDyn.py!=null?camDyn.py:player.pos.y))*ff; } }
+  camDyn.py=player.pos.y;
+  camera.position.lerp(desired, (xlr8Cam||player.flying)?0.3:0.18);
+  { const sv2=Math.hypot(_fdx,_fdz)/Math.max(cdt,1e-3); // hard cap on how far the camera may trail the player when moving fast
+    if(sv2>12 && sv2<400){ const Ld=camera.position.distanceTo(desired), mx=1.4; if(Ld>mx) camera.position.lerp(desired,1-mx/Ld); } }
   const lookAt = pivot.clone().addScaledVector(lookDir, 8);
   camera.lookAt(lookAt);
 }
@@ -3245,7 +3244,7 @@ function poseExtras(parts,moving,dt){
   const A=player.animT, S=Math.sin(A);
   if(player.flying){
     const lv=player.form.id==='diamondhead';
-    lean=lv?(moving?-.35:0):(moving?-(Math.PI/2-player.pitch):-.12);
+    lean=lv?(moving?-.35:0):(moving?THREE.MathUtils.clamp(-(Math.PI/2-player.pitch),-1.0,0.2):-.12);
     const up=lv?1.0:(moving?2.9+S*.08:.5);
     if(lv&&(player._cl=(player._cl||0)+dt)>.09){ player._cl=0; debris(player.pos.clone().add(new THREE.Vector3(0,-.95,0)),0x9ffcff,.8,new THREE.Vector3(),1.4,false); }
     if(player.form.id==='heatblast'&&moving&&(player._fl=(player._fl||0)+dt)>.03){
@@ -3914,7 +3913,7 @@ function playerAnimate(parts,dt,moving){
   { const burn=id==='heatblast'&&player.flying&&parts.all; // flying Heatblast glows like he's on fire
     if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(1.0*k,.38*k,.04*k); player._burn=true; }
     else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
-  animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb,vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
+  animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb||(id==='xlr8'&&(player.superT||0)>.2&&!player.flying&&Math.abs(player.vel.y)<9),vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
     swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
@@ -4162,7 +4161,7 @@ function updatePlayerOnFoot(dt){
     // fully cover it, so the silhouette actually reads as a ball rather than a person with tucked limbs.
     const curl = player.rollT||0;
     const useGlb=!!parts.glb; // real model: curl his own body into a ball instead of swapping in the generic shell
-    const bodyScale = useGlb ? 1-curl*.12 : 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
+    const bodyScale = useGlb ? 1-curl*.2 : 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
     if(parts.hips && !useGlb) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
     if(useGlb) GLBBODY.scaleBody(parts,bodyScale);
     player._ball = useGlb ? curl : 0;
