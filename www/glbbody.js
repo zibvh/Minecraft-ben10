@@ -27,6 +27,7 @@ const GLBBODY=(function(){
     xlr8:{ face:Math.PI, map:{ hips:['spine_01','tail(1)_045'], chest:['spine001_02'], head:['spine004_05'],
         sL:['upper_armL_010'], eL:['forearmL_011'], sR:['upper_armR_019'], eR:['forearmR_020'],
         tL:['thighL_035'], kL:['shinL_036'], fL:['footL_037'], tR:['thighR_040'], kR:['shinR_041'], fR:['footR_042'] },
+      gain:{ chest:.4, head:.7, sL:.8, sR:.8, tL:.8, tR:.8, kL:.85, kR:.85 }, hMul:1.15, leanMul:.22,
       down:{}, tail:['tail(2)_046','tail(3)_047','tail(4)_048','tail(5)_049','tail(6)_050'] },
     echo_echo:{ face:Math.PI, map:{ hips:['Bone_00','Bone009_037','Bone012_041'], chest:['Bone043_01'], head:['Bone018_034','Bone019_035'],
         sL:['Bone006_018'], eL:['Bone007_019'], sR:['Bone002_03'], eR:['Bone003_04'],
@@ -40,7 +41,7 @@ const GLBBODY=(function(){
              Right_arm_09:['Right_elbow_010',12], Right_elbow_010:['Right_wrist_Cannonbolt_011',12] } }
   };
   const store={}, state={};          // store[kind] = parsed template; state[kind] = 'wait' | 'ok' | 'fail'
-  const _q=new THREE.Quaternion(), _q2=new THREE.Quaternion(), _v=new THREE.Vector3(), _v2=new THREE.Vector3(), _m=new THREE.Matrix4(), _s=new THREE.Vector3();
+  const _qg=new THREE.Quaternion(), _q=new THREE.Quaternion(), _q2=new THREE.Quaternion(), _v=new THREE.Vector3(), _v2=new THREE.Vector3(), _m=new THREE.Matrix4(), _s=new THREE.Vector3();
 
   function b64ToBuf(s){ const bin=atob(s), n=bin.length, u=new Uint8Array(n); for(let i=0;i<n;i++) u[i]=bin.charCodeAt(i); return u.buffer; }
 
@@ -105,6 +106,7 @@ const GLBBODY=(function(){
             side:src.side,transparent:src.transparent,opacity:src.opacity,alphaTest:src.alphaTest,skinning:!!o.isSkinnedMesh});
           if(src.emissiveMap) src.emissiveMap.encoding=THREE.LinearEncoding;
           m.userData.baseEmis=m.emissive.getHex(); mats.set(src,m); parts.all.push(m); }
+        if(kind==='echo_echo'&&o.isSkinnedMesh){ try{ paintEcho(o); m.vertexColors=true; m.color.set(0xffffff); m.map=null; m.needsUpdate=true; }catch(e){ console.warn('paintEcho',e); } }
         o.material=m; });
       pivot.updateMatrixWorld(true);
       // collect skeleton, bind data
@@ -128,7 +130,7 @@ const GLBBODY=(function(){
         const phi=deg*Math.PI/180, t=h.multiplyScalar(Math.sin(phi)).add(new THREE.Vector3(0,-Math.cos(phi),0));
         const A=new THREE.Quaternion().setFromUnitVectors(d,t.normalize()); ent[i].qb0.premultiply(A); }
       const tail=(C.tail||[]).map(nm=>idx.get(byName[nm])).filter(i=>i!=null);
-      const G={ kind, pivot, k, base:pivot.position.clone(), bones, par, qBind, pBind, qParRel, sPar, ent, tail, qw:bones.map(()=>new THREE.Quaternion()),
+      const G={ kind, gain:C.gain||null, pivot, k, base:pivot.position.clone(), bones, par, qBind, pBind, qParRel, sPar, ent, tail, qw:bones.map(()=>new THREE.Quaternion()),
         t:{hips:new THREE.Quaternion(),chest:new THREE.Quaternion(),head:new THREE.Quaternion(),sL:new THREE.Quaternion(),eL:new THREE.Quaternion(),sR:new THREE.Quaternion(),eR:new THREE.Quaternion(),
            s2L:new THREE.Quaternion(),e2L:new THREE.Quaternion(),s2R:new THREE.Quaternion(),e2R:new THREE.Quaternion(),
            tL:new THREE.Quaternion(),kL:new THREE.Quaternion(),fL:new THREE.Quaternion(),tR:new THREE.Quaternion(),kR:new THREE.Quaternion(),fR:new THREE.Quaternion()}, clock:Math.random()*10 };
@@ -141,16 +143,17 @@ const GLBBODY=(function(){
 
   // Copy the animator's pivot rotations onto the GLB bones. Call right after animateRig().
   function apply(parts,dt){
-    const G=parts.glb; if(!G) return; const p=parts, t=G.t, Q=(o)=>o?o.quaternion:null;
-    t.hips.copy(p.hips.quaternion);
-    t.chest.copy(t.hips).multiply(p.chest.quaternion);
-    t.head.copy(t.chest).multiply(p.neck.quaternion).multiply(p.head.quaternion);
-    t.sL.copy(t.chest).multiply(p.leftArm.quaternion); t.eL.copy(t.sL).multiply(p.elbowL.quaternion);
-    t.sR.copy(t.chest).multiply(p.rightArm.quaternion); t.eR.copy(t.sR).multiply(p.elbowR.quaternion);
-    if(p.leftArm2){ t.s2L.copy(t.chest).multiply(p.leftArm2.quaternion); t.e2L.copy(t.s2L).multiply(p.elbow2L.quaternion);
-      t.s2R.copy(t.chest).multiply(p.rightArm2.quaternion); t.e2R.copy(t.s2R).multiply(p.elbow2R.quaternion); }
-    t.tL.copy(t.hips).multiply(p.leftLeg.quaternion); t.kL.copy(t.tL).multiply(p.kneeL.quaternion); t.fL.copy(t.kL).multiply(p.footL.quaternion);
-    t.tR.copy(t.hips).multiply(p.rightLeg.quaternion); t.kR.copy(t.tR).multiply(p.kneeR.quaternion); t.fR.copy(t.kR).multiply(p.footR.quaternion);
+    const G=parts.glb; if(!G) return; const p=parts, t=G.t, gn=G.gain;
+    const Q=(o,k)=>{ const gk=gn&&gn[k]; if(gk==null||gk===1) return o.quaternion; return _qg.identity().slerp(o.quaternion,gk); };
+    t.hips.copy(Q(p.hips,'hips'));
+    t.chest.copy(t.hips).multiply(Q(p.chest,'chest'));
+    t.head.copy(t.chest).multiply(p.neck.quaternion).multiply(Q(p.head,'head'));
+    t.sL.copy(t.chest).multiply(Q(p.leftArm,'sL')); t.eL.copy(t.sL).multiply(Q(p.elbowL,'eL'));
+    t.sR.copy(t.chest).multiply(Q(p.rightArm,'sR')); t.eR.copy(t.sR).multiply(Q(p.elbowR,'eR'));
+    if(p.leftArm2){ t.s2L.copy(t.chest).multiply(Q(p.leftArm2,'s2L')); t.e2L.copy(t.s2L).multiply(Q(p.elbow2L,'e2L'));
+      t.s2R.copy(t.chest).multiply(Q(p.rightArm2,'s2R')); t.e2R.copy(t.s2R).multiply(Q(p.elbow2R,'e2R')); }
+    t.tL.copy(t.hips).multiply(Q(p.leftLeg,'tL')); t.kL.copy(t.tL).multiply(Q(p.kneeL,'kL')); t.fL.copy(t.kL).multiply(Q(p.footL,'fL'));
+    t.tR.copy(t.hips).multiply(Q(p.rightLeg,'tR')); t.kR.copy(t.tR).multiply(Q(p.kneeR,'kR')); t.fR.copy(t.kR).multiply(Q(p.footR,'fR'));
     const dy=p.hips.position.y-p.hipY, dz=p.hips.position.z, dx=p.hips.position.x;
     const sw=(dt>0)?(G.clock+=dt):G.clock, spd=Math.min(1.6,(p.anim&&p.anim.spd||0)/4);
     const n=G.bones.length;
@@ -173,6 +176,35 @@ const GLBBODY=(function(){
         _q2.setFromAxisAngle(_v.set(0,0,1),Math.sin(sw*(3+3*spd)-j*.7)*(.05+.07*spd)*(1+j*.3)); b.quaternion.multiply(_q2); } }
   }
 
+  // Echo Echo colouring: the source model is one flat white mesh. Paint it per vertex (bone region + facial position)
+  // to match the cartoon design: white body, dark visor and eyes, steel-grey speaker ears and cuffs, black/green Omnitrix.
+  const W4=(a,i,k)=>k===0?a.getX(i):k===1?a.getY(i):k===2?a.getZ(i):a.getW(i);
+  function paintEcho(mesh){
+    const g=mesh.geometry, pos=g.attributes.position, nor=g.attributes.normal, ji=g.attributes.skinIndex, jw=g.attributes.skinWeight, n=pos.count;
+    const bones=mesh.skeleton.bones, par=bones.map(b=>bones.indexOf(b.parent));
+    const anc=(j,names)=>{ for(let i=j;i>=0;i=par[i]) if(names.includes(bones[i].name)) return true; return false; };
+    const depthFrom=(j,names)=>{ let d=0; for(let i=j;i>=0;i=par[i],d++) if(names.includes(bones[i].name)) return d; return -1; };
+    const M=CFG.echo_echo.map, headN=M.head, armN=[...M.eL,...M.eR], legN=[...M.fL,...M.fR], chestN=M.chest;
+    const col=new Float32Array(n*3), W=[.95,.96,.98], DARK=[.16,.19,.25], STEEL=[.42,.47,.55], BLACK=[.03,.03,.04], GREEN=[.2,.95,.35];
+    // head bounds (for eye/visor bands)
+    let y0=1e9,y1=-1e9; const isHead=new Uint8Array(n);
+    for(let i=0;i<n;i++){ let best=0,bj=0; for(let k=0;k<4;k++){ if(W4(jw,i,k)>best){ best=W4(jw,i,k); bj=W4(ji,i,k); } }
+      if(anc(bj,headN)){ isHead[i]=1; const y=pos.getY(i); if(y<y0)y0=y; if(y>y1)y1=y; } }
+    for(let i=0;i<n;i++){ let best=0,bj=0; for(let k=0;k<4;k++){ if(W4(jw,i,k)>best){ best=W4(jw,i,k); bj=W4(ji,i,k); } }
+      let c=W; const nz=nor.getZ(i), ny=nor.getY(i), v=(pos.getY(i)-y0)/Math.max(1e-6,y1-y0);
+      if(isHead[i]){
+        const front = ECHO_FRONT*nz>.35;
+        if(front && v>.38 && v<.62) c = (v>.47&&v<.57)?BLACK:DARK;      // visor band with dark eye slit
+        else if(front && v>.2 && v<.36) c=DARK;                         // mouth grille
+        else if(Math.abs(nor.getX(i))>.82) c=STEEL;                     // speaker ears
+      } else if(depthFrom(bj,armN)>=1 && depthFrom(bj,armN)<=99 && anc(bj,armN)){ const d=depthFrom(bj,armN); c = d>=1 && d<=2 ? STEEL : W; }
+      else if(anc(bj,legN)) c=STEEL;
+      else if(anc(bj,chestN)){ const x=pos.getX(i), yy=pos.getY(i); /* Omnitrix disc handled below */ }
+      col[i*3]=c[0]; col[i*3+1]=c[1]; col[i*3+2]=c[2]; }
+    g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  }
+  const ECHO_FRONT=1;
+
   // Cannonbolt curl: shrink the GLB body toward the hips as the shell grows
   function scaleBody(parts,s){
     const G=parts.glb; if(!G) return; s=Math.max(.001,s);
@@ -183,7 +215,7 @@ const GLBBODY=(function(){
   const PZ={four_arms:.68,heatblast:.68,xlr8:.92,echo_echo:.72,cannonbolt:1};
   function topOf(parts){ return parts.glb?(parts.dims.total-.12):null; }
 
-  return { init, attach, apply, scaleBody, topOf, pz:k=>PZ[k]||.7, ready:k=>state[k]==='ok', pending:k=>!!CFG[k]&&(state[k]==='wait'||state[k]===undefined), CFG };
+  return { init, attach, apply, scaleBody, topOf, pz:k=>PZ[k]||.7, leanMul:k=>(CFG[k]&&CFG[k].leanMul!=null)?CFG[k].leanMul:1, ready:k=>state[k]==='ok', pending:k=>!!CFG[k]&&(state[k]==='wait'||state[k]===undefined), CFG };
 })();
 window.GLBBODY=GLBBODY;
 try{GLBBODY.init();}catch(e){console.warn('GLB init',e);}

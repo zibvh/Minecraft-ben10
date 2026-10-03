@@ -1472,7 +1472,10 @@ function animateRig(parts,dt,inp){
     const k=_ez(inp.superT); P.sL.x=_lerp(P.sL.x,-1.5,k); P.sR.x=_lerp(P.sR.x,-1.5,k); P.eL=_lerp(P.eL,.35,k); P.eR=_lerp(P.eR,.35,k); P.chX+=-.35*k; P.hdX+=.3*k; P.sL.z=-.12; P.sR.z=.12;
     P.tLx*=1.25; P.tRx*=1.25; P.kL*=1.2; P.kR*=1.2;
   }
-  if(inp.carrying){ for(const [S,ek] of [[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
+  if(inp.ball>0){ const b=_sm(inp.ball); // Cannonbolt ball: chin tucked, back rounded, knees drawn up, arms hugging the shins
+    P.chX+=1.35*b; P.hdX+=.55*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
+    P.sL.x=_lerp(P.sL.x,1.0,b); P.sR.x=_lerp(P.sR.x,1.0,b); P.eL=_lerp(P.eL,1.7,b); P.eR=_lerp(P.eR,1.7,b); P.sL.z=_lerp(P.sL.z,.45,b); P.sR.z=_lerp(P.sR.z,-.45,b); P.hipsY-=.12*b; }
+  if(inp.carrying){ const _cl=parts.leftArm2?[[P.sL,'eL'],[P.sR,'eR']]:[[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]; for(const [S,ek] of _cl){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
   if(inp.flee){ P.sL.x=2.5+Math.sin(A.t*14)*.35; P.sR.x=2.5-Math.sin(A.t*14)*.35; P.eL=.8; P.eR=.8; P.chX+=-.12; P.hdX+=.25; }
   if(inp.aim){ // pistol/blaster: right arm straight out, left hand supports, head turned down the sight line
     P.sR.x=1.55; P.sR.y=-.05; P.eR=.05; P.sL.x=1.3; P.sL.y=-.45; P.eL=.85; P.sR.z=.03; P.chY+=.18; P.chX+=-.05; P.hdY+=-.15;
@@ -1480,6 +1483,11 @@ function animateRig(parts,dt,inp){
   // ---- melee overlay ----
   if(chg>0.01) chargePose(P,chg,parts);
   if(inp.atk) attackPose(P,parts,inp.atk,dt);
+  if(inp.cast>0 && !inp.flying){ // Heatblast: both palms thrust forward to fire (recoil kick first, then hold the aim)
+    const c=_ez(inp.cast), kick=_sm((c-.55)/.45)*.35;
+    P.sL.x=_lerp(P.sL.x,1.5+kick,c); P.sR.x=_lerp(P.sR.x,1.5+kick,c); P.sL.y=.18; P.sR.y=-.18; P.eL=_lerp(P.eL,.12,c); P.eR=_lerp(P.eR,.12,c);
+    P.chX+=-.12*c-kick*.4; P.hdX+=.1*c; }
+  else if(inp.cast>0){ P.sL.x=_lerp(P.sL.x,1.3,inp.cast); P.sR.x=_lerp(P.sR.x,1.3,inp.cast); P.eL=.15; P.eR=.15; }
   // ---- hit reaction ----
   if(hurt>0){ const h=_sm(hurt); P.chX+=.42*h; P.hdX+=.4*h; P.hipsRX+=.1*h; P.hipsZ+=.12*h; P.sL.x+=-.6*h; P.sR.x+=-.6*h; P.sL.z+=-.5*h; P.sR.z+=.5*h; P.eL+=.5*h; P.eR+=.5*h; P.tLx+=.35*h; P.kL+=.4*h; P.kR+=.5*h; P.hipsY+=-.08*h; P.chY+=Math.sin(A.t*40)*.05*h; }
   // ---- death: crumple; the whole-body fall is applied to the model root by the caller ----
@@ -2004,6 +2012,7 @@ function updateCamera(){
   // smoothed horizontal velocity (works for walking, flying, XLR8 and driving alike)
   if(camDyn.init && cdt>0){ const vx=(player.pos.x-camDyn.px)/cdt, vz=(player.pos.z-camDyn.pz)/cdt;
     if(Math.hypot(vx,vz)<90){ const k=Math.min(1,cdt*4.5); camDyn.vx+=(vx-camDyn.vx)*k; camDyn.vz+=(vz-camDyn.vz)*k; } else { camDyn.vx=camDyn.vz=0; } }
+  const _fdx=camDyn.init?player.pos.x-camDyn.px:0,_fdz=camDyn.init?player.pos.z-camDyn.pz:0;
   camDyn.px=player.pos.x; camDyn.pz=player.pos.z; camDyn.init=true;
   // landing: brief downward dip scaled by how hard we hit
   if(!player.onGround) camDyn.lastVy=player.vel.y;
@@ -2018,7 +2027,7 @@ function updateCamera(){
   const sp = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
   camDyn.pull += (sp-camDyn.pull)*Math.min(1,cdt*2.2); // eases in/out with the speed ramp
   const xlr8Cam = player.form.id==='xlr8';
-  const la=Math.min(.34, .028+ (drv?.02:0) + (xlr8Cam ? camDyn.pull*.10 : camDyn.pull*.16)); // modest look-ahead at speed
+  const la=Math.min(.34, .028+ (drv?.02:0) + (xlr8Cam ? camDyn.pull*.02 : camDyn.pull*.16)); // modest look-ahead at speed
   const pivot = player.pos.clone().add(new THREE.Vector3(
     camDyn.vx*la,
     camState.height*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_HEIGHT : camDyn.pull*.5)) + drv*1.3 - camDyn.kick,
@@ -2032,7 +2041,9 @@ function updateCamera(){
     for(let k=1;k<=10;k++){ const d=back*k/10; if(camSolid(pivot.x+fx*d,pivot.y+fy*d,pivot.z+fz*d)){ safeBack=Math.max(1.6,d-1.2); break; } }
   }   // never inside a building
   const desired = pivot.clone().addScaledVector(lookDir, -safeBack);
-  camera.position.lerp(desired, 0.18);
+  // feed-forward: move the camera with the player's own displacement so a huge speed can't build up lag distance
+  if(xlr8Cam && camDyn.pull>0.02 && Math.hypot(_fdx,_fdz)<60){ const ff=Math.min(1,camDyn.pull*2.5); camera.position.x+=_fdx*ff; camera.position.z+=_fdz*ff; }
+  camera.position.lerp(desired, xlr8Cam?0.3:0.18);
   const lookAt = pivot.clone().addScaledVector(lookDir, 8);
   camera.lookAt(lookAt);
 }
@@ -2041,6 +2052,11 @@ function updateCamera(){
    PROJECTILES
 ========================================================================= */
 const projectiles = [];
+const _hv=new THREE.Vector3();
+function handWorld(side){ // world position of a hand of the player's rig (0=left,1=right); null if unavailable
+  const pa=player.model&&player.model.userData&&player.model.userData.parts; const h=pa&&(side?pa.handR:pa.handL); if(!h) return null;
+  player.model.updateMatrixWorld(true); h.getWorldPosition(_hv); return _hv.clone();
+}
 function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
   const geo=style==='crystal'?new THREE.OctahedronGeometry(0.3):new THREE.SphereGeometry(style==='fire'?0.5:0.22,8,8);
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color}));
@@ -2056,6 +2072,7 @@ function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
     const cp=Math.cos(pl.pitch||0);
     dir = new THREE.Vector3(-Math.sin(pl.yaw)*cp, Math.sin(pl.pitch||0), -Math.cos(pl.yaw)*cp);
     startPos = pl.pos.clone().add(new THREE.Vector3(0,1.2,0)).add(dir.clone().multiplyScalar(1.2));
+    if(style==='fire' && pl===player){ pl._hs=!pl._hs; const hp=handWorld(pl._hs?1:0); if(hp) startPos=hp.addScaledVector(dir,.6); pl.castT=1; }
   }
   mesh.position.copy(startPos);
   scene.add(mesh);
@@ -2587,8 +2604,8 @@ function updateFx(dt){
 ========================================================================= */
 const BASE_FOV = 70;
 const MAX_FOV_BOOST = 30;
-const XLR8_MAX_FOV_BOOST = 8; // XLR8 gets restrained FOV widening so the character stays readable.
-const XLR8_CAM_PULL = 0.10; // At max super-speed, the camera moves back only 10%, not >2x.
+const XLR8_MAX_FOV_BOOST = 4; // XLR8 gets restrained FOV widening so the character stays readable.
+const XLR8_CAM_PULL = 0.03; // At max super-speed, the camera moves back only 10%, not >2x.
 const XLR8_CAM_HEIGHT = 0.12; // Small extra height at speed; preserves a close third-person read.
 const STREAK_COUNT = 14, DUST_COUNT = 12;
 const streakGeo = new THREE.BoxGeometry(0.04, 0.04, 1);
@@ -2960,7 +2977,8 @@ function updateIces(dt){
   }
 }
 function streamTick(kind,dt){
-  const dir=lookDir(), from=player.pos.clone().add(new THREE.Vector3(0,.8,0)).addScaledVector(flatFwd(player.yaw),.7);
+  const dir=lookDir(); let from=player.pos.clone().add(new THREE.Vector3(0,.8,0)).addScaledVector(flatFwd(player.yaw),.7);
+  if(kind==='fire'){ player._hs=!player._hs; const hp=handWorld(player._hs?1:0); if(hp) from=hp.addScaledVector(dir,.5); player.castHold=.15; }
   const fire=kind==='fire', cols=fire?[0xff4a1a,0xff8a1e,0xffd84a]:[0xd8f8ff,0x8fe0ff,0xffffff];
   for(let i=0;i<2;i++){
     const v=dir.clone().multiplyScalar(fire?15:17).add(new THREE.Vector3((Math.random()-.5)*2.4,(Math.random()-.5)*2.4,(Math.random()-.5)*2.4));
@@ -3177,7 +3195,7 @@ function poseExtras(parts,moving,dt){
     lean=moving?-(Math.PI/2-player.pitch*.7):-.1;
   }
   // (the old per-frame debris() blue trail was removed: it allocated a new material every frame; speed trails are now pooled in updateSpeedEffects)
-  if((player.superT||0)>0.2&&!player.flying&&!player.swimming){ lean=-.6*player.superT; }
+  if((player.superT||0)>0.2&&!player.flying&&!player.swimming){ const _gp=m.userData.parts; lean=-.6*player.superT*((_gp&&_gp.glb)?GLBBODY.leanMul(player.form.id):1); }
   m.rotation.x+=(lean-m.rotation.x)*.18;
 }
 const raycaster = new THREE.Raycaster();
@@ -3830,8 +3848,12 @@ function playerAnimate(parts,dt,moving){
   const ry=player.model.rotation.y, id=player.form.id, fwd={x:-Math.sin(ry),z:-Math.cos(ry)};
   const atk = player.punchAnimT>0 ? atkInput(player.punchKind,player.punchAnimT,player.punchAnimDur||.25,{side:player.punchSide,id,amp:id==='echo_echo'?.85:1}) : null;
   const climb=!!player.onLadder;
+  player.castT=Math.max(0,(player.castT||0)-dt*2.6); player.castHold=Math.max(0,(player.castHold||0)-dt);
+  { const burn=id==='heatblast'&&player.flying&&parts.all; // flying Heatblast glows like he's on fire
+    if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(1.0*k,.38*k,.04*k); player._burn=true; }
+    else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb,vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,carrying:!!carried,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
+    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.
@@ -4077,11 +4099,13 @@ function updatePlayerOnFoot(dt){
     // Curled: shrink the visible body (head/arms/legs/torso) to nothing and grow the shell sphere to
     // fully cover it, so the silhouette actually reads as a ball rather than a person with tucked limbs.
     const curl = player.rollT||0;
-    const bodyScale = 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
-    if(parts.hips) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
-    if(parts.glb) GLBBODY.scaleBody(parts,bodyScale);
-    if(curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
-    if(parts.shell){ parts.shell.scale.setScalar(Math.max(0.001, curl)); parts.shell.position.y = parts.shellBaseY; }
+    const useGlb=!!parts.glb; // real model: curl his own body into a ball instead of swapping in the generic shell
+    const bodyScale = useGlb ? 1-curl*.12 : 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
+    if(parts.hips && !useGlb) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
+    if(useGlb) GLBBODY.scaleBody(parts,bodyScale);
+    player._ball = useGlb ? curl : 0;
+    if(useGlb || curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
+    if(parts.shell){ parts.shell.scale.setScalar(useGlb?0.001:Math.max(0.001, curl)); parts.shell.position.y = parts.shellBaseY; }
     if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
     else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
   } else {
