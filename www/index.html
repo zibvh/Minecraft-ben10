@@ -1531,10 +1531,17 @@ function animateRig(parts,dt,inp){
     P.eL+=(.55+.7*r)*mv+.2*(1-mv); P.eR+=(.55+.7*r)*mv+.2*(1-mv); P.sL.z-=.08; P.sR.z+=.08; P.chX+=-.05*mv-.16*r; P.hdX+=.05*mv+.12*r;
   }
   if(inp.hb && inp.flying && !inp.swimming){ // rock flight: Heatblast surfs standing on a flying lava rock - upright, knees soft, arms out for balance
-    const sw=Math.sin(A.t*2.4);
-    P.tLx=.28; P.tRx=-.22; P.kL=.55; P.kR=.5; P.fL=-.2; P.fR=.1; P.tLz=-.08; P.tRz=.08; P.hipsY-=.09;
-    P.sL.x=.15+sw*.05; P.sR.x=.15-sw*.05; P.sL.z=-.95; P.sR.z=.95; P.eL=.25; P.eR=.25; P.chX+=-.12; P.hdX+=.1; P.chZ+=sw*.03;
+    const t=A.t, sw=Math.sin(t*2.4), sw2=Math.sin(t*3.7+1), sp=Math.min(1,mv+.0), fl=Math.sin(t*9)*.5+Math.sin(t*14)*.5;
+    // surfing a lava rock: arms keep balancing - wide, dipping and rising as the rock banks; trail back when moving fast
+    P.tLx=.28+sw*.04; P.tRx=-.22-sw*.04; P.kL=.55+sw2*.06; P.kR=.5-sw2*.06; P.fL=-.2; P.fR=.1; P.tLz=-.08; P.tRz=.08; P.hipsY-=.09;
+    P.sL.z=-(.85+.25*sw+.1*fl*sp); P.sR.z=(.85-.25*sw2+.1*fl*sp);
+    P.sL.x=.1+.35*sw2-.5*sp; P.sR.x=.1-.35*sw-.5*sp;
+    P.eL=.3+.25*(1+sw2)*.5+.15*sp; P.eR=.3+.25*(1-sw)*.5+.15*sp;
+    P.chX+=-.12-.1*sp; P.hdX+=.1+.05*sp; P.chZ+=sw*.05; P.chY+=sw2*.08; P.hdY+=-sw*.06;
   }
+  if(inp.xlLeap && !inp.flying){ // XLR8 running leap: stretched out, arms swept back, one leg reaching, one trailing
+    P.chX+=-.45; P.hdX+=.3; P.sL.x=-1.7; P.sR.x=-1.7; P.sL.z=-.25; P.sR.z=.25; P.eL=.25; P.eR=.25;
+    P.tLx=-.95; P.tRx=.7; P.kL=.25; P.kR=1.3; P.fL=.3; P.fR=-.4; P.hipsY-=.05; }
   // ---- special stances ----
   if(inp.superT>.2 && grounded && !inp.flying){ // XLR8 sprint: arms swept back, deep forward lean, driving knees
     const k=_ez(inp.superT); P.sL.x=_lerp(P.sL.x,-1.5,k); P.sR.x=_lerp(P.sR.x,-1.5,k); P.eL=_lerp(P.eL,.35,k); P.eR=_lerp(P.eR,.35,k); P.chX+=-.35*k; P.hdX+=.3*k; P.sL.z=-.12; P.sR.z=.12;
@@ -1560,12 +1567,14 @@ function animateRig(parts,dt,inp){
       P.chX+=-.28; P.hdX+=.22; P.hdY+=0;
       if(!armsOnly){ P.tLx=_lerp(P.tLx,.4,.8); P.tRx=_lerp(P.tRx,-.35,.8); P.kL=_lerp(P.kL,.55,.8); P.kR=_lerp(P.kR,.4,.8); P.hipsY-=.07; P.tLz=-.12; P.tRz=.12; }
     } else {
-      const th=_sm(c*1.8), wind=_sm((1-c)*2.2)*(c<.55?1:0);                       // thrust right at launch, follow-through as it fades
+      const tt2=1-inp.cast, wind=_sm(Math.min(1,tt2/.3)), th=_sm(Math.max(0,Math.min(1,(tt2-.3)/.22))), fol=_sm(Math.max(0,Math.min(1,(tt2-.6)/.4)));
       const T=R>0?P.sR:P.sL, TE=R>0?'eR':'eL', O=R>0?P.sL:P.sR, OE=R>0?'eL':'eR';
-      T.x=_lerp(T.x,1.52+ap,th); T.y=-R*.1*th; T.z=R*.05; P[TE]=_lerp(P[TE],.06,th);
-      O.x=_lerp(O.x,.55,th); O.z=-R*.35; P[OE]=_lerp(P[OE],1.25,th);                // guard arm tucked in
-      P.chY+=R*(-.42)*th+R*.18*(1-th)*c; P.chX+=-.22*th; P.hdX+=.15*th; P.hdY+=R*.2*th;
-      if(!armsOnly){ P.tLx=_lerp(P.tLx,.4,th); P.tRx=_lerp(P.tRx,-.3,th); P.kL=_lerp(P.kL,.45,th); P.kR=_lerp(P.kR,.3,th); P.hipsY-=.05*th; P.hipsRY+=R*.25*th; }
+      // reference: ball forms at the hip, arm cocks back, then whips forward and extends; off-hand stays tucked
+      T.x=-.75*wind*(1-th)+(1.5+ap)*th*(1-.3*fol); T.y=-R*.1*th; T.z=R*(.4*wind*(1-th)+.05*th); P[TE]=.95*wind*(1-th)+.06*th+.25*fol;
+      O.x=_lerp(O.x,.55,wind); O.z=-R*.35*wind; P[OE]=_lerp(P[OE],1.25,wind);
+      P.chY+=R*(.38*wind*(1-th)-.42*th*(1-.5*fol)); P.chX+=-.22*th-.06*wind*(1-th); P.hdX+=.15*th; P.hdY+=R*.2*th;
+      const w2=Math.max(wind*(1-th),th);
+      if(!armsOnly){ P.tLx=_lerp(P.tLx,.4,w2); P.tRx=_lerp(P.tRx,-.3,w2); P.kL=_lerp(P.kL,.45,w2); P.kR=_lerp(P.kR,.3,w2); P.hipsY-=.05*w2; P.hipsRY+=R*(-.2*wind*(1-th)+.25*th); }
     }
   }
   if(inp.ball>0){ const b=_sm(inp.ball); // Cannonbolt ball: chin tucked, back rounded, knees drawn up, arms hugging the shins
@@ -1895,12 +1904,12 @@ const ALIENS = [
     atkDamage:22, atkRange:2.4, atkCooldown:0.7, modelScale:1.69,
     special:{ name:'GROUND SLAM', cost:35, cooldown:5,
       run(ctx){ shockwaveAt(ctx.player.pos, 4.5, 40, true); shakeCamera(0.3); } } },
-  { id:'heatblast', name:'HEATBLAST', actions:[ACT.fire,ACT.fly,ACT.burn], maxHealth:100, maxEnergy:120, speed:3.0, jump:5.6, flies:true, flySpeed:22,
-    atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.5,
+  { id:'heatblast', name:'HEATBLAST', actions:[ACT.fire,ACT.fly,ACT.burn], maxHealth:100, maxEnergy:120, speed:3.2, jump:5.6, flies:true, flySpeed:22,
+    atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.3,
     special:{ name:'FIREBALL', cost:20, cooldown:1.2,
       run(ctx){ spawnProjectile(ctx.player, 0xff5a1e, 26, 18, false); } } },
   { id:'xlr8', name:'XLR8', actions:[ACT.dash,ACT.tornado,ACT.slow], maxHealth:90, maxEnergy:110, speed:7.4, jump:6.0,
-    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:1.24,
+    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:1.05,
     special:{ name:'SPEED BURST', cost:8, cooldown:0.1, duration:4, speedMult:1.9, drainPerSec:8,
       run(ctx){ ctx.player.speedBurstT = 4; } } },
   { id:'diamondhead', name:'DIAMONDHEAD', flies:true, flySpeed:9, actions:[ACT.spray,ACT.shard,ACT.shield,ACT.wall,ACT.lev], maxHealth:130, maxEnergy:100, speed:2.9, jump:5.4,
@@ -2143,15 +2152,17 @@ function updateCamera(){
   const sp = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
   camDyn.pull += (sp-camDyn.pull)*Math.min(1,cdt*2.2); // eases in/out with the speed ramp
   const xlr8Cam = player.form.id==='xlr8';
+  { const hv=Math.hypot(camDyn.vx,camDyn.vz), tgt=xlr8Cam?Math.min(1,Math.max(0,(hv-4)/6)):0, tg2=(player.form.id==='heatblast'&&player.flying)?1:0;
+    camDyn.run=(camDyn.run||0)+(tgt-(camDyn.run||0))*Math.min(1,cdt*3); camDyn.hf=(camDyn.hf||0)+(tg2-(camDyn.hf||0))*Math.min(1,cdt*2.5); }
   const la=Math.min(.34, .028+ (drv?.02:0) + (xlr8Cam ? camDyn.pull*.02 : camDyn.pull*.16)); // modest look-ahead at speed
   const pivot = player.pos.clone().add(new THREE.Vector3(
     camDyn.vx*la,
-    camState.height*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_HEIGHT : camDyn.pull*.5)) + drv*1.3 - camDyn.kick,
+    camState.height*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_HEIGHT+camDyn.run*.12 : camDyn.pull*.5)+camDyn.hf*.3) + drv*1.3 - camDyn.kick,
     camDyn.vz*la
   ));
   // XLR8 must remain visually anchored on-screen. The old multiplier (pull*1.15)
   // pushed the camera to more than twice its normal distance at top speed.
-  const back = camState.dist*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_PULL : camDyn.pull*1.15)) + drv*5.8;
+  const back = camState.dist*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_PULL+camDyn.run*.22 : camDyn.pull*1.15)+camDyn.hf*.75) + drv*5.8;
   let safeBack=back;
   { const fx=-lookDir.x, fy=-lookDir.y, fz=-lookDir.z;
     for(let k=1;k<=10;k++){ const d=back*k/10; if(camSolid(pivot.x+fx*d,pivot.y+fy*d,pivot.z+fz*d)){ safeBack=Math.max(1.6,d-1.2); break; } }
@@ -2184,6 +2195,9 @@ function handWorld(side){ // world position of a hand of the player's rig (0=lef
   player.model.updateMatrixWorld(true); h.getWorldPosition(_hv); return _hv.clone();
 }
 function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
+  if(style==='fire' && pl===player && !(opts&&(opts._now||opts.explicitDir))){ // wind-up first, the ball leaves the hand when the arm whips forward
+    pl._hs=!pl._hs; pl.castT=1; pl.castSide=pl._hs?1:0;
+    setTimeout(()=>{ if(!PAUSED) spawnProjectile(pl,color,damage,speed,pierce,style,Object.assign({},opts,{_now:1})); },130); return; }
   const geo=style==='crystal'?new THREE.OctahedronGeometry(0.3):new THREE.SphereGeometry(style==='fire'?0.5:0.22,8,8);
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color}));
   if(style==='crystal') mesh.scale.set(.7,1.7,.7);
@@ -2198,7 +2212,7 @@ function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
     const cp=Math.cos(pl.pitch||0);
     dir = new THREE.Vector3(-Math.sin(pl.yaw)*cp, Math.sin(pl.pitch||0), -Math.cos(pl.yaw)*cp);
     startPos = pl.pos.clone().add(new THREE.Vector3(0,1.2,0)).add(dir.clone().multiplyScalar(1.2));
-    if(style==='fire' && pl===player){ pl._hs=!pl._hs; const hp=handWorld(pl._hs?1:0); if(hp){ startPos=hp.addScaledVector(dir,.6); dir=aimDirFrom(startPos); } pl.castT=1; pl.castSide=pl._hs?1:0; }
+    if(style==='fire' && pl===player){ const hp=handWorld(pl._hs?1:0); if(hp){ startPos=hp.addScaledVector(dir,.6); dir=aimDirFrom(startPos); } }
   }
   mesh.position.copy(startPos);
   scene.add(mesh);
@@ -2732,8 +2746,8 @@ function updateFx(dt){
 const BASE_FOV = 70;
 const MAX_FOV_BOOST = 30;
 const XLR8_MAX_FOV_BOOST = 4; // XLR8 gets restrained FOV widening so the character stays readable.
-const XLR8_CAM_PULL = 0.03; // At max super-speed, the camera moves back only 10%, not >2x.
-const XLR8_CAM_HEIGHT = 0.12; // Small extra height at speed; preserves a close third-person read.
+const XLR8_CAM_PULL = 0.4; // At max super-speed, the camera moves back only 10%, not >2x.
+const XLR8_CAM_HEIGHT = 0.25; // Small extra height at speed; preserves a close third-person read.
 const STREAK_COUNT = 14, DUST_COUNT = 12;
 const streakGeo = new THREE.BoxGeometry(0.04, 0.04, 1);
 const streakMat = new THREE.MeshBasicMaterial({color:0xbfe8ff, transparent:true, opacity:0, depthWrite:false});
@@ -2765,6 +2779,22 @@ const TRAIL_N=44, TRAILS=[], TRAIL_SRC=[[.34,.75],[-.34,.55],[0,-.35]];
     TRAILS.push({mesh:m,pts:new Float32Array(TRAIL_N*3),n:0,pos,col,last:new THREE.Vector3(1e9,0,0)});
   });
 })();
+// XLR8 after-images: cyan ghost silhouettes left behind along the path, fading out
+const GHOSTS=[]; (function(){
+  const mat0=new THREE.MeshBasicMaterial({color:0x3ff0ff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,fog:false});
+  for(let i=0;i<7;i++){ const g=new THREE.Group(), mt=mat0.clone();
+    const add=(w,h,d,x,y,z,rx)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mt); m.position.set(x,y,z); if(rx) m.rotation.x=rx; g.add(m); };
+    add(.5,.7,.3,0,.2,0); add(.3,.32,.34,0,.7,-.12); add(.16,.7,.18,-.16,-.45,.05); add(.16,.7,.18,.16,-.45,-.05); add(.14,.55,.14,-.42,.3,.1,.9); add(.14,.55,.14,.42,.3,.1,.9); add(.1,.1,1.0,0,-.05,.6);
+    g.visible=false; scene.add(g); GHOSTS.push({g,mt,life:0}); }
+})();
+let ghostAcc=0, ghostIdx=0, ghostLast=new THREE.Vector3(1e9,0,0);
+function updateGhosts(dt,k){
+  const on=k>.2&&player.form.id==='xlr8'&&!player.flying;
+  if(on){ const d=ghostLast.distanceTo(player.pos);
+    if(d>1.1||d>50){ ghostLast.copy(player.pos); const G=GHOSTS[ghostIdx]; ghostIdx=(ghostIdx+1)%GHOSTS.length;
+      G.life=.38; G.g.visible=true; G.g.position.copy(player.pos).add(new THREE.Vector3(0,-.15*player.form.modelScale,0)); G.g.rotation.set(-.5,player.yaw,0,'YXZ'); G.g.scale.setScalar(.95*player.form.modelScale); } }
+  for(const G of GHOSTS){ if(G.life<=0){ if(G.g.visible) G.g.visible=false; continue; } G.life-=dt; G.mt.opacity=Math.max(0,G.life/.38)*.5*Math.min(1,k*1.3); }
+}
 let trailIdle=9;
 function updateSpeedTrails(dt,k){
   const on = k>0.12;
@@ -2791,6 +2821,7 @@ function updateSpeedTrails(dt,k){
 function updateSpeedEffects(dt){
   const s = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
   updateSpeedTrails(dt, player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0);
+  updateGhosts(dt, player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0);
   { const fx=document.getElementById('speed-fx'); if(fx){ const o=Math.max(0,Math.min(.6,(s-.3)*.9)); if(fx._o!==o){ fx._o=o; fx.style.opacity=o; } } }
 
   // XLR8 widens the FOV only a little; vehicles keep their existing wider speed FOV.
@@ -3712,6 +3743,11 @@ function doJump(){
     } else {
       player.flying = false; // gravity resumes and brings you back down
     }
+  } else if(player.onGround && player.form.id==='xlr8' && Math.hypot(camDyn.vx,camDyn.vz)>6){ // running leap: long and low, length follows speed
+    const hv=Math.hypot(camDyn.vx,camDyn.vz), f={x:-Math.sin(player.yaw),z:-Math.cos(player.yaw)}, r={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)};
+    let mx=moveInput.x,my=moveInput.y; if(Math.hypot(mx,my)<.15){ mx=0; my=1; }
+    const dx=f.x*my+r.x*mx, dz=f.z*my+r.z*mx, l=Math.hypot(dx,dz)||1, ex=Math.min(26,hv*.75);
+    player.vel.y = player.form.jump*1.18; player.onGround=false; player.xlLeap={x:dx/l*ex,z:dz/l*ex}; player.xlAir=true; Audio_.jump();
   } else if(player.onGround){
     player.vel.y = player.form.jump; player.onGround=false; Audio_.jump();
   }
@@ -3988,7 +4024,7 @@ function playerAnimate(parts,dt,moving){
     if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(1.0*k,.38*k,.04*k); player._burn=true; }
     else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb||(id==='xlr8'&&(player.superT||0)>.2&&!player.flying&&Math.abs(player.vel.y)<9),vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:player.pitch,xl:id==='xlr8',hb:id==='heatblast',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
+    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,hb:id==='heatblast',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.
@@ -4113,7 +4149,9 @@ function updatePlayerOnFoot(dt){
 
   if(player.alive && !climbing){
     const flySpeed = player.flying ? (player.form.flySpeed||speed)*FLY_SCALE*(player.boostT>0?1.7:1) : speed;
-    const lvx = (player.leapActive && !player.onGround && !player.flying) ? player.leap.x : 0, lvz = (player.leapActive && !player.onGround && !player.flying) ? player.leap.z : 0;
+    if(player.xlAir && (player.onGround||player.flying||player.form.id!=='xlr8')) player.xlAir=false;
+    let lvx = (player.leapActive && !player.onGround && !player.flying) ? player.leap.x : 0, lvz = (player.leapActive && !player.onGround && !player.flying) ? player.leap.z : 0;
+    if(player.xlAir){ lvx=player.xlLeap.x; lvz=player.xlLeap.z; }
     const nx = player.pos.x + (moveX*flySpeed + lvx)*dt;
     const nz = player.pos.z + (moveZ*flySpeed + lvz)*dt;
     if(player.flying){
