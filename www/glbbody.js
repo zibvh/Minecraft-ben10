@@ -81,7 +81,9 @@ const GLBBODY=(function(){
     const D=window.__GLB_DATA||{};
     for(const kind in CFG){ if(!D[kind]){ state[kind]='fail'; continue; } state[kind]='wait';
       await new Promise(r=>setTimeout(r,0));
-      try{ await load(kind,b64ToBuf(D[kind])); }catch(e){ state[kind]='fail'; } }
+      try{ await load(kind,b64ToBuf(D[kind])); }catch(e){ state[kind]='fail'; }
+      delete D[kind]; }                       // the base64 text is no longer needed once parsed
+    try{ if(window.__glbReady) window.__glbReady(); }catch(e){}
   }
 
   // Attach a clone of the GLB body to a freshly built rig. Returns true on success (box body is then hidden).
@@ -181,7 +183,7 @@ const GLBBODY=(function(){
   const PZ={four_arms:.68,heatblast:.68,xlr8:.92,echo_echo:.72,cannonbolt:1};
   function topOf(parts){ return parts.glb?(parts.dims.total-.12):null; }
 
-  return { init, attach, apply, scaleBody, topOf, pz:k=>PZ[k]||.7, ready:k=>state[k]==='ok', pending:k=>state[k]==='wait'||state[k]===undefined, CFG };
+  return { init, attach, apply, scaleBody, topOf, pz:k=>PZ[k]||.7, ready:k=>state[k]==='ok', pending:k=>!!CFG[k]&&(state[k]==='wait'||state[k]===undefined), CFG };
 })();
 window.GLBBODY=GLBBODY;
 try{GLBBODY.init();}catch(e){console.warn('GLB init',e);}

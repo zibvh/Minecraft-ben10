@@ -237,3 +237,5 @@ instead of the box anatomy. Ben, Diamondhead, civilians and enemies still use th
 - Echo Echo's own 9 baked animations, the extra duplicate bodies and the rig-control shapes in the original GLB were dropped.
 - Four Arms arrived without a skeleton; one was generated (`tools/glb-prep/rigfa.mjs`).
 - Not verified on a real device: performance of Heatblast (77k verts) on low-end phones.
+
+- HUD portraits now share ONE offscreen WebGL renderer (previously one new context per portrait, which made phones drop the main game view - white screen + sad-face icon - when the Omnitrix dial opened).

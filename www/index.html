@@ -1690,10 +1690,14 @@ function portraitFraming(model,kind){
   const cy=top-H*.5+.03, dist=(H*.5)/Math.tan(16*Math.PI/180);
   return {px:.12,py:cy+.1,pz:dist,tx:0,ty:cy-.04,tz:0};
 }
+// ONE shared offscreen renderer for every HUD portrait. (Each portrait used to open its own WebGL context; browsers cap
+// the number of live contexts and then silently kill the OLDEST one - the main game view - which showed up on phones as
+// a white screen with a sad-face icon the moment the Omnitrix dial was opened.)
+let _portraitRenderer=null;
 function renderPortrait(kind){
   const size = 128;
-  const pr = new THREE.WebGLRenderer({antialias:true, alpha:true});
-  pr.setSize(size,size);
+  if(!_portraitRenderer){ _portraitRenderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); _portraitRenderer.setSize(size,size); }
+  const pr = _portraitRenderer;
   const psc = new THREE.Scene();
   psc.add(new THREE.AmbientLight(0xffffff,0.9));
   const pl = new THREE.DirectionalLight(0xffffff,0.8); pl.position.set(2,3,4); psc.add(pl);
@@ -1705,8 +1709,10 @@ function renderPortrait(kind){
   const pcam = new THREE.PerspectiveCamera(32,1,0.1,14);
   pcam.position.set(pf.px,pf.py,pf.pz); pcam.lookAt(pf.tx,pf.ty,pf.tz);
   pr.render(psc, pcam);
-  try{ const c2=document.createElement('canvas'); c2.width=c2.height=size; c2.getContext('2d').drawImage(pr.domElement,0,0); portraitThumb[kind]=c2.toDataURL(); }catch(e){}
-  return pr.domElement;
+  const c2=document.createElement('canvas'); c2.width=c2.height=size;
+  try{ c2.getContext('2d').drawImage(pr.domElement,0,0); portraitThumb[kind]=c2.toDataURL(); }catch(e){}
+  try{ rigDispose(model.userData.parts); psc.remove(model); pr.renderLists.dispose(); }catch(e){}
+  return c2;
 }
 
 /* =========================================================================
@@ -1974,6 +1980,11 @@ function closeDial(){ OMNI.open=false; ['omni-dial','omni-dim','omni-x'].forEach
 function toggleDial(){ if(OMNI.open) closeDial(); else openDial(); }
 (function(){ const close=e=>{ e.preventDefault(); e.stopPropagation(); closeDial(); };
   ['omni-dim','omni-x'].forEach(id=>{ const el=document.getElementById(id); el.addEventListener('touchend',close,{passive:false}); el.addEventListener('click',close); }); })();
+// called by glbbody.js once the GLB bodies are parsed: redo the GLB aliens' portraits (they may have been drawn with the box body) and refresh the dial icons
+window.__glbReady=function(){
+  try{ for(const a of ALIENS){ if(!(window.GLBBODY&&GLBBODY.ready(a.id))) continue; delete portraitCache[a.id]; getPortraitCanvas(a.id);
+      const el=document.querySelector('#omni-dial .od[data-id="'+a.id+'"] img'); if(el&&portraitThumb[a.id]) el.src=portraitThumb[a.id]; } }catch(e){}
+};
 function warmPortraits(){ // render every portrait once, a little at a time, so the dial never hitches
   const kinds=['ben'].concat(ALIENS.map(a=>a.id)); let i=0;
   (function step(){ if(i>=kinds.length) return; try{ getPortraitCanvas(kinds[i]); }catch(e){} i++; setTimeout(step,250); })();
