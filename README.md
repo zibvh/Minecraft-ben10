@@ -219,3 +219,21 @@ At full speed XLR8 stays small in frame while the world and effects sell the vel
 (distance-sampled, ~70 u long at full speed, cleared when you slow), edge speed-lines overlay, wider FOV (to ~100), and the camera pulls back ~2x, rises and
 looks further ahead, easing with the speed ramp. The camera is also now blocked by buildings (it can no longer sit inside one). Dash gives a short trail.
 tests/t_trails.js covers it.
+
+
+## Real 3D alien bodies (GLB)
+
+The five aliens that have models - Four Arms, Heatblast, XLR8, Echo Echo and Cannonbolt - now use skinned GLB bodies
+instead of the box anatomy. Ben, Diamondhead, civilians and enemies still use the voxel rig.
+
+- **Animations are the game's own.** `animateRig()` still poses the jointed rig (walk / run / sprint / idle / jump / fly /
+  punch combo / hit / death / climb / swim / carry). `www/glbbody.js` then retargets each rig pivot onto the matching bone of
+  the GLB skeleton every frame, so every existing animation plays on the real bodies with no baked clips. Cannonbolt's curl
+  into a ball still works (the body shrinks while the shell grows).
+- **Fallback.** If a model fails to load or a bone name is missing, that alien keeps its box body automatically.
+- **Files.** `www/models.js` holds the models as base64 (works from file:// and in the APK), `www/glb-libs.js` is three r128's
+  GLTFLoader + SkeletonUtils, `models/*.glb` are the optimised sources. After replacing a model run `node tools/build-models.js`.
+- **Per-model setup** (facing direction, bone names, how far T-posed arms are relaxed) is the `CFG` table at the top of `www/glbbody.js`.
+- Echo Echo's own 9 baked animations, the extra duplicate bodies and the rig-control shapes in the original GLB were dropped.
+- Four Arms arrived without a skeleton; one was generated (`tools/glb-prep/rigfa.mjs`).
+- Not verified on a real device: performance of Heatblast (77k verts) on low-end phones.

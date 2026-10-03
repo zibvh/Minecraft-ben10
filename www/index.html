@@ -376,151 +376,12 @@ window.addEventListener('error',function(e){
 });
 </script>
 <script src="three.min.js"></script>
-
+<script src="glb-libs.js"></script>
+<script src="models.js"></script>
+<script src="glbbody.js"></script>
 <script>
-/* Offline GLB body loader: keeps the game's existing procedural animation system and
-   exposes the supplied alien bodies as skinned Three.js objects. */
-window.__ALIEN_GLB_READY = (async function(){
-  const BASE='assets/aliens/';
-  const FILES={heatblast:'heatblast.glb',xlr8:'xlr8_rigged.glb',four_arms:'fourarms.glb',echo_echo:'echoecho.glb',cannonbolt:'cannonbolt.glb'};
-  const assets={};
-
-  function readChunk(ab){
-    const dv=new DataView(ab), magic=new TextDecoder().decode(new Uint8Array(ab,0,4));
-    if(magic!=='glTF') throw new Error('Invalid GLB');
-    let p=12, json=null, bin=null;
-    while(p<dv.byteLength){
-      const n=dv.getUint32(p,true), t=dv.getUint32(p+4,true); p+=8;
-      const chunk=ab.slice(p,p+n); p+=n;
-      if(t===0x4e4f534a) json=JSON.parse(new TextDecoder().decode(chunk).replace(/\0+$/,''));
-      else if(t===0x004e4942) bin=chunk;
-    }
-    return {json,bin};
-  }
-  function comps(type){return {SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT2:4,MAT3:9,MAT4:16}[type]||1}
-  function csize(t){return {5120:1,5121:1,5122:2,5123:2,5125:4,5126:4}[t]}
-  function readAccessor(g,aidx){
-    const a=g.accessors[aidx], bv=g.bufferViews[a.bufferView], n=a.count, nc=comps(a.type), sz=csize(a.componentType);
-    const stride=bv.byteStride||nc*sz, off=(bv.byteOffset||0)+(a.byteOffset||0), out=new Float32Array(n*nc);
-    const dv=new DataView(g._bin,0,g._bin.byteLength);
-    const getter={5120:(o)=>dv.getInt8(o),5121:(o)=>dv.getUint8(o),5122:(o)=>dv.getInt16(o,true),5123:(o)=>dv.getUint16(o,true),5125:(o)=>dv.getUint32(o,true),5126:(o)=>dv.getFloat32(o,true)}[a.componentType];
-    const max={5120:127,5121:255,5122:32767,5123:65535}[a.componentType];
-    for(let i=0;i<n;i++) for(let c=0;c<nc;c++){
-      let v=getter(off+i*stride+c*sz);
-      if(a.normalized) v = a.componentType===5120 ? Math.max(v/max,-1) : v/max;
-      out[i*nc+c]=v;
-    }
-    return {data:out,count:n,nc};
-  }
-  function readIndices(g,aidx){
-    const a=g.accessors[aidx], bv=g.bufferViews[a.bufferView], n=a.count, sz=csize(a.componentType), off=(bv.byteOffset||0)+(a.byteOffset||0);
-    const C=a.componentType===5121?Uint8Array:a.componentType===5123?Uint16Array:Uint32Array;
-    const out=new C(n), dv=new DataView(g._bin,0,g._bin.byteLength), getter=a.componentType===5121?(o)=>dv.getUint8(o):a.componentType===5123?(o)=>dv.getUint16(o,true):(o)=>dv.getUint32(o,true);
-    const stride=bv.byteStride||sz;
-    for(let i=0;i<n;i++) out[i]=getter(off+i*stride);
-    return out;
-  }
-  async function makeTextures(g){
-    const out=[];
-    for(const im of (g.images||[])){
-      let blob;
-      if(im.bufferView!=null){
-        const bv=g.bufferViews[im.bufferView], bytes=g._bin.slice((bv.byteOffset||0),(bv.byteOffset||0)+(bv.byteLength||0));
-        blob=new Blob([bytes],{type:im.mimeType||'application/octet-stream'});
-      } else if(im.uri) {
-        const r=await fetch(im.uri); blob=await r.blob();
-      }
-      if(!blob){out.push(null);continue}
-      const url=URL.createObjectURL(blob);
-      out.push(await new Promise((resolve,reject)=>{
-        const img=new Image(); img.onload=()=>{const t=new THREE.Texture(img);t.flipY=false;t.needsUpdate=true;resolve(t);URL.revokeObjectURL(url)}; img.onerror=reject; img.src=url;
-      }));
-    }
-    return out;
-  }
-  function matFor(g,mi,textures){
-    const m=g.materials&&g.materials[mi], p=m&&m.pbrMetallicRoughness||{}, bc=p.baseColorFactor||[1,1,1,1];
-    const params={color:new THREE.Color(bc[0],bc[1],bc[2]),opacity:bc[3],transparent:bc[3]<.999,roughness:p.roughnessFactor==null?1:p.roughnessFactor,metalness:p.metallicFactor||0,side:THREE.DoubleSide};
-    if(p.baseColorTexture && textures[p.baseColorTexture.index]) params.map=textures[p.baseColorTexture.index];
-    if(m&&m.emissiveFactor) params.emissive=new THREE.Color(m.emissiveFactor[0],m.emissiveFactor[1],m.emissiveFactor[2]);
-    if(m&&m.alphaMode==='BLEND') params.transparent=true;
-    if(m&&m.alphaMode==='MASK') params.alphaTest=m.alphaCutoff==null?.5:m.alphaCutoff;
-    if(m&&m.extensions&&m.extensions.KHR_materials_unlit) return new THREE.MeshBasicMaterial(params);
-    return new THREE.MeshStandardMaterial(params);
-  }
-  function applyNodeTRS(o,n){
-    if(n.matrix){
-      o.matrix.fromArray(n.matrix); o.matrix.decompose(o.position,o.quaternion,o.scale);
-    } else {
-      if(n.translation)o.position.fromArray(n.translation);
-      if(n.rotation)o.quaternion.fromArray(n.rotation);
-      if(n.scale)o.scale.fromArray(n.scale);
-    }
-  }
-  function build(g,textures){
-    const skinJoints=new Set();
-    (g.skins||[]).forEach(s=>(s.joints||[]).forEach(i=>skinJoints.add(i)));
-    const nodes=(g.nodes||[]).map((n,i)=>{const o=skinJoints.has(i)?new THREE.Bone():new THREE.Object3D();o.name=n.name||('node_'+i);o.userData.gltfNode=i;applyNodeTRS(o,n);return o});
-    nodes.forEach((o,i)=>((g.nodes[i].children||[]).forEach(c=>nodes[i].add(nodes[c]))));
-    const materials=(g.materials||[]).map((_,i)=>matFor(g,i,textures));
-    const meshOwners=[];
-    (g.nodes||[]).forEach((n,ni)=>{
-      if(n.mesh==null)return;
-      const md=g.meshes[n.mesh];
-      (md.primitives||[]).forEach(pr=>{
-        const geo=new THREE.BufferGeometry(), at=pr.attributes||{};
-        const add=(name,attr,Item)=>{if(attr==null)return;const r=readAccessor(g,attr);geo.setAttribute(name,new Item(r.data,r.nc));};
-        if(at.POSITION!=null)add('position',at.POSITION,THREE.Float32BufferAttribute);
-        if(at.NORMAL!=null)add('normal',at.NORMAL,THREE.Float32BufferAttribute);
-        if(at.TEXCOORD_0!=null)add('uv',at.TEXCOORD_0,THREE.Float32BufferAttribute);
-        if(at.TEXCOORD_1!=null)add('uv1',at.TEXCOORD_1,THREE.Float32BufferAttribute);
-        if(at.JOINTS_0!=null){const r=readAccessor(g,at.JOINTS_0);geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(r.data,r.nc));}
-        if(at.WEIGHTS_0!=null)add('skinWeight',at.WEIGHTS_0,THREE.Float32BufferAttribute);
-        if(pr.indices!=null)geo.setIndex(new THREE.BufferAttribute(readIndices(g,pr.indices),1));
-        geo.computeBoundingSphere();
-        const mat=materials[pr.material==null?0:pr.material]||new THREE.MeshStandardMaterial({color:0xffffff});
-        let mesh;
-        if(n.skin!=null && geo.getAttribute('skinIndex') && geo.getAttribute('skinWeight')) mesh=new THREE.SkinnedMesh(geo,mat);
-        else mesh=new THREE.Mesh(geo,mat);
-        mesh.name=(n.name||'mesh')+'_primitive';
-        mesh.castShadow=true; mesh.receiveShadow=true;
-        nodes[ni].add(mesh); meshOwners.push({mesh,node:ni,skin:n.skin});
-      });
-    });
-    const root=new THREE.Group(); root.name='GLB_'+(g.scenes&&g.scene!=null?g.scene:'0');
-    const sceneDef=g.scenes&&g.scenes[g.scene==null?0:g.scene];
-    ((sceneDef&&sceneDef.nodes)||[]).forEach(i=>root.add(nodes[i]));
-    root.traverse(o=>{if(o.isObject3D)o.updateMatrixWorld(true)});
-    (g.skins||[]).forEach((s,si)=>{
-      const bones=(s.joints||[]).map(i=>nodes[i]);
-      let inv=[];
-      if(s.inverseBindMatrices!=null){
-        const r=readAccessor(g,s.inverseBindMatrices);
-        for(let i=0;i<bones.length;i++){const m=new THREE.Matrix4();m.fromArray(r.data,i*16);inv.push(m)}
-      } else bones.forEach(()=>inv.push(new THREE.Matrix4()));
-      const skel=new THREE.Skeleton(bones,inv);
-      meshOwners.filter(x=>x.skin===si).forEach(x=>{
-        x.mesh.bind(skel,x.mesh.matrixWorld.clone());
-        x.mesh.normalizeSkinWeights();
-      });
-    });
-    root.updateMatrixWorld(true);
-    return root;
-  }
-  async function loadOne(kind,file){
-    const r=await fetch(BASE+file), ab=await r.arrayBuffer(), q=readChunk(ab); q.json._bin=q.bin;
-    const textures=await makeTextures(q.json);
-    assets[kind]={json:q.json,textures,build:()=>build(q.json,textures)};
-  }
-  await Promise.all(Object.entries(FILES).map(([k,f])=>loadOne(k,f)));
-  window.__ALIEN_GLB_ASSETS=assets;
-  return assets;
-})();
-</script>
-<script>
-(async function(){
+(function(){
 'use strict';
-await window.__ALIEN_GLB_READY;
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 /* =========================================================================
@@ -1636,6 +1497,7 @@ function animateRig(parts,dt,inp){
   ap(parts.elbowL,'x',P.eL); ap(parts.elbowR,'x',P.eR); if(parts.elbow2L){ ap(parts.elbow2L,'x',P.e2L); ap(parts.elbow2R,'x',P.e2R); }
   ap(parts.leftLeg,'x',P.tLx); ap(parts.rightLeg,'x',P.tRx); ap(parts.leftLeg,'z',P.tLz); ap(parts.rightLeg,'z',P.tRz);
   ap(parts.kneeL,'x',-P.kL); ap(parts.kneeR,'x',-P.kR); ap(parts.footL,'x',P.fL); ap(parts.footR,'x',P.fR);
+  if(parts.glb) GLBBODY.apply(parts,dt);   // retarget the pivots onto the GLB skeleton
 }
 // Helper: turn a timer-driven attack ({kind,dur,t}) into the attack input for animateRig.
 function atkInput(kind,left,dur,extra){ if(!(left>0)||!kind) return null; const o={kind,t:1-Math.max(0,Math.min(1,left/dur))}; if(extra) Object.assign(o,extra); return o; }
@@ -1811,104 +1673,10 @@ function buildCharacter(kind){
     for(let i=0;i<4;i++){ const band=new THREE.Mesh(new THREE.TorusGeometry(0.63,0.05,6,16),M.accent); band.rotation.x=Math.PI/2; band.position.y=-0.35+i*0.24; band.castShadow=true; shell.add(band); }
     shell.position.y=shellCenterY; shell.scale.setScalar(0.001); g.add(shell); parts.shell=shell; parts.shellBaseY=shellCenterY;
   }
+  if(kind!=='ben' && window.GLBBODY) GLBBODY.attach(kind,parts,parts.shell);   // real GLB body on top of the rig (box body stays as fallback)
   const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
   o.userData.parts=parts; o.userData.kind=kind;
   return o;
-}
-
-
-// --- Supplied GLB alien bodies ---
-// The original procedural rig/animation code remains the single animation driver.
-// GLB skeleton bones are wrapped in zeroed control nodes so the existing pose math
-// can drive them without destroying their authored rest pose.
-function __glbFind(root,re){ let hit=null; root.traverse(o=>{if(!hit && o.isBone && re.test(o.name)) hit=o}); return hit; }
-function __glbCtrl(bone,name){
-  if(!bone) return null;
-  const p=bone.parent;
-  if(!p) return bone;
-  const c=new THREE.Object3D(); c.name=name||('ctrl_'+bone.name);
-  p.add(c); p.remove(bone); c.add(bone);
-  return c;
-}
-function __glbParts(model,kind){
-  const b=(re)=>__glbFind(model,re);
-  let hips,chest,head,lA,rA,eL,eR,lL,rL,kL,kR,fL,fR;
-  if(kind==='heatblast'){
-    hips=b(/^bip_pelvis_01$/); chest=b(/^bip_spine_2_04$/); head=b(/^bip_head_07$/);
-    lA=b(/^bip_upperArm_L_029$/); rA=b(/^bip_upperArm_R_010$/);
-    eL=b(/^bip_lowerArm_L_030$/); eR=b(/^bip_lowerArm_R_011$/);
-    lL=b(/^bip_hip_L_052$/); rL=b(/^bip_hip_R_047$/); kL=b(/^bip_knee_L_053$/); kR=b(/^bip_knee_R_048$/);
-    fL=b(/^bip_foot_L_054$/); fR=b(/^bip_foot_R_049$/);
-  } else if(kind==='xlr8'){
-    hips=b(/^_rootJoint$/); chest=b(/^spine\.003_04$/); head=b(/^spine\.006_07$/);
-    lA=b(/^upper_arm\.L_010$/); rA=b(/^upper_arm\.R_019$/);
-    eL=b(/^forearm\.L_011$/); eR=b(/^forearm\.R_020$/);
-    lL=b(/^thigh\.L_035$/); rL=b(/^thigh\.R_040$/); kL=b(/^shin\.L_036$/); kR=b(/^shin\.R_041$/);
-    fL=b(/^foot\.L_037$/); fR=b(/^foot\.R_042$/);
-  } else if(kind==='cannonbolt'){
-    hips=b(/^Hips_01$/); chest=b(/^Chest_07$/); head=b(/^Chest_07$/);
-    lA=b(/^Left arm_029$/); rA=b(/^Right arm_09$/); eL=b(/^Left elbow_030$/); eR=b(/^Right elbow_010$/);
-    lL=b(/^Right_WideLeg_L_048$/); rL=b(/^Right_WideLeg_R_02$/); kL=b(/^Right_WideKnee_L_049$/); kR=b(/^Right_WideKnee_R_03$/);
-    fL=b(/^Right_WideAnkle_L_050$/); fR=b(/^Right_WideAnkle_R_04$/);
-  } else if(kind==='echo_echo'){
-    hips=b(/^_rootJoint$/); chest=b(/^Bone\.004_05$/); head=b(/^Bone\.022_07$/);
-    lA=b(/^Bone\.005_017$/); rA=b(/^Bone\.023_08$/); eL=b(/^Bone\.006_018$/); eR=b(/^Bone\.024_09$/);
-    lL=b(/^Bone\.009_037$/); rL=b(/^Bone\.012_041$/); kL=b(/^Bone\.010_038$/); kR=b(/^Bone\.013_042$/);
-    fL=b(/^Bone\.011_039$/); fR=b(/^Bone\.014_043$/);
-  }
-  // Four Arms is supplied as a single static mesh, so use its model root as a
-  // control surface. Its movement/rotation still follows the game's animation state.
-  if(!hips) hips=model;
-  if(!chest) chest=hips;
-  if(!head) head=chest;
-  if(!lA) lA=hips; if(!rA) rA=hips; if(!eL) eL=lA; if(!eR) eR=rA;
-  if(!lL) lL=hips; if(!rL) rL=hips; if(!kL) kL=lL; if(!kR) kR=rL; if(!fL) fL=kL; if(!fR) fR=kR;
-
-  // Wrap each target in a zero-transform controller, preserving the GLB rest pose.
-  hips=__glbCtrl(hips,'anim_hips');
-  if(chest!==hips) chest=__glbCtrl(chest,'anim_chest');
-  if(head!==chest && head!==hips) head=__glbCtrl(head,'anim_head');
-  if(lA!==hips && lA!==chest) lA=__glbCtrl(lA,'anim_leftArm');
-  if(rA!==hips && rA!==chest) rA=__glbCtrl(rA,'anim_rightArm');
-  if(eL!==lA) eL=__glbCtrl(eL,'anim_elbowL'); if(eR!==rA) eR=__glbCtrl(eR,'anim_elbowR');
-  if(lL!==hips) lL=__glbCtrl(lL,'anim_leftLeg'); if(rL!==hips) rL=__glbCtrl(rL,'anim_rightLeg');
-  if(kL!==lL) kL=__glbCtrl(kL,'anim_kneeL'); if(kR!==rL) kR=__glbCtrl(kR,'anim_kneeR');
-  if(fL!==kL) fL=__glbCtrl(fL,'anim_footL'); if(fR!==kR) fR=__glbCtrl(fR,'anim_footR');
-
-  // Normalize imported bodies against their actual character silhouette. Heatblast's GLB
-  // contains separate flame/effect meshes with a much larger authored bounding box, so using
-  // the total GLB bounds would shrink the character itself. The other supplied bodies can use
-  // their complete bounds.
-  const box=new THREE.Box3().setFromObject(model);
-  const rawH=Math.max(.001,box.max.y-box.min.y);
-  const silhouetteH=(kind==='heatblast') ? 135.13 : rawH;
-  const target=2.35, sc=target/silhouetteH;
-  model.scale.multiplyScalar(sc);
-  // Put the lowest imported geometry on the model's local ground plane. This prevents different
-  // GLB origin conventions from making one alien float while another sinks into the terrain.
-  model.updateMatrixWorld(true);
-  const groundedBox=new THREE.Box3().setFromObject(model);
-  if(isFinite(groundedBox.min.y)) model.position.y -= groundedBox.min.y;
-  model.updateMatrixWorld(true);
-  const parts={
-    hips,chest,head,leftArm:lA,rightArm:rA,elbowL:eL,elbowR:eR,leftLeg:lL,rightLeg:rL,kneeL:kL,kneeR:kR,footL:fL,footR:fR,
-    hipY:hips.position.y, anim:{t:0,px:null,pz:null,spd:0,vyS:0,wasGround:false,lastVy:0,land:0,ph:0,climbPh:0},
-    dims:{total:target,headS:.52,torsoW:.7,torsoD:.4,torsoH:1.15,armLen:.85,legLen:1},
-    all:[],fx:[],cfg:{},mats:{}
-  };
-  model.traverse(o=>{if(o.isMesh&&o.material){const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(parts.all.indexOf(m)<0&&m.emissive)parts.all.push(m)})}});
-  model.userData.parts=parts; model.userData.kind=kind; model.userData.glbBody=true;
-  return model;
-}
-function buildCharacter(kind){
-  if(!window.__ALIEN_GLB_ASSETS || !window.__ALIEN_GLB_ASSETS[kind]){
-    // Should only be reached during a failed asset load; retain a visible fallback.
-    return new THREE.Group();
-  }
-  const model=window.__ALIEN_GLB_ASSETS[kind].build();
-  model.rotation.order='YXZ';
-  __glbParts(model,kind);
-  return model;
 }
 
 // tiny portrait renderer (renders each alien to a mini canvas for the HUD)
@@ -1916,8 +1684,9 @@ const portraitThumb={};
 // Frame head + shoulders from the model's real bounding box so hair, flames and crystal crowns are never cropped.
 function portraitFraming(model,kind){
   model.updateMatrixWorld(true);
-  const bb=new THREE.Box3().setFromObject(model), top=isFinite(bb.max.y)?bb.max.y:1.9;
-  const big=(kind==='four_arms'||kind==='heatblast'||kind==='diamondhead'), H=big?2.15:1.8;       // visible world height
+  const _pp=model.userData.parts, _gt=_pp&&window.GLBBODY?GLBBODY.topOf(_pp):null;
+  const bb=new THREE.Box3().setFromObject(model), top=_gt!=null?(model.position.y+_pp.g.position.y+_gt):(isFinite(bb.max.y)?bb.max.y:1.9);
+  const big=(kind==='four_arms'||kind==='heatblast'||kind==='diamondhead'), H=(big?2.15:1.8)*(_gt!=null?GLBBODY.pz(kind):1);       // visible world height
   const cy=top-H*.5+.03, dist=(H*.5)/Math.tan(16*Math.PI/180);
   return {px:.12,py:cy+.1,pz:dist,tx:0,ty:cy-.04,tz:0};
 }
@@ -2048,8 +1817,10 @@ scene.add(player.model);
 
 const portraitCache = {};
 function getPortraitCanvas(kind){
-  if(!portraitCache[kind]) portraitCache[kind] = renderPortrait(kind);
-  return portraitCache[kind];
+  if(portraitCache[kind]) return portraitCache[kind];
+  const c = renderPortrait(kind);
+  if(!(window.GLBBODY && GLBBODY.pending(kind))) portraitCache[kind] = c;   // do not cache a box-body portrait while the GLB is still loading
+  return c;
 }
 
 // STAGE 12 - separate health pools. Ben and every alien keep their own HP: taking damage as Four Arms never touches Ben's HP,
@@ -4297,6 +4068,7 @@ function updatePlayerOnFoot(dt){
     const curl = player.rollT||0;
     const bodyScale = 1 - curl; // legs/arms/head/torso shrink away entirely as curl approaches 1
     if(parts.hips) parts.hips.scale.setScalar(Math.max(0.001,bodyScale));
+    if(parts.glb) GLBBODY.scaleBody(parts,bodyScale);
     if(curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
     if(parts.shell){ parts.shell.scale.setScalar(Math.max(0.001, curl)); parts.shell.position.y = parts.shellBaseY; }
     if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
