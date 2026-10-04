@@ -1907,7 +1907,7 @@ const ACT={
  fire:{label:'FIREBALL',hold:v=>{ if(v){ player.flameHeld=true; flameTime=0; } else if(player.flameHeld){ player.flameHeld=false; if(flameTime<.22&&player.energy>=15){ player.energy-=15; spawnProjectile(player,0xff5a1e,28,22,false,'fire'); } } },cost:0,cd:0},
  fly:{label:()=>player.flying?'LAND':'FLY',cost:0,cd:0.3,run:()=>doJump()},
  burn:{label:'BURN',cost:25,cd:6,run:()=>{player.boostT=2.5;statusText('AFTERBURNER');}},
- roll:{label:()=>player.rolling?'UNROLL':'ROLL',hold:v=>{ if(v){ if(player.cbBall){ player.cbBall=false; player.rolling=false; player.rollT=0; player.rollHeld=false; } else player.rollHeld=!player.rollHeld; } },cost:0,cd:0}
+ roll:{label:()=>player.rolling?'UNROLL':'ROLL',hold:v=>{ if(v){ player.rollHeld=!player.rollHeld; if(player.rollHeld&&player.onGround&&!player.flying){ player.vel.y=player.form.jump*2.7; player.onGround=false; Audio_.jump(); } } },cost:0,cd:0}
 };
 const ALIENS = [
   { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:13,
@@ -1918,7 +1918,7 @@ const ALIENS = [
     atkDamage:14, atkRange:1.8, atkCooldown:0.5, modelScale:1.3,
     special:{ name:'FIREBALL', cost:20, cooldown:1.2,
       run(ctx){ spawnProjectile(ctx.player, 0xff5a1e, 26, 18, false); } } },
-  { id:'xlr8', name:'XLR8', actions:[ACT.dash,ACT.tornado,ACT.slow], maxHealth:90, maxEnergy:110, speed:7.4, jump:8.5,
+  { id:'xlr8', name:'XLR8', actions:[ACT.dash,ACT.tornado,ACT.slow], maxHealth:90, maxEnergy:110, speed:7.4, jump:6.0,
     atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:0.95,
     special:{ name:'SPEED BURST', cost:8, cooldown:0.1, duration:4, speedMult:1.9, drainPerSec:8,
       run(ctx){ ctx.player.speedBurstT = 4; } } },
@@ -1928,7 +1928,7 @@ const ALIENS = [
       run(ctx){ spawnProjectile(ctx.player, 0x35e0d6, 30, 24, true); } } },
   { id:'echo_echo', name:'ECHO ECHO', actions:[ACT.scream,ACT.split,ACT.reps,ACT.doom], maxHealth:90, maxEnergy:100, speed:5.4, jump:6.4,
     atkDamage:9, atkRange:1.8, atkCooldown:0.3, modelScale:0.75, special:null },
-  { id:'cannonbolt', name:'CANNONBOLT', actions:[ACT.roll], maxHealth:140, maxEnergy:110, speed:3.6, jump:10.5,
+  { id:'cannonbolt', name:'CANNONBOLT', actions:[ACT.roll], maxHealth:140, maxEnergy:110, speed:3.6, jump:5.4,
     atkDamage:24, atkRange:1.6, atkCooldown:0.5, modelScale:1.54,
     special:null },
 ];
@@ -1954,7 +1954,6 @@ const player = {
   health: BEN.maxHealth, energy: BEN.maxEnergy,
   atkTimer: 0, specialTimer: 0, speedBurstT: 0, invuln: 0,
   walkT: 0, attacking: 0, alive: true, flying: false,
-  cbBall: false, cbBounceT: 0, cbLastImpact: 0,
   comboStep: 0,        // 0 = next hit is punch 1 (left), 1 = next hit is punch 2 (right), 2 = next hit is the heavy finisher
   comboResetTimer: 0,  // counts down after each hit; if it reaches 0 before the next hit, the combo resets to step 0
   punchAnimT: 0, punchAnimDur: 0.25, punchKind: 'left' // drives the current swing's animation shape
@@ -1980,7 +1979,6 @@ function setForm(formDef, kind){
   const prevForm=player.form; if(prevForm && prevForm!==formDef && player.alive) HP.store[prevForm.id]=Math.max(1,player.health);
   player.form = formDef; if(player.driving) setTimeout(()=>{ if(player.driving) player.model.visible=false; },0);
   player.flying = false;
-  player.cbBall = false; player.cbBounceT = 0; player.cbLastImpact = 0;
   scene.remove(player.model);
   player.model = buildCharacter(kind);
   scene.add(player.model);
@@ -2780,7 +2778,7 @@ let dustIdx = 0, dustEmitAcc = 0, lastFov = BASE_FOV, speedShakeT = 0;
 
 // Light trails: three additive ribbons sampled from the shoulders/hips/feet. Distance-sampled ring buffers so the trail length scales with speed
 // (~75 u at full speed), tapering to nothing, rebuilt in-place each frame (no allocation). Invisible and cleared when not speeding.
-const TRAIL_N=26, TRAILS=[], TRAIL_SRC=[[.28,.72],[-.28,.58],[0,-.28]];
+const TRAIL_N=44, TRAILS=[], TRAIL_SRC=[[.62,.45],[-.62,.45]];
 (function(){
   TRAIL_SRC.forEach(()=>{
     const g=new THREE.BufferGeometry(), pos=new Float32Array(TRAIL_N*2*3), col=new Float32Array(TRAIL_N*2*3), idx=[];
@@ -2822,10 +2820,10 @@ function updateSpeedTrails(dt,k){
   const on = k>0.12;
   if(!on){ trailIdle+=dt; if(trailIdle>.35){ for(const t of TRAILS){ if(t.mesh.visible){ t.mesh.visible=false; t.n=0; t.last.set(1e9,0,0); } } } return; }
   trailIdle=0;
-  const right={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)}, wid=.035+.085*Math.min(1,k);
+  const right={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)}, wid=.035+.05*Math.min(1,k);
   for(let r=0;r<TRAILS.length;r++){ const t=TRAILS[r], src=TRAIL_SRC[r];
     const px=player.pos.x+right.x*src[0], py=player.pos.y+src[1]-.2, pz=player.pos.z+right.z*src[0];
-    if(Math.hypot(px-t.last.x,py-t.last.y,pz-t.last.z)>.42 || t.n===0){
+    if(Math.hypot(px-t.last.x,py-t.last.y,pz-t.last.z)>.55 || t.n===0){
       t.pts.copyWithin(3,0,(TRAIL_N-1)*3); t.pts[0]=px; t.pts[1]=py; t.pts[2]=pz; t.n=Math.min(TRAIL_N,t.n+1); t.last.set(px,py,pz); }
     else { t.pts[0]=px; t.pts[1]=py; t.pts[2]=pz; }                                    // head follows the character every frame
     const n=t.n; t.mesh.visible=n>1;
@@ -2842,8 +2840,7 @@ function updateSpeedTrails(dt,k){
 }
 function updateSpeedEffects(dt){
   const s = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
-  const trailK = player.form.id==='xlr8' ? Math.max(s, player.dashT>0 ? 0.75 : 0) : 0;
-   updateSpeedTrails(dt, trailK);
+  updateSpeedTrails(dt, player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0);
   updateGhosts(dt, player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0);
   { const fx=document.getElementById('speed-fx'); if(fx){ const o=Math.max(0,Math.min(.6,(s-.3)*.9)); if(fx._o!==o){ fx._o=o; fx.style.opacity=o; } } }
 
@@ -2864,14 +2861,14 @@ function updateSpeedEffects(dt){
     st.seed = (st.seed + dt*(1.2 + s*3.5)) % 1;
     const ang = (st.seed*7.3 + st.idx*0.9) % (Math.PI*2);
     const radius = 1.6 + ((st.idx*0.37)%1)*2.2;
-    const along = 6 - st.seed*12; // restrained streak length keeps the character readable
+    const along = 10 - st.seed*20; // +10 ahead ... -10 behind
     const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
     st.mesh.position.copy(player.pos)
       .addScaledVector(fwd, along)
       .addScaledVector(side, Math.cos(ang)*radius)
       .add(new THREE.Vector3(0, 1 + Math.sin(ang)*radius*0.7, 0));
     st.mesh.rotation.y = player.yaw;
-    st.mesh.scale.z = 1.0 + s*3.5; // restrained directional streaks
+    st.mesh.scale.z = 1.5 + s*6; // longer streaks at higher speed
     st.mesh.material.opacity = Math.min(0.55, (s-0.25)*0.9);
   }
 
@@ -3022,9 +3019,9 @@ function updateCrystals(dt){
 const squad=[]; let squadMode='bot', panelOpen=false, panelEls={};
 const RING=new THREE.TorusGeometry(.5,.07,6,20);
 function flatFwd(yaw){ return new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)); }
-function ringFx(pos,dir,delay,offsetY=1){
+function ringFx(pos,dir,delay){
   const m=new THREE.Mesh(RING,new THREE.MeshBasicMaterial({color:0xcfefff,transparent:true,opacity:.9}));
-  m.position.copy(pos).add(new THREE.Vector3(0,offsetY,0)).addScaledVector(dir,.8+delay*10); m.lookAt(m.position.clone().add(dir)); scene.add(m);
+  m.position.copy(pos).add(new THREE.Vector3(0,1,0)).addScaledVector(dir,.8+delay*10); m.lookAt(m.position.clone().add(dir)); scene.add(m);
   fx.push({mesh:m,vel:dir.clone().multiplyScalar(16),life:.55,max:.55,grow:3.2});
 }
 function sonicBlast(from,dir,dmg,range,rings){
@@ -3779,23 +3776,20 @@ function doJump(){
     } else {
       player.flying = false; // gravity resumes and brings you back down
     }
-  } else if(!player.onGround && player.form.id==='echo_echo' && !player.ejUsed && !player.swimming){ // double jump: sonic burst originates from Echo Echo's mouth
-     player.ejUsed=true; player.ejT=.5; player.vel.y=player.form.jump*1.05;
-     const parts=player.model.userData.parts, mouth=new THREE.Vector3();
-     if(parts&&parts.head) parts.head.getWorldPosition(mouth); else mouth.copy(player.pos).add(new THREE.Vector3(0,.55,0));
-     const mf=flatFwd(player.model.rotation.y||player.yaw), mouthOffset=Math.max(.28,.38*PS*(player.form.modelScale||1));
-     mouth.addScaledVector(mf,mouthOffset);
-     const sonicDir=mf.clone();
-     for(let i=0;i<4;i++) ringFx(mouth,sonicDir,i*.03,0);
-     for(let i=0;i<14;i++){ const a=i/14*6.283; debris(mouth.clone(),i%2?0xcfefff:0x8fe0ff,.16,new THREE.Vector3(sonicDir.x*(7+Math.random()*4)+(Math.random()-.5)*2,1+Math.random()*3,sonicDir.z*(7+Math.random()*4)+(Math.random()-.5)*2),.35,false); }
-     shakeCamera(.08);
-  } else if(player.onGround && player.form.id==='cannonbolt'){
-     player.vel.y=Math.max(player.form.jump,10.5); player.onGround=false; player.cbBall=true; player.rolling=true; player.rollT=1; player.cbBounceT=0; player.cbLastImpact=0; Audio_.jump();
+  } else if(!player.onGround && player.form.id==='echo_echo' && !player.ejUsed && !player.swimming){ // double jump: a sonic blast under his feet pushes him up
+    player.ejUsed=true; player.ejT=.5; player.vel.y=player.form.jump*1.05;
+    const dn=new THREE.Vector3(0,-1,0), hd=player.model.userData.parts&&player.model.userData.parts.head;
+    setTimeout(()=>{ const fp=new THREE.Vector3(); if(hd) hd.getWorldPosition(fp); else fp.copy(player.pos); fp.y-=.55; // the scream comes out of his mouth (face is pointing at the ground by now)
+      for(let i=0;i<4;i++) ringFx(fp,dn,i*.03);
+      for(let i=0;i<14;i++){ const a=i/14*6.283; debris(fp.clone(),i%2?0xcfefff:0x8fe0ff,.18,new THREE.Vector3(Math.cos(a)*1.6,-6-Math.random()*4,Math.sin(a)*1.6),.45,false); } },110);
+    shakeCamera(.08);
   } else if(player.onGround && player.form.id==='xlr8' && Math.hypot(camDyn.vx,camDyn.vz)>6){ // running leap: long and low, length follows speed
     const hv=Math.hypot(camDyn.vx,camDyn.vz), f={x:-Math.sin(player.yaw),z:-Math.cos(player.yaw)}, r={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)};
     let mx=moveInput.x,my=moveInput.y; if(Math.hypot(mx,my)<.15){ mx=0; my=1; }
     const dx=f.x*my+r.x*mx, dz=f.z*my+r.z*mx, l=Math.hypot(dx,dz)||1, ex=Math.min(26,hv*.75);
-    player.vel.y = Math.max(player.form.jump*1.35,10.5); player.onGround=false; player.xlLeap={x:dx/l*ex,z:dz/l*ex}; player.xlAir=true; Audio_.jump();
+    player.vel.y = 13.5+Math.min(6,hv*.12); player.onGround=false; player.xlLeap={x:dx/l*ex,z:dz/l*ex}; player.xlAir=true; Audio_.jump();
+  } else if(player.onGround && player.form.id==='cannonbolt' && player.rollHeld){
+    player.vel.y = player.form.jump*2.9; player.onGround=false; Audio_.jump();
   } else if(player.onGround){
     player.vel.y = player.form.jump; player.onGround=false; Audio_.jump();
   }
@@ -4072,7 +4066,7 @@ function playerAnimate(parts,dt,moving){
     if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(.38*k,.14*k,.01*k); player._burn=true; }
     else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb||(id==='xlr8'&&(player.superT||0)>.2&&!player.flying&&Math.abs(player.vel.y)<9),vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.form.id==='four_arms'?0:(player.leapCharging?Math.max(.12,player.leapC||0):0)});
+    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.
@@ -4129,14 +4123,9 @@ function updatePlayerOnFoot(dt){
   // Eased speed curve: ease-in so low tiers feel like a fast run and only the top tier reaches extreme speed.
   player.superSpeed = Math.pow(player.superT||0, 1.6);
 
-  // Cannonbolt: manual roll uses the existing control; cbBall is the persistent airborne/bounce state.
-  if(player.form.id==='cannonbolt'){
-    if(player.cbBall){ player.rolling=true; player.rollT=1; }
-    else if(player.rollHeld){ player.rolling=true; player.rollT=Math.min(1,(player.rollT||0)+dt*1.4); }
-    else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*1.4); }
-  } else {
-    player.cbBall=false; player.rolling=false; player.rollT=0;
-  }
+  // Cannonbolt: hold ROLL to curl into a ball and build up speed; release to unroll back to normal.
+  if(player.rollHeld && player.form.id==='cannonbolt'){ player.rolling=true; player.rollT=Math.min(1,(player.rollT||0)+dt*2.0); }
+  else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*1.8); }
 
   // energy regen (paused briefly right after casting)
   if(!player.superHeld && !(player.speedBurstT>0) && !player.flameHeld && !player.sprayHeld){
@@ -4298,21 +4287,11 @@ function updatePlayerOnFoot(dt){
     // Walking down stairs/ramps: stay glued to the surface instead of hopping down it.
     if(wasGround && !player.swimming && player.vel.y<=0 && feetNow-groundY>0.001 && feetNow-groundY<=0.6) player.pos.y = groundY+1;
     if(player.pos.y <= groundY + 1){
-      const impactVy = player.vel.y;
-      const cbImpact = player.form.id==='cannonbolt' && player.cbBall && !player.swimming && impactVy < -5.5;
-      if(!player.onGround && impactVy < -6) Audio_.land(-impactVy);
+      if(!player.onGround && player.vel.y < -6) Audio_.land(-player.vel.y);
       player.pos.y = groundY + 1;
-      if(cbImpact){
-        const rebound = Math.min(18, Math.max(0, -impactVy*0.72));
-        player.vel.y = rebound;
-        player.onGround = rebound > 2.5;
-        player.cbBounceT = .18;
-        player.cbLastImpact = -impactVy;
-      } else {
-        player.vel.y = 0;
-        player.onGround = true;
-        if(player.form.id==='cannonbolt' && !player.cbBall){ player.cbBounceT=0; player.cbLastImpact=0; }
-      }
+      if(player.form.id==='cannonbolt' && player.rollHeld && !player.swimming && player.vel.y < -3){ // the ball is super bouncy: keeps rebounding until he unrolls
+        player.vel.y = Math.min(26, Math.max(8.5, -player.vel.y*.82)); player.onGround = false; shakeCamera(.04);
+      } else { player.vel.y = 0; player.onGround = true; }
     } else {
       player.onGround = false;
       // Ramp launch: running off the top of a ramp at speed (XLR8, roll) carries the climb into the air.
