@@ -1542,6 +1542,7 @@ function animateRig(parts,dt,inp){
   if(inp.xlLeap && !inp.flying){ // XLR8 running leap: stretched out, arms swept back, one leg reaching, one trailing
     P.chX+=-.45; P.hdX+=.3; P.sL.x=-1.7; P.sR.x=-1.7; P.sL.z=-.25; P.sR.z=.25; P.eL=.25; P.eR=.25;
     P.tLx=-.95; P.tRx=.7; P.kL=.25; P.kR=1.3; P.fL=.3; P.fR=-.4; P.hipsY-=.05; }
+  if(inp.ejB>0){ const e=_sm(inp.ejB); P.sL.x=_lerp(P.sL.x,-.2,e); P.sR.x=_lerp(P.sR.x,-.2,e); P.sL.z=-.55*e; P.sR.z=.55*e; P.eL=.25; P.eR=.25; P.chX+=.12*e; P.tLx+=.6*e; P.tRx+=.4*e; P.kL+=.9*e; P.kR+=.7*e; }
   // ---- special stances ----
   if(inp.superT>.2 && grounded && !inp.flying){ // XLR8 sprint: arms swept back, deep forward lean, driving knees
     const k=_ez(inp.superT); P.sL.x=_lerp(P.sL.x,-1.5,k); P.sR.x=_lerp(P.sR.x,-1.5,k); P.eL=_lerp(P.eL,.35,k); P.eR=_lerp(P.eR,.35,k); P.chX+=-.35*k; P.hdX+=.3*k; P.sL.z=-.12; P.sR.z=.12;
@@ -1791,16 +1792,18 @@ function buildCharacter(kind){
   if(kind!=='ben' && window.GLBBODY) GLBBODY.attach(kind,parts,parts.shell);   // real GLB body on top of the rig (box body stays as fallback)
   const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
   if(kind==='heatblast'){
+    // flying lava rock: an upside-down cone he stands on, with a huge flame column trailing from its tip (as in the reference)
     const rk=new THREE.Group();
-    const rg=new THREE.IcosahedronGeometry(.8,1), pa=rg.attributes.position;
-    for(let i=0;i<pa.count;i++){ const k=1+Math.sin(i*12.9898)*.18; pa.setXYZ(i,pa.getX(i)*k*1.25,pa.getY(i)*k*.4,pa.getZ(i)*k*1.25); }
+    const rg=new THREE.ConeGeometry(.85,1.5,8,3); rg.rotateX(Math.PI); rg.translate(0,.75-.05,0); const pa=rg.attributes.position;
+    for(let i=0;i<pa.count;i++){ const j=1+Math.sin(i*12.9898)*.16; pa.setXYZ(i,pa.getX(i)*j,pa.getY(i),pa.getZ(i)*j); }
     rg.computeVertexNormals();
-    const rock=new THREE.Mesh(rg,new THREE.MeshLambertMaterial({color:0x4a1a10,emissive:0xff4a10,emissiveIntensity:.55}));
-    rk.add(rock);
-    const fl=new THREE.Group(); rk.add(fl); rk.userData.fl=[];
+    rk.add(new THREE.Mesh(rg,new THREE.MeshLambertMaterial({color:0x4a1a10,emissive:0xff4a10,emissiveIntensity:.6})));
+    const fl=new THREE.Group(); fl.position.y=-1.5; rk.add(fl); rk.userData.fl=[]; rk.userData.flg=fl;
+    const rr=[1.5,1.15,.85,.55];
     for(let i=0;i<4;i++){
-      const c=new THREE.Mesh(new THREE.ConeGeometry(.45-i*.06,2.2,8,1,true),new THREE.MeshBasicMaterial({color:i%2?0xffd84a:0xff6a1a,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
-      c.rotation.x=Math.PI/2; c.position.set((i-1.5)*.28,-.1,.9+i*.12); fl.add(c); rk.userData.fl.push(c);
+      const cg=new THREE.ConeGeometry(rr[i],6,10,1,true); cg.translate(0,-3,0);
+      const c=new THREE.Mesh(cg,new THREE.MeshBasicMaterial({color:i%2?0xffd84a:0xff6a1a,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,fog:false}));
+      c.frustumCulled=false; fl.add(c); rk.userData.fl.push(c);
     }
     rk.position.y=-.82; rk.visible=false; o.add(rk); parts.rock=rk;
   }
@@ -1897,7 +1900,7 @@ const ACT={
  fire:{label:'FIREBALL',hold:v=>{ if(v){ player.flameHeld=true; flameTime=0; } else if(player.flameHeld){ player.flameHeld=false; if(flameTime<.22&&player.energy>=15){ player.energy-=15; spawnProjectile(player,0xff5a1e,28,22,false,'fire'); } } },cost:0,cd:0},
  fly:{label:()=>player.flying?'LAND':'FLY',cost:0,cd:0.3,run:()=>doJump()},
  burn:{label:'BURN',cost:25,cd:6,run:()=>{player.boostT=2.5;statusText('AFTERBURNER');}},
- roll:{label:()=>player.rolling?'UNROLL':'ROLL',hold:v=>{player.rollHeld=v;},cost:0,cd:0}
+ roll:{label:()=>player.rolling?'UNROLL':'ROLL',hold:v=>{ if(v) player.rollHeld=!player.rollHeld; },cost:0,cd:0}
 };
 const ALIENS = [
   { id:'four_arms', name:'FOUR ARMS', actions:[ACT.smash,ACT.grab,ACT.drop,ACT.slam], maxHealth:160, maxEnergy:100, speed:3.4, jump:13,
@@ -1909,7 +1912,7 @@ const ALIENS = [
     special:{ name:'FIREBALL', cost:20, cooldown:1.2,
       run(ctx){ spawnProjectile(ctx.player, 0xff5a1e, 26, 18, false); } } },
   { id:'xlr8', name:'XLR8', actions:[ACT.dash,ACT.tornado,ACT.slow], maxHealth:90, maxEnergy:110, speed:7.4, jump:6.0,
-    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:1.05,
+    atkDamage:10, atkRange:1.6, atkCooldown:0.28, modelScale:0.95,
     special:{ name:'SPEED BURST', cost:8, cooldown:0.1, duration:4, speedMult:1.9, drainPerSec:8,
       run(ctx){ ctx.player.speedBurstT = 4; } } },
   { id:'diamondhead', name:'DIAMONDHEAD', flies:true, flySpeed:9, actions:[ACT.spray,ACT.shard,ACT.shield,ACT.wall,ACT.lev], maxHealth:130, maxEnergy:100, speed:2.9, jump:5.4,
@@ -1917,7 +1920,7 @@ const ALIENS = [
     special:{ name:'CRYSTAL SHARD', cost:22, cooldown:1.4,
       run(ctx){ spawnProjectile(ctx.player, 0x35e0d6, 30, 24, true); } } },
   { id:'echo_echo', name:'ECHO ECHO', actions:[ACT.scream,ACT.split,ACT.reps,ACT.doom], maxHealth:90, maxEnergy:100, speed:5.4, jump:6.4,
-    atkDamage:9, atkRange:1.8, atkCooldown:0.3, modelScale:0.55, special:null },
+    atkDamage:9, atkRange:1.8, atkCooldown:0.3, modelScale:0.75, special:null },
   { id:'cannonbolt', name:'CANNONBOLT', actions:[ACT.roll], maxHealth:140, maxEnergy:110, speed:3.6, jump:5.4,
     atkDamage:24, atkRange:1.6, atkCooldown:0.5, modelScale:1.54,
     special:null },
@@ -2779,21 +2782,23 @@ const TRAIL_N=44, TRAILS=[], TRAIL_SRC=[[.34,.75],[-.34,.55],[0,-.35]];
     TRAILS.push({mesh:m,pts:new Float32Array(TRAIL_N*3),n:0,pos,col,last:new THREE.Vector3(1e9,0,0)});
   });
 })();
-// XLR8 after-images: cyan ghost silhouettes left behind along the path, fading out
-const GHOSTS=[]; (function(){
-  const mat0=new THREE.MeshBasicMaterial({color:0x3ff0ff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,fog:false});
-  for(let i=0;i<7;i++){ const g=new THREE.Group(), mt=mat0.clone();
-    const add=(w,h,d,x,y,z,rx)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mt); m.position.set(x,y,z); if(rx) m.rotation.x=rx; g.add(m); };
-    add(.5,.7,.3,0,.2,0); add(.3,.32,.34,0,.7,-.12); add(.16,.7,.18,-.16,-.45,.05); add(.16,.7,.18,.16,-.45,-.05); add(.14,.55,.14,-.42,.3,.1,.9); add(.14,.55,.14,.42,.3,.1,.9); add(.1,.1,1.0,0,-.05,.6);
-    g.visible=false; scene.add(g); GHOSTS.push({g,mt,life:0}); }
-})();
-let ghostAcc=0, ghostIdx=0, ghostLast=new THREE.Vector3(1e9,0,0);
+// XLR8 after-images: frozen copies of his real (skinned) mesh left behind, cyan + additive so they read as a motion blur, fading out
+const GH={model:null,list:[],idx:0,acc:0};
+function ghostsFree(){ for(const G of GH.list) scene.remove(G.c); GH.list=[]; GH.model=null; }
+function ghostsBuild(){
+  ghostsFree(); const src=player.model; GH.model=src; GH.src=[]; src.traverse(o=>GH.src.push(o));
+  for(let i=0;i<10;i++){ const c=THREE.SkeletonUtils.clone(src), dst=[], mats=[]; c.traverse(o=>{ dst.push(o);
+      if(o.isMesh){ o.castShadow=false; o.frustumCulled=false; const m=new THREE.MeshBasicMaterial({color:0x5ff4ff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}); m.skinning=!!o.isSkinnedMesh; o.material=m; mats.push(m); } });
+    c.visible=false; scene.add(c); GH.list.push({c,dst,mats,life:0}); }
+}
 function updateGhosts(dt,k){
-  const on=k>.2&&player.form.id==='xlr8'&&!player.flying;
-  if(on){ const d=ghostLast.distanceTo(player.pos);
-    if(d>1.1||d>50){ ghostLast.copy(player.pos); const G=GHOSTS[ghostIdx]; ghostIdx=(ghostIdx+1)%GHOSTS.length;
-      G.life=.38; G.g.visible=true; G.g.position.copy(player.pos).add(new THREE.Vector3(0,-.15*player.form.modelScale,0)); G.g.rotation.set(-.5,player.yaw,0,'YXZ'); G.g.scale.setScalar(.95*player.form.modelScale); } }
-  for(const G of GHOSTS){ if(G.life<=0){ if(G.g.visible) G.g.visible=false; continue; } G.life-=dt; G.mt.opacity=Math.max(0,G.life/.38)*.5*Math.min(1,k*1.3); }
+  const on=k>.2&&player.form.id==='xlr8'&&!player.flying&&player.model.userData.parts&&player.model.userData.parts.glb;
+  if(on){ if(GH.model!==player.model) ghostsBuild();
+    GH.acc+=dt; if(GH.acc>=.04){ GH.acc=0; const G=GH.list[GH.idx]; GH.idx=(GH.idx+1)%GH.list.length;
+      const n=Math.min(G.dst.length,GH.src.length); for(let i=0;i<n;i++){ const s=GH.src[i], d=G.dst[i]; d.position.copy(s.position); d.quaternion.copy(s.quaternion); d.scale.copy(s.scale); d.visible=s.visible; }
+      G.c.updateMatrixWorld(true); G.life=.42; G.c.visible=true; } }
+  else if(GH.model && player.form.id!=='xlr8') ghostsFree();
+  for(const G of GH.list){ if(G.life<=0){ if(G.c.visible) G.c.visible=false; continue; } G.life-=dt; const o=Math.max(0,G.life/.42)*.42*Math.min(1,k*1.4); for(const m of G.mats) m.opacity=o; }
 }
 let trailIdle=9;
 function updateSpeedTrails(dt,k){
@@ -2820,7 +2825,7 @@ function updateSpeedTrails(dt,k){
 }
 function updateSpeedEffects(dt){
   const s = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
-  updateSpeedTrails(dt, player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0);
+  updateSpeedTrails(dt, 0);
   updateGhosts(dt, player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0);
   { const fx=document.getElementById('speed-fx'); if(fx){ const o=Math.max(0,Math.min(.6,(s-.3)*.9)); if(fx._o!==o){ fx._o=o; fx.style.opacity=o; } } }
 
@@ -3014,12 +3019,13 @@ function sonicBlast(from,dir,dmg,range,rings){
   props.forEach(p=>{ if(p.state!=='rest') return; const v=p.mesh.position.clone().sub(from); v.y=0; if(v.length()<range&&dir.angleTo(v.normalize())<.7){ p.state='fall'; p.vel.set(dir.x*11,5,dir.z*11); } });
   Audio_.special();
 }
+const ECHO_S=()=>{ const a=ALIENS.find(x=>x.id==='echo_echo'); return (a&&a.modelScale)||1; };
 function splitEcho(){
   if(!squad.length) squad.push({model:player.model,pos:player.pos,vel:player.vel,yaw:player.yaw,health:player.health,energy:player.energy,active:true,n:0,walkT:0,cd:0,atkT:0});
   if(squad.length>=4){ statusText('MAX 4 ECHOS'); player.energy+=25; return; }
   let n=1; while(squad.some(u=>u.n===n)) n++;
   const r=new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
-  const model=buildCharacter('echo_echo'); model.scale.setScalar(PS); scene.add(model);
+  const model=buildCharacter('echo_echo'); model.scale.setScalar(PS*ECHO_S()); scene.add(model);
   const u={model,pos:player.pos.clone().addScaledVector(r,(squad.length%2?1:-1)*1.6),vel:new THREE.Vector3(),yaw:player.yaw,health:player.form.maxHealth,energy:player.form.maxEnergy,active:false,n,walkT:0,cd:0,atkT:0};
   model.rotation.y=u.yaw; squad.push(u);
   for(let i=0;i<6;i++) debris(u.pos.clone().add(new THREE.Vector3(0,1,0)),0xcfefff,.25,new THREE.Vector3((Math.random()-.5)*4,Math.random()*3,(Math.random()-.5)*4),.5,false);
@@ -3106,7 +3112,7 @@ function updateSquad(dt){
     const P=u.model.userData.parts, mry=u.model.rotation.y;
     animateRig(P,dt,{pos:u.pos,fwd:{x:-Math.sin(mry),z:-Math.cos(mry)},grounded:Math.abs(u.vy||0)<.05,vy:u.vy||0,moving,id:'echo_echo',
       atk:atkInput(u.punch?'right':'left',u.atkT,.25,{id:'echo_echo',amp:.85,tc:.3}),hurt:0});
-    u.model.position.set(u.pos.x,u.pos.y-1+.9*PS,u.pos.z); u.model.scale.setScalar(PS);
+    u.model.position.set(u.pos.x,u.pos.y-1+.9*PS*ECHO_S(),u.pos.z); u.model.scale.setScalar(PS*ECHO_S());
     let dy=u.yaw-u.model.rotation.y; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); u.model.rotation.y+=dy*Math.min(1,dt*12);
   });
   for(const k in panelEls){ const e=panelEls[k]; if(!e.u) continue; e.el.classList.toggle('sel',e.u.active); e.el.style.setProperty('--hp',Math.max(0,e.u.health/player.form.maxHealth*100)); }
@@ -3358,9 +3364,19 @@ function poseExtras(parts,moving,dt){
   if((player.superT||0)>0.2&&!player.flying&&!player.swimming){ const _gp=m.userData.parts; lean=-.6*player.superT*((_gp&&_gp.glb)?GLBBODY.leanMul(player.form.id):1); }
   m.rotation.x+=(lean-m.rotation.x)*.18;
   const rk=m.userData.parts&&m.userData.parts.rock;
-  if(rk){ rk.visible=!!player.flying; if(rk.visible){ const t=performance.now()/1000, sp=moving?1:.4;
-    rk.position.y=-.82+Math.sin(t*3)*.05; rk.rotation.z=Math.sin(t*1.7)*.06;
-    rk.userData.fl.forEach((c,i)=>{ const f=1+Math.sin(t*38+i*2)*.18; c.scale.set(1,f*(.5+sp*.9),1); c.position.z=.5+c.scale.y*1.1; c.material.opacity=.45+Math.random()*.3; }); } }
+  if(rk){ rk.visible=!!player.flying; if(rk.visible){ const t=performance.now()/1000, sp=moving?1:.25;
+    rk.position.y=-.82+Math.sin(t*3)*.04; rk.rotation.z=Math.sin(t*1.7)*.05;
+    rk.userData.flg.rotation.x=-(.12+.75*sp)-m.rotation.x*0; 
+    rk.userData.fl.forEach((c,i)=>{ const f=1+Math.sin(t*34+i*2)*.12; c.scale.set(1+Math.sin(t*27+i)*.06,(.35+.65*sp)*f,1); c.material.opacity=(.4+Math.random()*.25); });
+    // scraping: when the rock tip gets near the ground or a wall, throw sparks and dust off the contact point
+    const gt=groundTopAt(player.pos.x,player.pos.z,player.pos.y), tip=player.pos.y-1-1.6*(player.form.modelScale||1);
+    if(moving&&(player._sc=(player._sc||0)+dt)>.035){ player._sc=0;
+      const fw=flatFwd(player.yaw);
+      if(tip<gt+.4&&player.pos.y-1-gt<4){ const cp=new THREE.Vector3(player.pos.x,gt+.1,player.pos.z);
+        for(let i=0;i<3;i++) debris(cp.clone(),i?0xffc84a:0xff6a1a,.18+Math.random()*.12,new THREE.Vector3(-fw.x*6+(Math.random()-.5)*4,2+Math.random()*4,-fw.z*6+(Math.random()-.5)*4),.5,true);
+        if(Math.random()<.5) debris(cp.clone(),0x9a9288,.4,new THREE.Vector3((Math.random()-.5)*2,1,(Math.random()-.5)*2),.6,false); }
+      else { const wp=player.pos.clone().addScaledVector(fw,1.1); if(blockedAt(wp.x,wp.z,player.pos.y-1)){ for(let i=0;i<4;i++) debris(wp.clone(),i%2?0xffc84a:0xff6a1a,.16,new THREE.Vector3((Math.random()-.5)*5,(Math.random()-.5)*5,(Math.random()-.5)*5),.45,false); } }
+    } } }
 }
 const raycaster = new THREE.Raycaster();
 const centerNDC = new THREE.Vector2(0,0);
@@ -3743,6 +3759,12 @@ function doJump(){
     } else {
       player.flying = false; // gravity resumes and brings you back down
     }
+  } else if(!player.onGround && player.form.id==='echo_echo' && !player.ejUsed && !player.swimming){ // double jump: a sonic blast under his feet pushes him up
+    player.ejUsed=true; player.ejT=.4; player.vel.y=player.form.jump*1.05;
+    const fp=player.pos.clone(); fp.y-=.8; const ff=flatFwd(player.yaw);
+    for(let i=0;i<3;i++) ringFx(fp,ff,i*.04);
+    for(let i=0;i<14;i++){ const a=i/14*6.283; debris(fp.clone(),i%2?0xcfefff:0x8fe0ff,.2,new THREE.Vector3(Math.cos(a)*4,-1-Math.random()*2,Math.sin(a)*4),.45,false); }
+    shakeCamera(.08);
   } else if(player.onGround && player.form.id==='xlr8' && Math.hypot(camDyn.vx,camDyn.vz)>6){ // running leap: long and low, length follows speed
     const hv=Math.hypot(camDyn.vx,camDyn.vz), f={x:-Math.sin(player.yaw),z:-Math.cos(player.yaw)}, r={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)};
     let mx=moveInput.x,my=moveInput.y; if(Math.hypot(mx,my)<.15){ mx=0; my=1; }
@@ -4019,12 +4041,12 @@ function playerAnimate(parts,dt,moving){
   const ry=player.model.rotation.y, id=player.form.id, fwd={x:-Math.sin(ry),z:-Math.cos(ry)};
   const atk = player.punchAnimT>0 ? atkInput(player.punchKind,player.punchAnimT,player.punchAnimDur||.25,{side:player.punchSide,id,amp:id==='echo_echo'?.85:1}) : null;
   const climb=!!player.onLadder;
-  player.castT=Math.max(0,(player.castT||0)-dt*2.6); player.castHold=Math.max(0,(player.castHold||0)-dt);
+  player.ejT=Math.max(0,(player.ejT||0)-dt); player.castT=Math.max(0,(player.castT||0)-dt*2.6); player.castHold=Math.max(0,(player.castHold||0)-dt);
   { const burn=id==='heatblast'&&player.flying&&parts.all; // flying Heatblast glows like he's on fire
     if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(1.0*k,.38*k,.04*k); player._burn=true; }
     else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb||(id==='xlr8'&&(player.superT||0)>.2&&!player.flying&&Math.abs(player.vel.y)<9),vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,hb:id==='heatblast',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
+    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,ejB:Math.max(0,player.ejT||0)/.4,hb:id==='heatblast',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:player.leapCharging?Math.max(.12,player.leapC||0):0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.
@@ -4100,7 +4122,7 @@ function updatePlayerOnFoot(dt){
   let mx = moveInput.x, my = moveInput.y;
   const mag = Math.hypot(mx,my); if(mag>1){ mx/=mag; my/=mag; }
   const speedMult = player.speedBurstT>0 ? (player.form.special.speedMult||1) : 1;
-  const speed = player.form.speed * SPEED_SCALE * speedMult * (player.dashT>0 ? ((player.superSpeed||0)>.2 ? 1.3 : 1+3.6*Math.pow(player.dashT/.32,.7)) : 1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*12) * (1+(player.rollT||0)*5) * ((player.rollT||0)>.5&&(player.runLatch||keys['ShiftLeft']||keys['ShiftRight'])?1.7:1) * ((player.runLatch||keys['ShiftLeft']||keys['ShiftRight']) && !player.flying && !player.swimming && !carried && player.form.id!=='xlr8' ? 1.5 : 1) * (player.leapCharging ? 0.35 : 1);
+  const speed = player.form.speed * SPEED_SCALE * speedMult * (player.dashT>0 ? ((player.superSpeed||0)>.2 ? 1.3 : 1+3.6*Math.pow(player.dashT/.32,.7)) : 1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*12) * (1+(player.rollT||0)*3.2) * ((player.rollT||0)>.5&&(player.runLatch||keys['ShiftLeft']||keys['ShiftRight'])?1.5:1) * ((player.runLatch||keys['ShiftLeft']||keys['ShiftRight']) && !player.flying && !player.swimming && !carried && player.form.id!=='xlr8' ? 1.5 : 1) * (player.leapCharging ? 0.35 : 1);
   let moveX = forward.x*my + right.x*mx;
   let moveZ = forward.z*my + right.z*mx;
   if(player.dashT>0){ moveX=player.dashDir.x; moveZ=player.dashDir.z; player.dashT-=dt; }
@@ -4118,7 +4140,6 @@ function updatePlayerOnFoot(dt){
       }
     }
   }
-  else if(player.rolling && Math.hypot(moveX,moveZ)<0.05){ moveX=forward.x; moveZ=forward.z; }
   const moving = Math.hypot(moveX,moveZ) > 0.05;
 
   // Stage 7: ladders. Face one and push forward to climb, push back to descend, JUMP to hop off.
@@ -4149,6 +4170,7 @@ function updatePlayerOnFoot(dt){
 
   if(player.alive && !climbing){
     const flySpeed = player.flying ? (player.form.flySpeed||speed)*FLY_SCALE*(player.boostT>0?1.7:1) : speed;
+    if(player.onGround) player.ejUsed=false;
     if(player.xlAir && (player.onGround||player.flying||player.form.id!=='xlr8')) player.xlAir=false;
     let lvx = (player.leapActive && !player.onGround && !player.flying) ? player.leap.x : 0, lvz = (player.leapActive && !player.onGround && !player.flying) ? player.leap.z : 0;
     if(player.xlAir){ lvx=player.xlLeap.x; lvz=player.xlLeap.z; }
@@ -4279,7 +4301,13 @@ function updatePlayerOnFoot(dt){
     player._ball = useGlb ? Math.min(1,curl*1.25) : 0;
     if(useGlb || curl<0.5) playerAnimate(parts, dt, moving); // standing Cannonbolt walks / punches like everyone else
     if(parts.shell){ parts.shell.scale.setScalar(useGlb?0.001:Math.max(0.001, curl*2.0)); parts.shell.position.y = parts.shellBaseY; }
-    if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
+    const _hv=Math.hypot(camDyn.vx,camDyn.vz);
+    if(parts.ball){
+      const show=curl>.85; GLBBODY.setBall(parts,show,show?(player.rollSpin=(player.rollSpin||0)+dt*Math.min(45,_hv/(parts.ball.r*player.model.scale.x))):0);
+      if(show){ player.model.rotation.x=0; if(parts.glb) parts.glb.pivot.visible=false; }
+      else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); if(parts.glb) parts.glb.pivot.visible=true; player.rollSpin=0; }
+    }
+    else if(curl>0.05){ player.rollSpin=(player.rollSpin||0) + dt*(6+curl*14); player.model.rotation.x = player.rollSpin; }
     else { player.model.rotation.x = THREE.MathUtils.lerp(player.model.rotation.x||0, 0, 0.2); player.rollSpin=0; }
   } else {
   if(moving && player.onGround) player.walkT += dt*8*speedMult;

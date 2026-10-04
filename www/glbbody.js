@@ -78,8 +78,36 @@ const GLBBODY=(function(){
       }catch(e){ state[kind]='fail'; res(); }
     });
   }
+  // Cannonbolt's ready-made ball model (separate GLB): shown while rolling
+  let BALL=null;
+  async function loadBall(D){
+    if(!D.cannonbolt_ball) return;
+    await new Promise(res=>{ try{ new THREE.GLTFLoader().parse(b64ToBuf(D.cannonbolt_ball),'',g=>{
+      try{ const sc=g.scene; sc.updateMatrixWorld(true); const bb=new THREE.Box3().setFromObject(sc), sz=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
+        BALL={scene:sc,dia:Math.max(sz.x,sz.y,sz.z),c}; }catch(e){ console.warn('ball',e); } res(); },()=>res()); }catch(e){ res(); } });
+    delete D.cannonbolt_ball;
+  }
+  function attachBall(parts){
+    if(!BALL||parts.ball) return;
+    const inst=BALL.scene.clone(true), grp=new THREE.Group(), spin=new THREE.Group();
+    const wrap=new THREE.Group(); wrap.add(inst); inst.position.sub(BALL.c); // centre the model on the pivot
+    const mats=new Map();
+    inst.traverse(o=>{ if(!o.isMesh) return; o.frustumCulled=false; o.castShadow=true; const src=o.material; let m=mats.get(src);
+      if(!m){ if(src.map) src.map.encoding=THREE.LinearEncoding; m=new THREE.MeshLambertMaterial({color:src.color.clone(),map:src.map||null,side:src.side,transparent:src.transparent,opacity:src.opacity,alphaTest:src.alphaTest,emissive:new THREE.Color(0x1a1608)});
+        m.userData.baseEmis=m.emissive.getHex(); mats.set(src,m); parts.all.push(m); } o.material=m; });
+    const r=parts.dims.total*.25, k=2*r/BALL.dia; wrap.scale.setScalar(k);
+    spin.add(wrap); grp.add(spin); grp.position.y=r; grp.visible=false; parts.g.add(grp); parts.ball={grp,spin,r};
+  }
+  // curl 0..1: swap the body for the ball once fully curled; spin = roll angle about X
+  function setBall(parts,show,spin){
+    if(!parts.ball) return false;
+    parts.ball.grp.visible=show; parts.ball.spin.rotation.x=spin||0;
+    if(parts.glb) parts.glb.pivot.visible=!show && parts.glb.pivot.visible;
+    return true;
+  }
   async function init(){
     const D=window.__GLB_DATA||{};
+    try{ await loadBall(D); }catch(e){}
     for(const kind in CFG){ if(!D[kind]){ state[kind]='fail'; continue; } state[kind]='wait';
       await new Promise(r=>setTimeout(r,0));
       try{ await load(kind,b64ToBuf(D[kind])); }catch(e){ state[kind]='fail'; }
@@ -137,7 +165,7 @@ const GLBBODY=(function(){
            tL:new THREE.Quaternion(),kL:new THREE.Quaternion(),fL:new THREE.Quaternion(),tR:new THREE.Quaternion(),kR:new THREE.Quaternion(),fR:new THREE.Quaternion()}, clock:Math.random()*10 };
       // success: only now hide the box anatomy (keeping the cannonbolt roll shell) and mount the GLB body
       g.traverse(o=>{ if(!o.isMesh) return; for(let p=o;p;p=p.parent){ if(p===shellRoot) return; if(p===g) break; } o.visible=false; });
-      g.add(pivot); parts.glb=G; apply(parts,0);
+      g.add(pivot); parts.glb=G; apply(parts,0); if(kind==='cannonbolt') attachBall(parts);
       return true;
     }catch(e){ console.warn('GLB attach '+kind+': '+e.message); return false; }
   }
@@ -218,7 +246,7 @@ const GLBBODY=(function(){
   const PZ={four_arms:.68,heatblast:.68,xlr8:.92,echo_echo:.72,cannonbolt:1};
   function topOf(parts){ return parts.glb?(parts.dims.total-.12):null; }
 
-  return { init, attach, apply, scaleBody, topOf, pz:k=>PZ[k]||.7, leanMul:k=>(CFG[k]&&CFG[k].leanMul!=null)?CFG[k].leanMul:1, ready:k=>state[k]==='ok', pending:k=>!!CFG[k]&&(state[k]==='wait'||state[k]===undefined), CFG };
+  return { init, attach, attachBall, setBall, apply, scaleBody, topOf, pz:k=>PZ[k]||.7, leanMul:k=>(CFG[k]&&CFG[k].leanMul!=null)?CFG[k].leanMul:1, ready:k=>state[k]==='ok', pending:k=>!!CFG[k]&&(state[k]==='wait'||state[k]===undefined), CFG };
 })();
 window.GLBBODY=GLBBODY;
 try{GLBBODY.init();}catch(e){console.warn('GLB init',e);}
