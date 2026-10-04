@@ -218,18 +218,20 @@ const GLBBODY=(function(){
     const M=CFG.echo_echo.map, headN=M.head, armN=[...M.eL,...M.eR], legN=[...M.fL,...M.fR], chestN=M.chest;
     const col=new Float32Array(n*3), W=[.95,.96,.98], DARK=[.16,.19,.25], STEEL=[.42,.47,.55], BLACK=[.03,.03,.04], GREEN=[.2,.95,.35];
     // head bounds (for eye/visor bands)
-    let y0=1e9,y1=-1e9; const isHead=new Uint8Array(n);
+    let y0=1e9,y1=-1e9,x0=1e9,x1=-1e9; const isHead=new Uint8Array(n);
     for(let i=0;i<n;i++){ let best=0,bj=0; for(let k=0;k<4;k++){ if(W4(jw,i,k)>best){ best=W4(jw,i,k); bj=W4(ji,i,k); } }
-      if(anc(bj,headN)){ isHead[i]=1; const y=pos.getY(i); if(y<y0)y0=y; if(y>y1)y1=y; } }
+      if(anc(bj,headN)){ isHead[i]=1; const y=pos.getY(i),x=pos.getX(i); if(y<y0)y0=y; if(y>y1)y1=y; if(x<x0)x0=x; if(x>x1)x1=x; } }
     for(let i=0;i<n;i++){ let best=0,bj=0; for(let k=0;k<4;k++){ if(W4(jw,i,k)>best){ best=W4(jw,i,k); bj=W4(ji,i,k); } }
       let c=W; const nz=nor.getZ(i), ny=nor.getY(i), v=(pos.getY(i)-y0)/Math.max(1e-6,y1-y0);
       if(isHead[i]){
         const front = ECHO_FRONT*nz>.35;
-        if(front && v>.38 && v<.62) c = (v>.47&&v<.57)?BLACK:DARK;      // visor band with dark eye slit
-        else if(front && v>.2 && v<.36) c=DARK;                         // mouth grille
-        else if(Math.abs(nor.getX(i))>.82) c=STEEL;                     // speaker ears
-      } else if(depthFrom(bj,armN)>=1 && depthFrom(bj,armN)<=99 && anc(bj,armN)){ const d=depthFrom(bj,armN); c = d>=1 && d<=2 ? STEEL : W; }
-      else if(anc(bj,legN)) c=STEEL;
+        const hx=(pos.getX(i)-(x0+x1)/2)/Math.max(1e-6,(x1-x0)/2);       // -1..1 across the head
+        if(front && v>.52 && v<.6 && Math.abs(hx)>.18 && Math.abs(hx)<.72) c=GREEN;      // two lime eye slits (reference art)
+        else if(front && v>.5 && v<.62 && Math.abs(hx)<.8) c=[.78,.8,.84];                // heavy lids / brow in light grey
+        else if(front && v>.27 && v<.34 && Math.abs(hx)<.6) c=GREEN;                      // lime frown mouth strip
+        else if(Math.abs(nor.getX(i))>.82) c=(v>.4&&v<.7)?BLACK:[.85,.86,.9];            // black headphone cups
+      } else if(depthFrom(bj,armN)>=1 && depthFrom(bj,armN)<=99 && anc(bj,armN)){ const d=depthFrom(bj,armN); c = d>=1 && d<=2 ? [.82,.84,.88] : W; }
+      else if(anc(bj,legN)) c=[.84,.86,.9];
       else if(anc(bj,chestN)){ const x=pos.getX(i), yy=pos.getY(i); /* Omnitrix disc handled below */ }
       col[i*3]=c[0]; col[i*3+1]=c[1]; col[i*3+2]=c[2]; }
     g.setAttribute('color',new THREE.BufferAttribute(col,3));
