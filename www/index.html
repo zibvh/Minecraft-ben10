@@ -1550,7 +1550,7 @@ function animateRig(parts,dt,inp){
   }
   if(inp.ball>0){ const b=_sm(inp.ball); // Cannonbolt ball: chin tucked, back rounded, knees drawn up, arms hugging the shins
     P.chX+=-1.5*b; P.hdX+=-.5*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
-    P.sL.x=_lerp(P.sL.x,-1.25,b); P.sR.x=_lerp(P.sR.x,-1.25,b); P.eL=_lerp(P.eL,.9,b); P.eR=_lerp(P.eR,.9,b); P.sL.z=_lerp(P.sL.z,.35,b); P.sR.z=_lerp(P.sR.z,-.35,b); P.hipsY-=.12*b; }
+    P.sL.x=_lerp(P.sL.x,1.2,b); P.sR.x=_lerp(P.sR.x,1.2,b); P.eL=_lerp(P.eL,.9,b); P.eR=_lerp(P.eR,.9,b); P.sL.z=_lerp(P.sL.z,.35,b); P.sR.z=_lerp(P.sR.z,-.35,b); P.hipsY-=.12*b; }
   if(inp.carrying){ const _cl=parts.leftArm2?[[P.sL,'eL'],[P.sR,'eR']]:[[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]; for(const [S,ek] of _cl){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
   if(inp.flee){ P.sL.x=2.5+Math.sin(A.t*14)*.35; P.sR.x=2.5-Math.sin(A.t*14)*.35; P.eL=.8; P.eR=.8; P.chX+=-.12; P.hdX+=.25; }
   if(inp.aim){ // pistol/blaster: right arm straight out, left hand supports, head turned down the sight line
@@ -1579,8 +1579,8 @@ function animateRig(parts,dt,inp){
     }
   }
   if(inp.ball>0){ const b=_sm(inp.ball); // Cannonbolt ball: chin tucked, back rounded, knees drawn up, arms hugging the shins
-    P.chX+=1.6*b; P.hdX+=.7*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
-    P.sL.x=_lerp(P.sL.x,-1.25,b); P.sR.x=_lerp(P.sR.x,-1.25,b); P.eL=_lerp(P.eL,.9,b); P.eR=_lerp(P.eR,.9,b); P.sL.z=_lerp(P.sL.z,.35,b); P.sR.z=_lerp(P.sR.z,-.35,b); P.hipsY-=.12*b; }
+    P.chX+=-1.5*b; P.hdX+=-.5*b; P.tLx=_lerp(P.tLx,1.75,b); P.tRx=_lerp(P.tRx,1.75,b); P.kL=_lerp(P.kL,2.2,b); P.kR=_lerp(P.kR,2.2,b);
+    P.sL.x=_lerp(P.sL.x,1.2,b); P.sR.x=_lerp(P.sR.x,1.2,b); P.eL=_lerp(P.eL,.9,b); P.eR=_lerp(P.eR,.9,b); P.sL.z=_lerp(P.sL.z,.35,b); P.sR.z=_lerp(P.sR.z,-.35,b); P.hipsY-=.12*b; }
   if(inp.carrying){ const _cl=parts.leftArm2?[[P.sL,'eL'],[P.sR,'eR']]:[[P.sL,'eL'],[P.sR,'eR'],[P.s2L,'e2L'],[P.s2R,'e2R']]; for(const [S,ek] of _cl){ S.x=2.9; S.z*=.3; P[ek]=.25; } P.chX+=.1; P.hdX+=.1; }
   if(inp.flee){ P.sL.x=2.5+Math.sin(A.t*14)*.35; P.sR.x=2.5-Math.sin(A.t*14)*.35; P.eL=.8; P.eR=.8; P.chX+=-.12; P.hdX+=.25; }
   if(inp.aim){ // pistol/blaster: right arm straight out, left hand supports, head turned down the sight line
@@ -1793,12 +1793,16 @@ function buildCharacter(kind){
   const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
   if(kind==='heatblast'){
     // soft flame sprite texture (shared)
-    if(!window.__FT){ const cv=document.createElement('canvas'); cv.width=cv.height=64; const cx=cv.getContext('2d'), gr=cx.createRadialGradient(32,32,2,32,32,31);
-      gr.addColorStop(0,'rgba(255,255,230,1)'); gr.addColorStop(.3,'rgba(255,214,70,.85)'); gr.addColorStop(.65,'rgba(255,110,20,.4)'); gr.addColorStop(1,'rgba(255,60,0,0)'); cx.fillStyle=gr; cx.fillRect(0,0,64,64); window.__FT=new THREE.CanvasTexture(cv); }
-    const mkSp=(col)=>new THREE.Sprite(new THREE.SpriteMaterial({map:window.__FT,color:col,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+    if(!window.__FT){ window.__FT=[]; for(let v=0;v<4;v++){ const cv=document.createElement('canvas'); cv.width=64; cv.height=128; const cx=cv.getContext('2d'); const r=(i)=>{ const x=Math.sin((v+1)*91.7+i*37.3)*43758.5; return x-Math.floor(x); };
+        cx.beginPath(); cx.moveTo(32,126);
+        const L=[[6,100],[12,70+r(1)*14],[8,44+r(2)*10],[20,22+r(3)*8],[28,4+r(4)*10]]; for(const [x,y] of L) cx.lineTo(x+r(x)*5,y);
+        cx.lineTo(32+(r(9)-.5)*6,0); const R=[[36,18+r(5)*8],[48,30+r(6)*10],[44,58+r(7)*14],[58,84+r(8)*8],[56,104]]; for(const [x,y] of R) cx.lineTo(x-r(y)*5,y); cx.closePath();
+        const gr=cx.createLinearGradient(0,128,0,0); gr.addColorStop(0,'rgba(255,255,235,1)'); gr.addColorStop(.35,'rgba(255,215,80,.95)'); gr.addColorStop(.7,'rgba(255,120,24,.75)'); gr.addColorStop(1,'rgba(255,50,0,0)'); cx.fillStyle=gr; cx.fill();
+        const t=new THREE.CanvasTexture(cv); window.__FT.push(t); } }
+    const mkSp=(col,vi)=>new THREE.Sprite(new THREE.SpriteMaterial({map:window.__FT[(vi||0)%4],color:col,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
     // head is always on fire: layered flame puffs above the head
     const hf=new THREE.Group(); parts.headFlame=[];
-    for(let i=0;i<6;i++){ const sp=mkSp(i%2?0xffb02e:0xffe27a); sp.userData.i=i; hf.add(sp); parts.headFlame.push(sp); }
+    for(let i=0;i<6;i++){ const sp=mkSp(i%2?0xffb02e:0xffe27a,i); sp.userData.i=i; hf.add(sp); parts.headFlame.push(sp); }
     hf.position.y=parts.dims.total-.42; g.add(hf); parts.hfGroup=hf;
     // flying rock: dark red faceted slab with a soft, long flame trail streaming behind it (reference art)
     const rk=new THREE.Group();
@@ -1807,7 +1811,7 @@ function buildCharacter(kind){
     rg.computeVertexNormals();
     const rock=new THREE.Mesh(rg,new THREE.MeshLambertMaterial({color:0x6a1410,emissive:0x5a1006,emissiveIntensity:.8})); rock.scale.set(1.05,1,.95); rk.add(rock);
     rk.userData.fl=[]; const N=18;
-    for(let i=0;i<N;i++){ const sp=mkSp(0xffffff); sp.userData.i=i; rk.add(sp); rk.userData.fl.push(sp); }
+    for(let i=0;i<N;i++){ const sp=mkSp(0xffffff,i); sp.userData.i=i; sp.material.rotation=(i*2.1)%6.28; rk.add(sp); rk.userData.fl.push(sp); }
     rk.position.y=-.78; rk.visible=false; o.add(rk); parts.rock=rk;
   }
   o.userData.parts=parts; o.userData.kind=kind;
@@ -2786,22 +2790,30 @@ const TRAIL_N=44, TRAILS=[], TRAIL_SRC=[[.34,.75],[-.34,.55],[0,-.35]];
   });
 })();
 // XLR8 after-images: frozen copies of his real (skinned) mesh left behind, cyan + additive so they read as a motion blur, fading out
-const GH={model:null,list:[],idx:0,acc:0,last:null};
-function ghostsFree(){ for(const G of GH.list) scene.remove(G.c); GH.list=[]; GH.model=null; }
+const GH={model:null,list:[],hist:[],src:[]};
+function ghostsFree(){ for(const G of GH.list) scene.remove(G.c); GH.list=[]; GH.hist=[]; GH.model=null; }
 function ghostsBuild(){
   ghostsFree(); const src=player.model; GH.model=src; GH.src=[]; src.traverse(o=>GH.src.push(o));
-  for(let i=0;i<10;i++){ const c=THREE.SkeletonUtils.clone(src), dst=[], mats=[]; c.traverse(o=>{ dst.push(o);
+  for(let i=0;i<7;i++){ const c=THREE.SkeletonUtils.clone(src), dst=[], mats=[]; c.traverse(o=>{ dst.push(o);
       if(o.isMesh){ o.castShadow=false; o.frustumCulled=false; const m=new THREE.MeshBasicMaterial({color:0x5ff4ff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}); m.skinning=!!o.isSkinnedMesh; o.material=m; mats.push(m); } });
-    c.visible=false; scene.add(c); GH.list.push({c,dst,mats,life:0}); }
+    c.visible=false; scene.add(c); GH.list.push({c,dst,mats}); }
 }
+// "speed blitz": a tight stack of cyan copies of his real mesh packed just behind his body, each wearing his pose from a few frames earlier
 function updateGhosts(dt,k){
   const on=k>.2&&player.form.id==='xlr8'&&!player.flying&&player.model.userData.parts&&player.model.userData.parts.glb;
-  if(on){ if(GH.model!==player.model) ghostsBuild();
-    GH.acc+=dt; const _gd=GH.last?GH.last.distanceTo(player.pos):9; if(_gd>=.8||GH.acc>=.12){ GH.acc=0; (GH.last||(GH.last=new THREE.Vector3())).copy(player.pos); const G=GH.list[GH.idx]; GH.idx=(GH.idx+1)%GH.list.length;
-      const n=Math.min(G.dst.length,GH.src.length); for(let i=0;i<n;i++){ const s=GH.src[i], d=G.dst[i]; d.position.copy(s.position); d.quaternion.copy(s.quaternion); d.scale.copy(s.scale); d.visible=s.visible; }
-      G.c.updateMatrixWorld(true); G.life=.2; G.c.visible=true; } }
-  else if(GH.model && player.form.id!=='xlr8') ghostsFree();
-  for(const G of GH.list){ if(G.life<=0){ if(G.c.visible) G.c.visible=false; continue; } G.life-=dt; const o=Math.max(0,G.life/.2)*.4*Math.min(1,k*1.4); for(const m of G.mats) m.opacity=o; }
+  if(!on){ if(GH.model){ if(player.form.id!=='xlr8') ghostsFree(); else for(const G of GH.list) G.c.visible=false; } GH.hist.length=0; return; }
+  if(GH.model!==player.model) ghostsBuild();
+  const n=GH.src.length, snap=GH.hist.length>=14?GH.hist.pop():new Float32Array(n*7);
+  for(let i=1;i<n;i++){ const s=GH.src[i], o=i*7; snap[o]=s.position.x; snap[o+1]=s.position.y; snap[o+2]=s.position.z; snap[o+3]=s.quaternion.x; snap[o+4]=s.quaternion.y; snap[o+5]=s.quaternion.z; snap[o+6]=s.quaternion.w; }
+  GH.hist.unshift(snap);
+  let dx=-camDyn.vx, dz=-camDyn.vz; const l=Math.hypot(dx,dz); if(l<1){ dx=Math.sin(player.yaw); dz=Math.cos(player.yaw); } else { dx/=l; dz/=l; }
+  const mdl=player.model, fade=Math.min(1,k*1.4);
+  GH.list.forEach((G,gi)=>{ const h=GH.hist[Math.min(GH.hist.length-1,(gi+1)*2)]; if(!h){ G.c.visible=false; return; }
+    const m=Math.min(G.dst.length,n);
+    for(let i=1;i<m;i++){ const d=G.dst[i], o=i*7; d.position.set(h[o],h[o+1],h[o+2]); d.quaternion.set(h[o+3],h[o+4],h[o+5],h[o+6]); d.visible=GH.src[i].visible; }
+    const sp=.42*(gi+1); G.c.position.set(mdl.position.x+dx*sp, mdl.position.y, mdl.position.z+dz*sp); G.c.quaternion.copy(mdl.quaternion); G.c.scale.copy(mdl.scale);
+    G.c.visible=true; G.c.updateMatrixWorld(true);
+    const o2=.5*Math.pow(1-gi/GH.list.length,1.3)*fade; for(const mt of G.mats) mt.opacity=o2; });
 }
 let trailIdle=9;
 function updateSpeedTrails(dt,k){
@@ -3368,12 +3380,12 @@ function poseExtras(parts,moving,dt){
       hp.headFlame.forEach((sp,i)=>{ const f=Math.sin(t*(11+i*3)+i*1.7); sp.position.set(Math.sin(t*6+i*1.3)*.07*(1+i*.3), .18+i*.16+.05*f, 0.0);
         const w=(.3-i*.03)*k*(1+.15*f), h=(.5+i*.16)*k*(1+.22*Math.sin(t*14+i)); sp.scale.set(w,h,1); sp.material.opacity=.85; }); } }
   const rk=m.userData.parts&&m.userData.parts.rock;
-  if(rk){ rk.visible=!!player.flying; if(rk.visible){ const t=performance.now()/1000, sp=moving?1:.3;
+  if(rk){ rk.visible=!!player.flying; if(rk.visible){ const t=performance.now()/1000; player._fsp=(player._fsp==null?0:player._fsp)+((moving?1:.3)-(player._fsp||0))*Math.min(1,dt*1.6); const sp=player._fsp;
     rk.position.y=-.78+Math.sin(t*3)*.04; rk.rotation.z=Math.sin(t*1.7)*.05;
     const L=1.2+5.5*sp, N=rk.userData.fl.length;
     rk.userData.fl.forEach((s2,i)=>{ const fr=((i/N)+t*(.8+sp*1.4))%1, d=fr*L;
       s2.position.set(Math.sin(t*9+i*2)*.12*fr, -.25-d*(.12+.2*sp), .1+d*(.4+.6*sp)+.5*(1-sp)*0);
-      const sz=(1.5+fr*1.9)*(.7+.3*sp); s2.scale.set(sz,sz*(.9+.3*sp),1);
+      const sz=(1.5+fr*1.9)*(.7+.3*sp); s2.scale.set(sz*.7,sz*1.3*(.9+.3*sp),1); s2.material.rotation=(i*2.1)%6.28+Math.sin(t*8+i)*.35;
       s2.material.color.setRGB(1,1-fr*.55,.9-fr*.9); s2.material.opacity=Math.max(0,(1-fr)*.9); });
     const gt=groundTopAt(player.pos.x,player.pos.z,player.pos.y), tip=player.pos.y-1-.8*(player.form.modelScale||1);
     if(moving&&(player._sc=(player._sc||0)+dt)>.04){ player._sc=0;
@@ -3766,9 +3778,9 @@ function doJump(){
     }
   } else if(!player.onGround && player.form.id==='echo_echo' && !player.ejUsed && !player.swimming){ // double jump: a sonic blast under his feet pushes him up
     player.ejUsed=true; player.ejT=.5; player.vel.y=player.form.jump*1.05;
-    const fp=player.pos.clone(); fp.y-=.8; const ff=flatFwd(player.yaw);
-    for(let i=0;i<3;i++) ringFx(fp,ff,i*.04);
-    for(let i=0;i<14;i++){ const a=i/14*6.283; debris(fp.clone(),i%2?0xcfefff:0x8fe0ff,.2,new THREE.Vector3(Math.cos(a)*4,-1-Math.random()*2,Math.sin(a)*4),.45,false); }
+    const fp=player.pos.clone(); fp.y-=1.0; const dn=new THREE.Vector3(0,-1,0);
+    for(let i=0;i<4;i++) ringFx(fp,dn,i*.03);
+    for(let i=0;i<14;i++){ const a=i/14*6.283; debris(fp.clone(),i%2?0xcfefff:0x8fe0ff,.2,new THREE.Vector3(Math.cos(a)*2.2,-5-Math.random()*4,Math.sin(a)*2.2),.45,false); }
     shakeCamera(.08);
   } else if(player.onGround && player.form.id==='xlr8' && Math.hypot(camDyn.vx,camDyn.vz)>6){ // running leap: long and low, length follows speed
     const hv=Math.hypot(camDyn.vx,camDyn.vz), f={x:-Math.sin(player.yaw),z:-Math.cos(player.yaw)}, r={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)};
@@ -4110,7 +4122,7 @@ function updatePlayerOnFoot(dt){
 
   // Cannonbolt: hold ROLL to curl into a ball and build up speed; release to unroll back to normal.
   if(player.rollHeld && player.form.id==='cannonbolt'){ player.rolling=true; player.rollT=Math.min(1,(player.rollT||0)+dt*1.4); }
-  else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*2.2); }
+  else { player.rolling=false; player.rollT=Math.max(0,(player.rollT||0)-dt*1.4); }
 
   // energy regen (paused briefly right after casting)
   if(!player.superHeld && !(player.speedBurstT>0) && !player.flameHeld && !player.sprayHeld){
