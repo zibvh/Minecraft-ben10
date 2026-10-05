@@ -35,7 +35,7 @@ const GLBBODY=(function(){
       down:{} },
     ben:{ syn:'ben', face:0, map:{ hips:['hips'], chest:['spine'], head:['neck'], sL:['upperArmL'], eL:['foreArmL'], sR:['upperArmR'], eR:['foreArmR'],
         tL:['thighL'], kL:['shinL'], fL:['footL'], tR:['thighR'], kR:['shinR'], fR:['footR'] },
-      down:{ upperArmL:['foreArmL',9], foreArmL:[null,9], upperArmR:['foreArmR',9], foreArmR:[null,9] } },
+      down:{ upperArmL:['foreArmL',5], foreArmL:[null,5], upperArmR:['foreArmR',5], foreArmR:[null,5] } },
     diamondhead:{ syn:'diamondhead', face:0, hMul:1.145, map:{ hips:['hips'], chest:['spine'], head:['neck'], sL:['upperArmL'], eL:['foreArmL'], sR:['upperArmR'], eR:['foreArmR'],
         tL:['thighL'], kL:['shinL'], fL:['footL'], tR:['thighR'], kR:['shinR'], fR:['footR'] }, down:{} },
     cannonbolt:{ curl:{ Chest_07:-1.0 }, face:Math.PI, map:{ hips:['Hips_01'], chest:['Spine_06'],
@@ -66,13 +66,13 @@ const GLBBODY=(function(){
   const BONES=['hips','spine','neck','thighL','shinL','footL','thighR','shinR','footR','upperArmL','foreArmL','upperArmR','foreArmR'];
   const SYN={
     ben:{ xf:(x,y,z)=>[-z,y,x], iter:9,
-      joint:{ hips:[0,-.42,0], spine:[0,-.12,0], neck:[0,.5,0], upperArmL:[-.31,.31,0], foreArmL:[-.74,.31,0], upperArmR:[.31,.31,0], foreArmR:[.74,.31,0],
+      joint:{ hips:[0,-.42,0], spine:[0,-.12,0], neck:[0,.5,0], upperArmL:[-.23,.33,0], foreArmL:[-.74,.31,0], upperArmR:[.23,.33,0], foreArmR:[.74,.31,0],
               thighL:[-.13,-.45,0], shinL:[-.13,-.8,0], footL:[-.13,-1.03,0], thighR:[.13,-.45,0], shinR:[.13,-.8,0], footR:[.13,-1.03,0] },
       par:{ spine:'hips', neck:'spine', upperArmL:'spine', upperArmR:'spine', foreArmL:'upperArmL', foreArmR:'upperArmR', thighL:'hips', thighR:'hips', shinL:'thighL', shinR:'thighR', footL:'shinL', footR:'shinR' },
       mesh:(n)=>n==='Object_2'?null:'neck',                                   // eyes / mouth / hair meshes belong to the head
       seg:(x,y,z)=>{ const ax=Math.abs(x), S=x<0?'L':'R';
         if(y>.52) return 'neck';
-        if(ax>.30&&y>-.12) return ax<.74?'upperArm'+S:'foreArm'+S;
+        if(ax>.25&&y>-.12) return ax<.74?'upperArm'+S:'foreArm'+S;
         if(y<-.45&&ax>.0){ return y<-1.03?'foot'+S:y<-.8?'shin'+S:'thigh'+S; }
         return y>-.1?'spine':'hips'; } },
     diamondhead:{ xf:(x,y,z)=>[-(x-.54),y,-(z+6.4)], iter:2,
