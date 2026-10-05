@@ -33,6 +33,11 @@ const GLBBODY=(function(){
         sL:['Bone006_018'], eL:['Bone007_019'], sR:['Bone002_03'], eR:['Bone003_04'],
         tL:['Bone013_042'], kL:['Bone014_043'], fL:['Bone016_044'], tR:['Bone010_038'], kR:['Bone011_039'], fR:['Bone015_040'] },
       down:{} },
+    ben:{ syn:'ben', face:0, map:{ hips:['hips'], chest:['spine'], head:['neck'], sL:['upperArmL'], eL:['foreArmL'], sR:['upperArmR'], eR:['foreArmR'],
+        tL:['thighL'], kL:['shinL'], fL:['footL'], tR:['thighR'], kR:['shinR'], fR:['footR'] },
+      down:{ upperArmL:['foreArmL',9], foreArmL:[null,9], upperArmR:['foreArmR',9], foreArmR:[null,9] } },
+    diamondhead:{ syn:'diamondhead', face:0, hMul:1.145, map:{ hips:['hips'], chest:['spine'], head:['neck'], sL:['upperArmL'], eL:['foreArmL'], sR:['upperArmR'], eR:['foreArmR'],
+        tL:['thighL'], kL:['shinL'], fL:['footL'], tR:['thighR'], kR:['shinR'], fR:['footR'] }, down:{} },
     cannonbolt:{ curl:{ Chest_07:-1.0 }, face:Math.PI, map:{ hips:['Hips_01'], chest:['Spine_06'],
         sL:['Left_arm_029'], eL:['Left_elbow_030'], sR:['Right_arm_09'], eR:['Right_elbow_010'],
         tL:['Right_WideLeg_L_048'], kL:['Right_WideKnee_L_049'], fL:['Right_WideAnkle_L_050'],
@@ -54,8 +59,78 @@ const GLBBODY=(function(){
     return bb;
   }
 
+
+  // ---- Ben & Diamondhead ship as UNSKINNED models (Ben: one T-posed mesh, Diamondhead: 12 separate crystal pieces).
+  // synth() bakes them into the rig frame (-Z forward, +X = character's right), builds a real skeleton at the joints and
+  // generates skin weights (hard region split + weight diffusion over the mesh), so they retarget like every other alien.
+  const BONES=['hips','spine','neck','thighL','shinL','footL','thighR','shinR','footR','upperArmL','foreArmL','upperArmR','foreArmR'];
+  const SYN={
+    ben:{ xf:(x,y,z)=>[-z,y,x], iter:9,
+      joint:{ hips:[0,-.42,0], spine:[0,-.12,0], neck:[0,.5,0], upperArmL:[-.31,.31,0], foreArmL:[-.74,.31,0], upperArmR:[.31,.31,0], foreArmR:[.74,.31,0],
+              thighL:[-.13,-.45,0], shinL:[-.13,-.8,0], footL:[-.13,-1.03,0], thighR:[.13,-.45,0], shinR:[.13,-.8,0], footR:[.13,-1.03,0] },
+      par:{ spine:'hips', neck:'spine', upperArmL:'spine', upperArmR:'spine', foreArmL:'upperArmL', foreArmR:'upperArmR', thighL:'hips', thighR:'hips', shinL:'thighL', shinR:'thighR', footL:'shinL', footR:'shinR' },
+      mesh:(n)=>n==='Object_2'?null:'neck',                                   // eyes / mouth / hair meshes belong to the head
+      seg:(x,y,z)=>{ const ax=Math.abs(x), S=x<0?'L':'R';
+        if(y>.52) return 'neck';
+        if(ax>.30&&y>-.12) return ax<.74?'upperArm'+S:'foreArm'+S;
+        if(y<-.45&&ax>.0){ return y<-1.03?'foot'+S:y<-.8?'shin'+S:'thigh'+S; }
+        return y>-.1?'spine':'hips'; } },
+    diamondhead:{ xf:(x,y,z)=>[-(x-.54),y,-(z+6.4)], iter:2,
+      joint:{ hips:[0,5.6,0], spine:[0,6.4,0], neck:[0,10,0], upperArmL:[-2.65,9.6,0], foreArmL:[-2.65,7.3,0], upperArmR:[2.65,9.6,0], foreArmR:[2.65,7.3,0],
+              thighL:[-1.15,5.4,0], shinL:[-1.15,3.7,0], footL:[-1.15,1,0], thighR:[1.15,5.4,0], shinR:[1.15,3.7,0], footR:[1.15,1,0] },
+      par:{ spine:'hips', neck:'spine', upperArmL:'spine', upperArmR:'spine', foreArmL:'upperArmL', foreArmR:'upperArmR', thighL:'hips', thighR:'hips', shinL:'thighL', shinR:'thighR', footL:'shinL', footR:'shinR' },
+      mesh:(n)=>{ const m=/^polySurface(\d+)_/.exec(n), id=m?+m[1]:0;
+        const T={9:'upperArmL',10:'foreArmL',8:'foreArmL',4:'spine',12:'upperArmR',11:'foreArmR',16:'foreArmR',15:'spine',6:'neck'};
+        if(!m) return 'spine'; return T[id]||null; },                         // pCylinder (Omnitrix) -> chest; 5 / 14 = suit halves incl. a leg: split by height below
+      seg:(x,y,z,nm)=>{ const S=/polySurface5_/.test(nm)?'L':'R'; if(y>6.6) return 'spine'; if(y>5.6) return 'hips'; return y<1.0?'foot'+S:y<3.5?'shin'+S:'thigh'+S; } }
+  };
+  function synth(kind,gltf){
+    const Z=SYN[kind], src=gltf.scene; src.updateMatrixWorld(true);
+    const bones={}, list=[]; const root=new THREE.Group();
+    for(const n of BONES){ const b=new THREE.Bone(); b.name=n; bones[n]=b; list.push(b); }
+    for(const n of BONES){ const p=Z.par[n], j=Z.joint[n]; if(p){ const pj=Z.joint[p]; bones[n].position.set(j[0]-pj[0],j[1]-pj[1],j[2]-pj[2]); bones[p].add(bones[n]); } else { bones[n].position.set(j[0],j[1],j[2]); root.add(bones[n]); } }
+    root.updateMatrixWorld(true);
+    const skel=new THREE.Skeleton(list), BI={}; BONES.forEach((n,i)=>BI[n]=i);
+    const meshes=[]; src.traverse(o=>{ if(o.isMesh) meshes.push(o); });
+    for(const m of meshes){
+      const g=m.geometry.clone(); g.applyMatrix4(m.matrixWorld);
+      const pos=g.attributes.position, n=pos.count, V=new THREE.Vector3();
+      for(let i=0;i<n;i++){ V.fromBufferAttribute(pos,i); const r=Z.xf(V.x,V.y,V.z); pos.setXYZ(i,r[0],r[1],r[2]); }
+      if(g.attributes.normal){ const nm=g.attributes.normal; for(let i=0;i<n;i++){ V.fromBufferAttribute(nm,i); const r=Z.xf(V.x,V.y,V.z); nm.setXYZ(i,r[0],r[1],r[2]); } }
+      // mirrored transform (det<0) flips triangle winding -> restore it
+      const det=(()=>{ const a=Z.xf(1,0,0),b=Z.xf(0,1,0),c=Z.xf(0,0,1),a0=Z.xf(0,0,0); const e=[[a[0]-a0[0],a[1]-a0[1],a[2]-a0[2]],[b[0]-a0[0],b[1]-a0[1],b[2]-a0[2]],[c[0]-a0[0],c[1]-a0[1],c[2]-a0[2]]];
+        return e[0][0]*(e[1][1]*e[2][2]-e[1][2]*e[2][1])-e[0][1]*(e[1][0]*e[2][2]-e[1][2]*e[2][0])+e[0][2]*(e[1][0]*e[2][1]-e[1][1]*e[2][0]); })();
+      if(det<0&&g.index){ const ix=g.index; for(let i=0;i<ix.count;i+=3){ const a=ix.getX(i+1); ix.setX(i+1,ix.getX(i+2)); ix.setX(i+2,a); } }
+      // initial hard weights
+      const whole=Z.mesh(m.name), B=BONES.length, W=new Float32Array(n*B);
+      for(let i=0;i<n;i++){ const bn=whole||Z.seg(pos.getX(i),pos.getY(i),pos.getZ(i),m.name); W[i*B+BI[bn]]=1; }
+      if(!whole){   // diffuse weights across welded neighbours so joints bend smoothly
+        const key=new Map(), wid=new Int32Array(n); let nw=0;
+        for(let i=0;i<n;i++){ const k=Math.round(pos.getX(i)*500)+','+Math.round(pos.getY(i)*500)+','+Math.round(pos.getZ(i)*500); let id=key.get(k); if(id==null){ id=nw++; key.set(k,id); } wid[i]=id; }
+        const nb=Array.from({length:nw},()=>new Set()), ix=g.index;
+        for(let t=0;t<ix.count;t+=3){ const a=wid[ix.getX(t)],b=wid[ix.getX(t+1)],c=wid[ix.getX(t+2)]; nb[a].add(b);nb[a].add(c);nb[b].add(a);nb[b].add(c);nb[c].add(a);nb[c].add(b); }
+        const nbA=nb.map(s=>Array.from(s));
+        let cur=new Float32Array(nw*B); for(let i=0;i<n;i++) for(let k=0;k<B;k++) cur[wid[i]*B+k]=W[i*B+k];
+        for(let it=0;it<Z.iter;it++){ const nx=new Float32Array(nw*B);
+          for(let v=0;v<nw;v++){ const L=nbA[v]; if(!L.length){ for(let k=0;k<B;k++) nx[v*B+k]=cur[v*B+k]; continue; }
+            for(let k=0;k<B;k++){ let s=0; for(let q=0;q<L.length;q++) s+=cur[L[q]*B+k]; nx[v*B+k]=.5*cur[v*B+k]+.5*s/L.length; } }
+          cur=nx; }
+        for(let i=0;i<n;i++) for(let k=0;k<B;k++) W[i*B+k]=cur[wid[i]*B+k];
+      }
+      const si=new Uint16Array(n*4), sw=new Float32Array(n*4);
+      for(let i=0;i<n;i++){ const top=[]; for(let k=0;k<B;k++){ const w=W[i*B+k]; if(w>.001) top.push([w,k]); } top.sort((a,b)=>b[0]-a[0]); let tot=0; for(let q=0;q<4&&q<top.length;q++) tot+=top[q][0];
+        for(let q=0;q<4;q++){ if(q<top.length){ si[i*4+q]=top[q][1]; sw[i*4+q]=top[q][0]/tot; } } }
+      g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4)); g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));
+      const mat=m.material.clone(); mat.skinning=true;
+      const sm=new THREE.SkinnedMesh(g,mat); sm.name=m.name; sm.frustumCulled=false; root.add(sm); meshes[meshes.indexOf(m)]=sm;
+    }
+    root.updateMatrixWorld(true);
+    root.traverse(o=>{ if(o.isSkinnedMesh) o.bind(skel,new THREE.Matrix4()); });
+    gltf.scene=root;
+  }
+
   function prep(kind,gltf){
-    const C=CFG[kind], sc=gltf.scene;
+    const C=CFG[kind]; if(C.syn) synth(kind,gltf); const sc=gltf.scene;
     const bones={}; sc.traverse(o=>{ if(o.isBone) bones[o.name]=o; });
     const need=[]; for(const k in C.map) for(const n of C.map[k]) need.push(n);
     for(const n of need) if(!bones[n]) throw new Error('missing bone '+n);
