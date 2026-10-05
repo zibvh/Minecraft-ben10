@@ -427,6 +427,7 @@ window.addEventListener('error',function(e){
 <script src="three.min.js"></script>
 <script src="glb-libs.js"></script>
 <script src="models.js"></script>
+<script src="props.js"></script>
 <script src="glbbody.js"></script>
 <script>
 (function(){
@@ -1092,6 +1093,7 @@ function placeParkedCar(spec){
   else { const lx=cxb+(side===3?40:-40), a=ROAD_LV[lineLevel(Math.round((lx-LINE_OFF)/PITCH))].a, inward=side===3?-1:1; x=lx+inward*(a-1.7); z=spec.cz+off; yaw=flip; }
   const car=makeBoulder(x,GY+CAR_H,z,CAR_S,CARCOL[(spec.seed>>>21)%6],true); car.mesh.rotation.y=yaw; car.yaw=yaw; car.by=GY; return car;
 }
+function ENVP_CLEAR(x,z){ return (Math.abs(x+21)<12&&Math.abs(z)<13)||(Math.abs(x+8)<5&&Math.abs(z)<4); }   // Ben's house (+ the path to its door) stays free of trees
 function generateLot(spec){
   const key=lotKey(spec.bx,spec.bz,spec.li); if(lots.has(key)) return lots.get(key);
   const t0=performance.now();
@@ -1101,6 +1103,7 @@ function generateLot(spec){
   B(spec.cx,spec.cz,ri,o);
   if(spec.kind==='park') for(let i=0;i<9;i++){ const a=rf()*6.283, r=2+rf()*4.5; o.treeSpots.push([spec.cx+Math.cos(a)*r,spec.cz+Math.sin(a)*r]); }
   if(spec.S!==1) scaleOwner(o,spec.cx,spec.cz,spec.S);
+  o.treeSpots=o.treeSpots.filter(t=>!ENVP_CLEAR(t[0],t[1]));   // keep Ben's house and the Rust Bucket free of trees
   o.meshes=mergeOwner(o);
   if(o.treeSpots.length){                       // trees: two instanced boxes per lot, scaled to the larger world
     const n=o.treeSpots.length, ts=1.7, tI=new THREE.InstancedMesh(TREE_T,trunkMat,n), lI=new THREE.InstancedMesh(TREE_L,leafMat,n);
@@ -1208,26 +1211,51 @@ function skylineTick(px,pz,q){
 }
 
 // ---- road network: street lattice is one repeating ground texture; avenues/boulevards are pooled long strips (to the horizon, zero chunk cost) ----
-function makeStreetTile(){
-  const S=320, u=S/PITCH, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
+// Road surfaces use the supplied road-template textures (asphalt + paving slabs, www/props.js); flat colours until they decode.
+const ROADIMG={asphalt:null,paving:null}, ROADREDRAW=[];
+(function(){ const D=window.__ROAD_TEX; if(!D) return; let n=0; ['asphalt','paving'].forEach(k=>{ const im=new Image(); im.onload=()=>{ ROADIMG[k]=im; if(++n===2) ROADREDRAW.forEach(f=>f()); }; im.src=D[k]; }); })();
+function roadPattern(g,kind,px,fallback){   // pre-shrunk copy of the template texture -> tiling pattern (cached per kind)
+  const im=ROADIMG[kind]; if(!im) return fallback; roadPattern.c=roadPattern.c||{}; let c=roadPattern.c[kind];
+  if(!c){ c=document.createElement('canvas'); c.width=c.height=px; const q=c.getContext('2d'); q.imageSmoothingQuality='high'; q.drawImage(im,0,0,px,px); roadPattern.c[kind]=c; }
+  const p=g.createPattern(c,'repeat'); return p||fallback;
+}
+function grassPattern(){
+  if(grassPattern.c) return grassPattern.c; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'); g.fillStyle='#5fae3c'; g.fillRect(0,0,64,64); let sd=7; const rn=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+  for(let i=0;i<90;i++){ g.fillStyle=rn()<.5?'rgba(60,130,40,.4)':'rgba(130,200,80,.35)'; g.fillRect(rn()*64,rn()*64,3,3); } return grassPattern.c=c;
+}
+function drawStreet(c){
+  const S=320, u=S/PITCH, g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); g.scale(c.width/S,c.width/S);
+  const ASPH=roadPattern(g,'asphalt',256,'#3a3a40'), PAVE=roadPattern(g,'paving',128,'#bdb6a8');
+  const sc=(p,k)=>{ if(p&&p.setTransform){ try{ p.setTransform(new DOMMatrix().scale(k,k)); }catch(e){} } return p; };
   g.fillStyle='#5fae3c'; g.fillRect(0,0,S,S); let sd=11; const rn=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
   for(let i=0;i<420;i++){ g.fillStyle=rn()<.5?'rgba(60,130,40,.35)':'rgba(130,200,80,.3)'; g.fillRect(rn()*S,rn()*S,4,4); }
   const T=ROAD_LV[1].t*u, A=ROAD_LV[1].a*u;
   const bands=(h,col)=>{ g.fillStyle=col; g.fillRect(0,0,h,S); g.fillRect(S-h,0,h,S); g.fillRect(0,0,S,h); g.fillRect(0,S-h,S,h); };
-  bands(T,'#bdb6a8'); bands(T+1.5,'rgba(0,0,0,0)'); g.fillStyle='#8f897f'; g.fillRect(T-1.5,0,1.5,S); g.fillRect(S-T,0,1.5,S); g.fillRect(0,T-1.5,S,1.5); g.fillRect(0,S-T,S,1.5);
-  bands(A,'#3a3a40');
+  bands(T,sc(PAVE,.25)); g.fillStyle='#8f897f'; g.fillRect(T-1.5,0,1.5,S); g.fillRect(S-T,0,1.5,S); g.fillRect(0,T-1.5,S,1.5); g.fillRect(0,S-T,S,1.5);
+  bands(A,sc(ASPH,.25));
   g.fillStyle='#e8d27a'; for(let y=T+10;y<S-T-14;y+=26){ g.fillRect(-1.5,y,3,13); g.fillRect(S-1.5,y,3,13); } for(let x=T+10;x<S-T-14;x+=26){ g.fillRect(x,-1.5,13,3); g.fillRect(x,S-1.5,13,3); }
   g.fillStyle='rgba(255,255,255,.85)'; for(let k=-A+4;k<A-3;k+=9){ g.fillRect(k,T+4,5,10); g.fillRect(k,S-T-14,5,10); g.fillRect(S+k,T+4,5,10); g.fillRect(T+4,k,10,5); g.fillRect(S-T-14,k,10,5); g.fillRect(T+4,S+k,10,5); }
-  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(16,16); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1; return t;
+}
+function makeStreetTile(){
+  const c=document.createElement('canvas'); c.width=c.height=640; drawStreet(c);
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(16,16); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1;
+  ROADREDRAW.push(()=>{ drawStreet(c); t.needsUpdate=true; }); return t;
+}
+function drawStrip(c,level){
+  const L=ROAD_LV[level], u=4, W=L.t*2*u, H=128, g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); g.scale(c.width/W,c.height/H);
+  const ASPH=roadPattern(g,'asphalt',256,'#3a3a40'), PAVE=roadPattern(g,'paving',128,'#bdb6a8'), GR=g.createPattern(grassPattern(),'repeat');
+  const sc=(p,k)=>{ if(p&&p.setTransform){ try{ p.setTransform(new DOMMatrix().scale(k,k)); }catch(e){} } return p; };
+  g.fillStyle=sc(PAVE,.25); g.fillRect(0,0,W,H); g.fillStyle='#8f897f'; g.fillRect((L.t-L.a)*u-2,0,2,H); g.fillRect(W-(L.t-L.a)*u,0,2,H);
+  g.fillStyle=sc(ASPH,.25); g.fillRect((L.t-L.a)*u,0,L.a*2*u,H);
+  const lanes=level===3?6:4, lw=L.a*2*u/lanes, mw=(level===3?3.6:1.8)*u;   // grass median down the middle (wider on boulevards)
+  for(let k=1;k<lanes;k++){ const x=(L.t-L.a)*u+k*lw;
+    if(k===lanes/2){ g.fillStyle=GR; g.fillRect(x-mw/2,0,mw,H); g.fillStyle='#d6d2c8'; g.fillRect(x-mw/2-1.6,0,1.6,H); g.fillRect(x+mw/2,0,1.6,H); }
+    else { g.fillStyle='rgba(255,255,255,.85)'; for(let y=0;y<H;y+=32) g.fillRect(x-1.2,y,2.4,16); } }
 }
 function makeStripTexture(level){
-  const L=ROAD_LV[level], u=4, W=L.t*2*u, H=128, c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
-  g.fillStyle='#bdb6a8'; g.fillRect(0,0,W,H); g.fillStyle='#8f897f'; g.fillRect((L.t-L.a)*u-2,0,2,H); g.fillRect(W-(L.t-L.a)*u,0,2,H);
-  g.fillStyle='#3a3a40'; g.fillRect((L.t-L.a)*u,0,L.a*2*u,H);
-  const lanes=level===3?6:4, lw=L.a*2*u/lanes;
-  for(let k=1;k<lanes;k++){ const x=(L.t-L.a)*u+k*lw;
-    if(k===lanes/2){ g.fillStyle='#e8c83a'; g.fillRect(x-4,0,2.5,H); g.fillRect(x+1.5,0,2.5,H); } else { g.fillStyle='rgba(255,255,255,.85)'; for(let y=0;y<H;y+=32) g.fillRect(x-1.2,y,2.4,16); } }
-  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1,45); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1; return t;
+  const L=ROAD_LV[level], W=L.t*2*4, c=document.createElement('canvas'); c.width=W*2; c.height=256; drawStrip(c,level);
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1,45); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1;
+  ROADREDRAW.push(()=>{ drawStrip(c,level); t.needsUpdate=true; }); return t;
 }
 const GROUND={plane:null,strips:[],mat:[null,null,null,null]};
 (function(){
@@ -2149,6 +2177,104 @@ function closeDial(){ OMNI.open=false; ['omni-dial','omni-dim','omni-x'].forEach
 function toggleDial(){ if(OMNI.open) closeDial(); else openDial(); }
 (function(){ const close=e=>{ e.preventDefault(); e.stopPropagation(); closeDial(); };
   ['omni-dim','omni-x'].forEach(id=>{ const el=document.getElementById(id); el.addEventListener('touchend',close,{passive:false}); el.addEventListener('click',close); }); })();
+
+/* =========================================================================
+   BEN'S HOUSE + THE RUST BUCKET (www/props.js: base64 GLBs)
+   The house is the farm-house interior model, painted (vertex colours: butter-yellow outside, cream inside, wood floor,
+   coloured furniture) with a gable roof added. All meshes are merged per material (7 draw calls), walls and big furniture
+   become colliders. The Rust Bucket is a drivable vehicle (the existing arcade car code) parked in front of the house.
+========================================================================= */
+const ENVP=(function(){
+  const HOUSE={x:-21,z:0,rot:Math.PI,S:1.4}, RV_POS={x:-37.4,z:7,yaw:0};
+  const X0=-5.06,X1=3.25,Z0=-19.02,Z1=-9.02,FY=.07,WALLTOP=2.5, CX=(X0+X1)/2, CZ=(Z0+Z1)/2;
+  const b2buf=s=>{ const bin=atob(s), n=bin.length, u=new Uint8Array(n); for(let i=0;i<n;i++) u[i]=bin.charCodeAt(i); return u.buffer; };
+  const parse=s=>new Promise((res,rej)=>{ try{ new THREE.GLTFLoader().parse(b2buf(s),'',res,rej); }catch(e){ rej(e); } });
+  const C=h=>new THREE.Color(h);
+  const EXT=C(0xf5d98a), INT=C(0xffcf9a), TRIM=C(0xffffff), FLOOR=C(0xd79d62);
+  function shingles(){ const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'); g.fillStyle='#c4573e'; g.fillRect(0,0,64,64);
+    for(let r=0;r<4;r++){ g.fillStyle=r%2?'#b24a34':'#cf6247'; g.fillRect(0,r*16,64,13); g.fillStyle='#7d2f20'; g.fillRect(0,r*16+13,64,3); for(let k=0;k<4;k++){ g.fillRect(k*16+(r%2)*8,r*16,2,13); } }
+    const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.magFilter=THREE.NearestFilter; return t; }
+  function paint(name,mat,p,n,info){
+    if(/^(M_Wall|Door_Frame|M_Window_Frame)/.test(name)){
+      if(/Frame/.test(name)) return TRIM;
+      const sd=info&&info.side; let ext=false;
+      if(sd==='xmin') ext=p.x<info.ref+.035; else if(sd==='xmax') ext=p.x>info.ref-.035; else if(sd==='zmin') ext=p.z<info.ref+.035; else if(sd==='zmax') ext=p.z>info.ref-.035;
+      return ext?EXT:INT; }
+    if(mat==='group_6') return FLOOR;
+    if(mat==='Group_1') return /Fire/.test(name)?C(0xeadfce):C(0x9fd0c8);
+    if(mat==='Group_4') return /Curtain/.test(name)?C(0xd8584f):C(0xa66a3a);
+    if(mat==='Group_2') return C(0xb87a45);
+    if(mat==='Box106__0') return C(0x6a4a35);
+    return C(0x946238);
+  }
+  const T=(x,y,z)=>{ const co=Math.cos(HOUSE.rot), si=Math.sin(HOUSE.rot), dx=(x-CX)*HOUSE.S, dz=(z-CZ)*HOUSE.S; return [HOUSE.x+dx*co+dz*si, GY+.03+(y-FY)*HOUSE.S, HOUSE.z-dx*si+dz*co]; };
+  const addAABB=(pts)=>{ let a=1e9,b=-1e9,c=1e9,d=-1e9,e=1e9,f=-1e9; for(const q of pts){ a=Math.min(a,q[0]);b=Math.max(b,q[0]);c=Math.min(c,q[2]);d=Math.max(d,q[2]);e=Math.min(e,q[1]);f=Math.max(f,q[1]); } return {x0:a,x1:b,z0:c,z1:d,bot:e,top:f}; };
+  async function buildHouse(D){
+    const g=await parse(D.house), sc=g.scene; sc.updateMatrixWorld(true);
+    const grp=new THREE.Group(), buckets={}, cols=[], co=Math.cos(HOUSE.rot), si=Math.sin(HOUSE.rot), v=new THREE.Vector3(), nv=new THREE.Vector3();
+    sc.traverse(o=>{ if(!o.isMesh) return;
+      const geo=o.geometry, pos=geo.attributes.position, nor=geo.attributes.normal, uv=geo.attributes.uv, mname=o.material.name, nmat=new THREE.Matrix3().getNormalMatrix(o.matrixWorld);
+      let B=buckets[mname]; if(!B){ const mp=o.material.map; if(mp){ mp.encoding=THREE.LinearEncoding; mp.needsUpdate=true; }
+        B=buckets[mname]={p:[],n:[],u:[],c:[],i:[],cnt:0,map:mp||null,col:o.material.color?o.material.color.clone():null}; }
+      const name=o.name, base=B.cnt, pts=[]; let info=null;
+      if(/^M_Wall/.test(name)){ let a1=1e9,a2=-1e9,c1=1e9,c2=-1e9; for(let i=0;i<pos.count;i++){ v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld); a1=Math.min(a1,v.x);a2=Math.max(a2,v.x);c1=Math.min(c1,v.z);c2=Math.max(c2,v.z); }
+        info={side:null,ref:0}; const dx=a2-a1, dz=c2-c1, E=.3;
+        if(dx<dz&&dx<.25){ if(a1<X0+E){ info.side='xmin'; info.ref=a1; } else if(a2>X1-E){ info.side='xmax'; info.ref=a2; } }
+        else if(dz<=dx&&dz<.25){ if(c1<Z0+E){ info.side='zmin'; info.ref=c1; } else if(c2>Z1-E){ info.side='zmax'; info.ref=c2; } } }
+      let mnx=1e9,mxx=-1e9,mnz=1e9,mxz=-1e9,mny=1e9,mxy=-1e9;
+      for(let i=0;i<pos.count;i++){ v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld); nv.set(0,1,0); if(nor) nv.fromBufferAttribute(nor,i).applyMatrix3(nmat).normalize();
+        const col=paint(name,mname,v,nv,info), gain=B.map?1.45:1, w=T(v.x,v.y,v.z); B.p.push(w[0],w[1],w[2]); B.n.push(nv.x*co+nv.z*si,nv.y,-nv.x*si+nv.z*co); if(uv) B.u.push(uv.getX(i),uv.getY(i)); else B.u.push(0,0); B.c.push(col.r*gain,col.g*gain,col.b*gain);
+        mnx=Math.min(mnx,v.x);mxx=Math.max(mxx,v.x);mnz=Math.min(mnz,v.z);mxz=Math.max(mxz,v.z);mny=Math.min(mny,v.y);mxy=Math.max(mxy,v.y); }
+      if(geo.index){ for(let i=0;i<geo.index.count;i++) B.i.push(base+geo.index.getX(i)); } else for(let i=0;i<pos.count;i++) B.i.push(base+i);
+      B.cnt+=pos.count;
+      const wall=/^(M_Wall|Door_Frame|M_Window_Frame)/.test(name), furn=/Kitchen_(Oven|Sink|Table|Piano|Shelf|Long)|Dining_Room|Fire_Place|Grandfather|Living/.test(name)&&!/Draw|Handle|Arrow/.test(name);
+      if((wall||furn)&&mny>-1){ const cs=[[mnx,mny,mnz],[mxx,mny,mnz],[mxx,mny,mxz],[mnx,mny,mxz],[mnx,mxy,mnz],[mxx,mxy,mnz],[mxx,mxy,mxz],[mnx,mxy,mxz]].map(q=>T(q[0],q[1],q[2])), bb=addAABB(cs);
+        if(wall){ const MIN=.55; if(bb.x1-bb.x0<MIN){ const m=(bb.x0+bb.x1)/2; bb.x0=m-MIN/2; bb.x1=m+MIN/2; } if(bb.z1-bb.z0<MIN){ const m=(bb.z0+bb.z1)/2; bb.z0=m-MIN/2; bb.z1=m+MIN/2; } bb.bot=GY; bb.top=GY+(WALLTOP-FY)*HOUSE.S; }
+        else if(bb.top-bb.bot<.3) return; cols.push(bb); } });
+    for(const k in buckets){ const B=buckets[k], geo=new THREE.BufferGeometry();
+      geo.setAttribute('position',new THREE.Float32BufferAttribute(B.p,3)); geo.setAttribute('normal',new THREE.Float32BufferAttribute(B.n,3)); geo.setAttribute('uv',new THREE.Float32BufferAttribute(B.u,2)); geo.setAttribute('color',new THREE.Float32BufferAttribute(B.c,3));
+      geo.setIndex(B.cnt>65000?new THREE.Uint32BufferAttribute(B.i,1):new THREE.Uint16BufferAttribute(B.i,1));
+      const m=new THREE.MeshLambertMaterial({map:B.map,vertexColors:true,side:THREE.DoubleSide}); const me=new THREE.Mesh(geo,m); me.castShadow=true; me.receiveShadow=true; me.frustumCulled=false; grp.add(me); }
+    // ---- roof: gable along the long (z) axis, with eaves, ridge cap and painted gable ends ----
+    const o=.7, ye=WALLTOP, rise=(X1-X0+2*o)*.30, yr=ye+rise, xm=CX, zA=Z0-o, zB=Z1+o, xa=X0-o, xb=X1+o;
+    const P=(x,y,z)=>T(x,y,z), roofP=[], roofU=[], roofI=[]; 
+    const quad=(a,b,c,d,uvs)=>{ const k=roofP.length/3; for(const q of [a,b,c,d]) roofP.push(...q); roofU.push(...uvs); roofI.push(k,k+1,k+2,k,k+2,k+3); };
+    const L=(zB-zA)*HOUSE.S/2.2, Wd=Math.hypot(xm-xa,rise)*HOUSE.S/2.2;
+    quad(P(xa,ye,zA),P(xm,yr,zA),P(xm,yr,zB),P(xa,ye,zB),[0,0, Wd,0, Wd,L, 0,L]);
+    quad(P(xm,yr,zA),P(xb,ye,zA),P(xb,ye,zB),P(xm,yr,zB),[0,0, Wd,0, Wd,L, 0,L]);
+    const rg=new THREE.BufferGeometry(); rg.setAttribute('position',new THREE.Float32BufferAttribute(roofP,3)); rg.setAttribute('uv',new THREE.Float32BufferAttribute(roofU,2)); rg.setIndex(roofI); rg.computeVertexNormals();
+    const rm=new THREE.Mesh(rg,new THREE.MeshLambertMaterial({map:shingles(),side:THREE.DoubleSide})); rm.castShadow=true; rm.receiveShadow=true; rm.frustumCulled=false; grp.add(rm);
+    // gable-end triangles (wall colour) + ridge cap
+    const gp=[],gi=[]; const tri=(a,b,c)=>{ const k=gp.length/3; gp.push(...a,...b,...c); gi.push(k,k+1,k+2); };
+    tri(P(X0,ye,Z0),P(X1,ye,Z0),P(xm,yr,Z0)); tri(P(X0,ye,Z1),P(xm,yr,Z1),P(X1,ye,Z1));
+    const gg=new THREE.BufferGeometry(); gg.setAttribute('position',new THREE.Float32BufferAttribute(gp,3)); gg.setIndex(gi); gg.computeVertexNormals();
+    const gm=new THREE.Mesh(gg,new THREE.MeshLambertMaterial({color:EXT,side:THREE.DoubleSide})); gm.castShadow=true; gm.frustumCulled=false; grp.add(gm);
+    const capA=P(xm,yr,zA), capB=P(xm,yr,zB), cap=new THREE.Mesh(new THREE.BoxGeometry(.5,.28,Math.hypot(capB[0]-capA[0],capB[2]-capA[2])+.2),new THREE.MeshLambertMaterial({color:0x8a3524}));
+    cap.position.set((capA[0]+capB[0])/2,capA[1]+.05,(capA[2]+capB[2])/2); cap.rotation.y=HOUSE.rot; cap.castShadow=true; grp.add(cap);
+    // chimney
+    const chp=P(CX+2.2,0,CZ-2.5), ch=new THREE.Mesh(new THREE.BoxGeometry(1.1,3.4,1.1),new THREE.MeshLambertMaterial({color:0xa5543f})); ch.position.set(chp[0],GY+(ye-FY)*HOUSE.S+1.2,chp[2]); ch.castShadow=true; grp.add(ch);
+    // porch step at the front door + a floor patch over the (removed) cellar stairs
+    scene.add(grp); cols.forEach(c=>{ gridAdd(c); }); ENVP.house=grp; ENVP.cols=cols;
+  }
+  async function buildRV(D){
+    const g=await parse(D.rustbucket), sc=g.scene; sc.updateMatrixWorld(true); let mesh=null; sc.traverse(o=>{ if(o.isMesh&&!mesh) mesh=o; }); if(!mesh) return;
+    const geo=mesh.geometry.clone(); geo.applyMatrix4(mesh.matrixWorld);
+    const K=.79, pos=geo.attributes.position, nor=geo.attributes.normal;
+    for(let i=0;i<pos.count;i++){ // model faces +Z, game cars face -Z: turn around, centre on z, scale into the car group's local units
+      const x=pos.getX(i), y=pos.getY(i)-.01, z=pos.getZ(i)-.345; pos.setXYZ(i,-x*K/CAR_S,(y*K-CAR_H)/CAR_S,-z*K/CAR_S);
+      if(nor){ const nx=nor.getX(i), ny=nor.getY(i), nz=nor.getZ(i); nor.setXYZ(i,-nx,ny,-nz); } }
+    pos.needsUpdate=true; if(nor) nor.needsUpdate=true; geo.computeBoundingSphere();
+    const om=mesh.material, mat=new THREE.MeshLambertMaterial({map:om.map||null,color:0xffffff,side:THREE.DoubleSide,transparent:om.transparent,alphaTest:om.alphaTest||0}); if(om.map){ om.map.encoding=THREE.LinearEncoding; om.map.needsUpdate=true; }
+    const p=makeBoulder(RV_POS.x,GY+CAR_H,RV_POS.z,CAR_S,0xe8d9a0,true);
+    while(p.mesh.children.length) p.mesh.remove(p.mesh.children[0]);
+    const me=new THREE.Mesh(geo,mat); me.castShadow=true; p.mesh.add(me);
+    p.mesh.rotation.y=RV_POS.yaw; p.yaw=RV_POS.yaw; p.by=GY; p.rv=true; p.hp=p.hpMax=220; ENVP.rv=p;
+  }
+  function init(){ const D=window.__PROP_DATA; if(!D||!THREE.GLTFLoader) return Promise.resolve();
+    return (async()=>{ try{ if(D.house) await buildHouse(D); }catch(e){ console.warn('house',e); } try{ if(D.rustbucket) await buildRV(D); }catch(e){ console.warn('rustbucket',e); } delete window.__PROP_DATA; })(); }
+  return { init, HOUSE, RV_POS };
+})();
+setTimeout(()=>{ try{ ENVP.init(); }catch(e){ console.warn('ENVP',e); } },60);
 // called by glbbody.js once the GLB bodies are parsed: redo the GLB aliens' portraits (they may have been drawn with the box body) and refresh the dial icons
 window.__glbReady=function(){
   try{ for(const a of ALIENS){ if(!(window.GLBBODY&&GLBBODY.ready(a.id))) continue; delete portraitCache[a.id]; getPortraitCanvas(a.id);
