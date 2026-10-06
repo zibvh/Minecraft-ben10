@@ -905,6 +905,162 @@ function warehouse(cx,cz,rnd,o){
   roofProps(cx,cz,GY+8.5,10,7,o,false); o.roofSpots.push([cx+3,cz,GY+8.5]);
 }
 
+
+/* -------------------------------------------------------------------------
+   Hand-authored road landmarks layered over the existing driveable road
+   backbone. They intentionally break the visual grid without changing the
+   movement/vehicle routing contract.
+------------------------------------------------------------------------- */
+const ROAD_FEATURES=[
+  {id:'crown_roundabout',type:'roundabout',x:40,z:40,r:11},
+  {id:'civic_roundabout',type:'roundabout',x:-40,z:-280,r:10},
+  {id:'market_roundabout',type:'roundabout',x:-280,z:40,r:10},
+  {id:'eastworks_yard',type:'yard',x:440,z:40,r:18},
+  {id:'south_bridge',type:'bridge',x:40,z:360,r:28},
+  {id:'west_overpass',type:'overpass',x:-360,z:40,r:24}
+];
+const ROAD_ART={group:null,built:false};
+function buildRoadFeatures(){
+  if(ROAD_ART.built) return; ROAD_ART.built=true; const g=new THREE.Group(); cityGroup.add(g); ROAD_ART.group=g;
+  const dark=flat(0x454b50), curb=flat(0xb3b5ad), grass=flat(0x4f914c), rail=flat(0x70767b);
+  for(const f of ROAD_FEATURES){
+    if(f.type==='roundabout'){
+      const ring=new THREE.Mesh(new THREE.CylinderGeometry(f.r+1.2,f.r+1.2,.12,32),dark); ring.position.set(f.x,GY-.02,f.z); ring.receiveShadow=true; g.add(ring);
+      const island=new THREE.Mesh(new THREE.CylinderGeometry(f.r*.63,f.r*.63,.22,20),grass); island.position.set(f.x,GY+.05,f.z); island.receiveShadow=true; g.add(island);
+      const inner=new THREE.Mesh(new THREE.CylinderGeometry(f.r*.46,f.r*.46,.16,20),curb); inner.position.set(f.x,GY+.17,f.z); g.add(inner);
+    } else if(f.type==='bridge'){
+      cbox(f.x,GY+.05,f.z,54,.35,12,dark,false,{meshes:[],colliders:[]});
+      for(const sx of [-1,1]){ cbox(f.x,GY+1.3,f.z+sx*7.0,54,1.4,.35,rail,false,{meshes:[],colliders:[]}); }
+    } else if(f.type==='overpass'){
+      cbox(f.x,GY+.05,f.z,12,.35,55,dark,false,{meshes:[],colliders:[]});
+      for(const sz of [-1,1]) cbox(f.x+sz*7,GY+1.3,f.z,.35,1.4,55,rail,false,{meshes:[],colliders:[]});
+    } else if(f.type==='yard'){
+      cbox(f.x,GY+.01,f.z,34,.08,24,flat(0x67605a),false,{meshes:[],colliders:[]});
+      for(let i=-2;i<=2;i++) cbox(f.x+i*6,GY+.08,f.z,4,.65,16,flat(0x77716a),false,{meshes:[],colliders:[]});
+    }
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Procedural architecture & environmental storytelling
+------------------------------------------------------------------------- */
+const CITY_PALETTES={
+  dense:['#40536a','#59677a','#735f55','#6c7480','#8e6c5c'],
+  mixed:['#d7c09f','#b6c8c0','#c8b0aa','#9eabc4','#d4d0ae'],
+  suburban:['#e6d5b7','#cfb1a4','#b7d3c2','#c7c0df','#e6dca7'],
+  old:['#b98e72','#c6a37c','#9d8e7e','#b17f7d','#a9a28f'],
+  market:['#c88453','#d4a55d','#a56f4e','#c36a55','#7e8f65'],
+  industrial:['#74777d','#8b8277','#6d7472','#8e8e88','#666e78'],
+  utility:['#646970','#7b746b','#5e6863','#797b82','#5f666c'],
+  waterfront:['#718f91','#8ca5a0','#ad9b7d','#687d8c','#a58c78'],
+  park:['#b7c99b','#d1c8a5','#a9b8a0','#c0d0b2','#d2c2a3'],
+  rural:['#d9ceb2','#c6bd9d','#b8c89f','#cbb394','#aab99b']
+};
+function paletteColor(profile,i,seed){ const a=CITY_PALETTES[profile]||CITY_PALETTES.mixed; return a[(i+(seed>>>8))%a.length]; }
+function modularBuilding(cx,cz,rnd,o,spec){
+  const p=spec?.profile?.profile||'mixed', vr=o.vr, seed=spec?.seed||1;
+  const kind=spec?.kind||'shop';
+  const dims={
+    office:[15,15,20+(seed%5)*3], restaurant:[16,13,8], supermarket:[18,16,8.5], garage:[17,15,7.5], gas:[14,13,7],
+    duplex:[14,13,10.5], townhouse:[11,13,9.5], clinic:[16,14,10], market:[17,15,8.5], power:[18,15,9], kiosk:[8,7,5.2]
+  }[kind]||[15,14,8];
+  let [w,d,h]=dims; const drift=.92+.14*vr(); w*=drift; d*=.94+.12*vr(); h*=kind==='office'?(0.9+0.35*vr()):1;
+  const base=paletteColor(p,0,seed), trim=paletteColor(p,1,seed), roof=paletteColor(p,2,seed);
+  cbox(cx,GY,cz,w,h,d,wallMat(base,trim,Math.max(2,Math.round(w/3.2)),Math.max(1,Math.round(h/2.8))),true,o);
+  cbox(cx,GY+h,cz,w+.5,.35,d+.5,flat(parseInt(roof.replace('#','0x'))),true,o);
+  const aw=(kind==='restaurant'||kind==='shop'||kind==='market'||kind==='supermarket') ? 1 : 0;
+  if(aw){ const awc=[0xd74f46,0x4a73aa,0xd3aa45][(seed>>>11)%3]; cbox(cx,GY+h*.48,cz+d/2+.34,w*.9,.55,.8,flat(awc),false,o); }
+  const sign=(kind==='restaurant'?'DINER':kind==='supermarket'?'FOODMART':kind==='garage'?'MECHANIC':kind==='gas'?'FUEL':kind==='office'?'OFFICES':kind==='clinic'?'CLINIC':kind==='market'?'MARKET':kind==='kiosk'?'KIOSK':kind.toUpperCase());
+  cbox(cx,GY+h*.67,cz+d/2+.22,Math.min(w*.62,7.5),1.0,.12,signMat(sign,'#26313a'),false,o);
+  const cols=Math.max(2,Math.min(6,Math.floor(w/3.2))), rows=Math.max(1,Math.min(6,Math.floor(h/2.8)));
+  const wx0=cx-w*.42, wz=cz+d/2+.12, ww=(w*.84)/(cols);
+  for(let r=0;r<rows;r++) for(let k=0;k<cols;k++) if(((r*cols+k+seed)%100)<(kind==='warehouse'||kind==='garage'?58:82)){
+    const y=GY+1.25+r*(h-2)/Math.max(1,rows-1), x=wx0+ww*(k+.5);
+    cbox(x,y,wz,.72,.95,.10,flat(kind==='office'?0xa8d8e9:0xbfe2e8),false,o);
+  }
+  const doorW=kind==='garage'?4:1.3, doorH=kind==='garage'?3:2.3; cbox(cx,GY+doorH/2,cz+d/2+.18,doorW,doorH,.14,flat(0x3b4148),false,o);
+  if(kind==='garage') for(let k=-1;k<=1;k++) cbox(cx+k*w*.25,GY+1.7,cz-d/2-.05,1.8,2.8,.12,flat(0x414950),false,o);
+  if(kind==='gas'){
+    cbox(cx,GY+3.4,cz, w*.95,.35,5.5,flat(0xe3d7b5),false,o);
+    for(const sx of [-w*.38,w*.38]) cbox(cx+sx,GY,cz, .28,3.4,.28,flat(0x555b62),false,o);
+    for(const sx of [-2,0,2]) cbox(cx+sx,GY,cz+1.6,1.0,1.4,.65,flat(0x7c8085),false,o);
+  }
+  if(kind==='kiosk'){
+    cbox(cx,GY+2.0,cz+d/2+.28,w*.8,1.0,.45,flat(0x835f40),false,o);
+    cbox(cx+w*.18,GY+2.0,cz+d/2+.5,.65,.65,.14,flat(0xeee4c4),false,o);
+  }
+  if(h>10) roofProps(cx,cz,GY+h+.38,w*.48,d*.48,o,false);
+}
+function landmarkCivic(spec,o,type,ri){
+  const cx=spec.cx,cz=spec.cz, seed=spec.seed, vr=o.vr;
+  const cfg={school:[32,24,8.5,'SCHOOL'],hospital:[32,24,11,'HOSPITAL'],police:[26,22,8,'POLICE'],fire:[25,21,7.5,'FIRE'],station:[30,22,9,'CENTRAL'],mall:[34,27,10,'SHOPPING']};
+  const [w,d,h,label]=cfg[type]||cfg.school;
+  const base=type==='hospital'?'#dbe7e2':type==='school'?'#d7a36d':type==='police'?'#7d8fa7':type==='fire'?'#a74b46':'#8c9aac';
+  cbox(cx,GY,cz,w,h,d,wallMat(base,'#bfe0ed',Math.round(w/3),Math.max(2,Math.round(h/2.6))),true,o);
+  cbox(cx,GY+h,cz,w+.8,.45,d+.8,flat(0x3f4650),true,o);
+  cbox(cx,GY+h*.58,cz+d/2+.3,w*.58,1.35,.12,signMat(label,'#203847'),false,o);
+  for(let side=-1;side<=1;side+=2) cbox(cx+side*(w*.36),GY+.05,cz+d/2+3.1,2.2,.5,2.2,flat(type==='school'?0x5da65d:0x777b80),false,o);
+  for(let i=0;i<4;i++) cbox(cx-w*.42+i*w*.28,GY+h*.35,cz-d/2-.15,1.6,1.8,.10,flat(type==='fire'?0xffdfb0:0xbfe2e8),false,o);
+  roofProps(cx,cz,GY+h+.5,w*.42,d*.38,o,false);
+  if(type==='school'){
+    cbox(cx,GY,cz-d/2-7.5,20,.25,12,flat(0x5e9b50),false,o);
+    cbox(cx,GY+.2,cz-d/2-7.5,1.2,.45,1.2,flat(0x4a79b0),false,o);
+  }
+  if(type==='fire') cbox(cx+w*.34,GY,cz-d/2-4,2.5,5.2,5.2,flat(0x9a3d33),true,o);
+  if(type==='station'){
+    for(let i=-2;i<=2;i++) cbox(cx+i*2.8,GY,cz+d/2+4.5,1.8,1.1,.85,flat(0x5d6770),false,o);
+  }
+}
+function landmarkSpecial(spec,o,ri){
+  const t=spec.landmark.type, cx=spec.cx,cz=spec.cz;
+  if(['school','hospital','police','fire','station','mall'].includes(t)){ landmarkCivic(spec,o,t,ri); return; }
+  if(t==='stadium'){
+    cbox(cx,GY,cz,34,4.2,28,flat(0x5d6670),true,o);
+    cbox(cx,GY+4.2,cz,27,.35,21,flat(0x4a8c55),false,o);
+    for(let i=-5;i<=5;i++) cbox(cx+i*2.2,GY+5.1,cz-11.5,1.35,2.0,.55,flat(0xa6a9ae),false,o);
+    for(let i=-5;i<=5;i++) cbox(cx+i*2.2,GY+5.1,cz+11.5,1.35,2.0,.55,flat(0xa6a9ae),false,o);
+    cbox(cx,GY+6.8,cz,20,.45,7,flat(0x4c8451),false,o); cbox(cx,GY+8.2,cz,17,.2,5,flat(0xb5b08e),false,o);
+    cbox(cx,GY+3.1,cz+14.1,10,1.4,.12,signMat('CROSSTOWN STADIUM','#273b4c'),false,o);
+    return;
+  }
+  if(t==='harbor'){
+    cbox(cx,GY,cz,34,.35,11,flat(0x6a6f72),false,o);
+    for(let i=-3;i<=3;i++) cbox(cx+i*4.5,GY-.05,cz+9,3.2,.45,3.2,flat(0x73553e),false,o);
+    for(let i=-3;i<=3;i++) cbox(cx+i*4.5,GY+1.5,cz+14,.35,3.0,.35,flat(0x5d4f44),false,o);
+    cbox(cx,GY+3,cz,26,5.2,8.5,wallMat('#748589','#b6d2d6',5,2),true,o);
+    cbox(cx,GY+6,cz,27,.4,9,flat(0x404a50),true,o);
+    cbox(cx,GY+3.2,cz+4.5,11,1.2,.12,signMat('HARBOR EXCHANGE','#17495b'),false,o); return;
+  }
+  if(t==='power'){
+    cbox(cx,GY,cz,30,10,22,wallMat('#666a70','#a0adb0',7,3),true,o);
+    for(let i=-2;i<=2;i++) cbox(cx+i*5,GY+10,cz-5,3.2,.5,7,flat(0x4f5960),false,o);
+    for(let i=-3;i<=3;i++) cbox(cx+i*4,GY+6,cz+12,.5,12,.5,flat(0x62676d),false,o);
+    cbox(cx,GY+6,cz+11,13,1.2,.12,signMat('EASTWORKS POWER','#432f32'),false,o); return;
+  }
+  if(t==='garage'){ modularBuilding(cx,cz,ri,o,{kind:'garage',profile:{profile:'industrial'},seed:spec.seed}); return; }
+  if(t==='market'){ modularBuilding(cx,cz,ri,o,{kind:'market',profile:{profile:'market'},seed:spec.seed});
+    for(let i=-4;i<=4;i+=2) cbox(cx+i,GY,cz+12,1.2,.8,1.6,flat([0x9c6f43,0x536d88,0x9c534a][(i+20)%3]),false,o); return; }
+  if(t==='park'){
+    cbox(cx,GY,cz,30,.18,24,flat(0x56a05a),false,o); cbox(cx,GY+.2,cz,8,.25,1.2,flat(0x6f7478),false,o); cbox(cx,GY+.3,cz+2,6,.3,.8,flat(0x4c8d4a),false,o); 
+    for(let i=0;i<16;i++){ const a=i*.3927, r=10+(i%3)*2; o.treeSpots.push([cx+Math.cos(a)*r,cz+Math.sin(a)*r]); } return;
+  }
+}
+function buildLandmark(spec,o,ri){ landmarkSpecial(spec,o,ri); }
+function decorateParcel(spec,o,ri){
+  if(spec.kind==='void'||spec.kind==='landmark') return;
+  const vr=o.vr, prof=spec.profile?.profile||'mixed', cx=spec.cx, cz=spec.cz, seed=spec.seed;
+  // Contextual frontage: these are deliberately sparse and semantic, not random clutter.
+  const f=spec.profile?.front||0, fx=f===1?1:f===3?-1:0, fz=f===0?-1:f===2?1:0;
+  const edge=11+vr()*3, px=cx+fx*edge, pz=cz+fz*edge;
+  if((prof==='market'||spec.kind==='shop'||spec.kind==='restaurant'||spec.kind==='supermarket')&&vr()<.72){ cbox(px,GY+.55,pz,.7,1.1,.7,flat(0x555b60),false,o); if(vr()<.5) cbox(px+.55*fx,GY+.7,pz+.55*fz,.9,.8,.8,flat(0xa07a52),false,o); }
+  if((prof==='industrial'||prof==='utility'||spec.kind==='garage')&&vr()<.75){ cbox(cx+(fx?fx*7:7),GY+.8,cz+(fz?fz*7:7),1.5,1.6,1.1,flat(0x5d4d40),false,o); cbox(cx-fx*6,GY+.5,cz-fz*6,1.8,1,.8,flat(0x6d7277),false,o); }
+  if((prof==='suburban'||prof==='rural'||spec.kind==='house'||spec.kind==='townhouse'||spec.kind==='duplex')&&vr()<.9){
+    cbox(cx+4,GY+.22,cz+5,.12,.45,5,flat(0x7d684f),false,o); cbox(cx-4,GY+.22,cz+5,.12,.45,5,flat(0x7d684f),false,o);
+  }
+  if(vr()<.55 && spec.kind!=='park') o.treeSpots.push([cx+(vr()-.5)*13,cz+(vr()-.5)*13]);
+  if(vr()<.25) o.treeSpots.push([cx+(vr()-.5)*14,cz+(vr()-.5)*14]);
+}
+
 const trunkMat = new THREE.MeshLambertMaterial({color:0x6b4a2d});
 const leafMat = new THREE.MeshLambertMaterial({color:0x2e8b3d});
 
@@ -1049,33 +1205,142 @@ function updateChunkStreaming(px,pz,dt){
      Tier 4   beyond    nothing exists in memory; the layout is a pure function of coordinates (lotSpec/districtOf), so it regenerates identically
 ========================================================================= */
 var CAR_S=2.7, CAR_H=1.35;               // var (hoisted): parked cars can be created during the first lot build
-const LOT_OFF=12;                        // four lots per block at +-12 from the block centre
-const S_KIND={house:2,shop:2,apartment:2,tower:2,school:2,warehouse:1,park:2};
-const SKY_COL={tower:0x34506e,apartment:0x9a7650,house:0xd9c8a8,shop:0xb9bcc6,school:0xb04a32,warehouse:0x8a8478};
+const LOT_OFF=12;                        // four normal parcels per block; landmark superblocks can reserve all four
+const S_KIND={house:2,shop:2,apartment:2,tower:2,school:2,warehouse:1,park:2,office:1.7,restaurant:2,supermarket:1.55,garage:1.7,gas:1.65,kiosk:1.5,duplex:2,townhouse:2,clinic:1.7,market:1.8,power:1.2,void:1,landmark:1};
+const SKY_COL={tower:0x34506e,apartment:0x9a7650,house:0xd9c8a8,shop:0xb9bcc6,school:0xb04a32,warehouse:0x8a8478,office:0x526b88,restaurant:0xb26b51,supermarket:0xb8a85f,garage:0x68737f,gas:0x546a5b,kiosk:0xd29a4f,duplex:0xc8b28e,townhouse:0xc2a07e,clinic:0x8bb3a8,market:0xc87c45,power:0x77727d,landmark:0x66707d};
 const STAT={tChunk:0,tPlan:0,tLot:0,tSky:0,tGround:0,lotsBuilt:0,lotsDropped:0,lotMsLast:0,lotMsMax:0,lotMsSum:0,chunksBuilt:0,skyBuilds:0,skyMsMax:0,urgent:0,queue:0,dropQ:0};
-const FB={lotMs:3.5,chunkMs:1.5,skyMs:1.2,ema:16.7};     // per-frame work budgets, adapted to the measured frame time
+const FB={lotMs:3.5,chunkMs:1.5,skyMs:1.2,ema:16.7};
 function hash3(a,b,c){ let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263)+Math.imul(c|0,2147483629))|0; h=Math.imul(h^(h>>>15),2246822519); h=Math.imul(h^(h>>>13),3266489917); return (h^(h>>>16))>>>0; }
-function sectorOf(bx,bz){ return [Math.floor((bx+4)/8),Math.floor((bz+4)/8)]; }          // 8x8 blocks = 640 u (~470 m) major sectors
-// Recognisable structure: dense downtown at the origin, commercial ring, then residential suburbs with industrial and parkland sectors.
-function districtOf(bx,bz){ const [sx,sz]=sectorOf(bx,bz), d=Math.hypot(sx,sz); if(d<=0.8) return 'downtown'; if(d<=1.5) return 'commercial'; const h=hash3(sx,sz,77)%100; if(d<=2.6) return h<35?'commercial':'residential'; return h<14?'industrial':h<27?'parkland':h<38?'commercial':'residential'; }
+
+/* -------------------------------------------------------------------------
+   NOVACREST METROPOLITAN WORLD DEFINITION
+   The gameplay road backbone remains axis-aligned so existing vehicle AI,
+   collision, minimap, and movement code keep their contracts. The world
+   planner is no longer a random radial grid: districts, neighborhoods,
+   superblocks, landmarks and parcel profiles determine what gets built.
+------------------------------------------------------------------------- */
+const WORLD_DEF={
+  id:'novacrest_region', city:{id:'novacrest',name:'Novacrest'},
+  districts:[
+    {id:'downtown',name:'Crown Downtown',tone:'dense',neighborhoods:['financial_core','civic_square','canal_arts']},
+    {id:'northside',name:'Northreach',tone:'residential',neighborhoods:['pine_hills','schoolbelt','north_market']},
+    {id:'westside',name:'West Market',tone:'older',neighborhoods:['old_quarter','market_row','west_green']},
+    {id:'eastworks',name:'Eastworks',tone:'industrial',neighborhoods:['factory_row','freight_yard','power_corridor']},
+    {id:'southquays',name:'South Quays',tone:'waterfront',neighborhoods:['docklands','harbor_edge','south_industrial']},
+    {id:'outskirts',name:'Outer Ring',tone:'mixed',neighborhoods:['ring_road','rural_edge','hillside_settlements']}
+  ],
+  neighborhoods:{
+    financial_core:{id:'financial_core',name:'Financial Core',profile:'tower'},
+    civic_square:{id:'civic_square',name:'Civic Square',profile:'civic'},
+    canal_arts:{id:'canal_arts',name:'Canal Arts Quarter',profile:'mixed'},
+    pine_hills:{id:'pine_hills',name:'Pine Hills',profile:'suburban'},
+    schoolbelt:{id:'schoolbelt',name:'School Belt',profile:'suburban'},
+    north_market:{id:'north_market',name:'North Market',profile:'mixed'},
+    old_quarter:{id:'old_quarter',name:'Old Quarter',profile:'old'},
+    market_row:{id:'market_row',name:'Market Row',profile:'market'},
+    west_green:{id:'west_green',name:'West Green',profile:'park'},
+    factory_row:{id:'factory_row',name:'Factory Row',profile:'industrial'},
+    freight_yard:{id:'freight_yard',name:'Freight Yard',profile:'industrial'},
+    power_corridor:{id:'power_corridor',name:'Power Corridor',profile:'utility'},
+    docklands:{id:'docklands',name:'Docklands',profile:'waterfront'},
+    harbor_edge:{id:'harbor_edge',name:'Harbor Edge',profile:'waterfront'},
+    south_industrial:{id:'south_industrial',name:'South Industrial',profile:'industrial'},
+    ring_road:{id:'ring_road',name:'Outer Ring',profile:'suburban'},
+    rural_edge:{id:'rural_edge',name:'Rural Edge',profile:'rural'},
+    hillside_settlements:{id:'hillside_settlements',name:'Hillside Settlements',profile:'rural'}
+  },
+  landmarks:[
+    {id:'bens_house',name:"Ben's House",type:'home',x:-21,z:0,radius:30,detail:1,external:true},
+    {id:'central_school',name:'Novacrest Central School',type:'school',bx:-2,bz:-4,detail:1},
+    {id:'novacrest_general',name:'Novacrest General Hospital',type:'hospital',bx:2,bz:-4,detail:1},
+    {id:'central_police',name:'Central Police HQ',type:'police',bx:3,bz:-1,detail:1},
+    {id:'fire_station_04',name:'Fire Station 04',type:'fire',bx:3,bz:2,detail:1},
+    {id:'westside_market',name:'Westside Market Hall',type:'market',bx:-4,bz:1,detail:1},
+    {id:'crosstown_stadium',name:'Crosstown Stadium',type:'stadium',bx:0,bz:-5,detail:1},
+    {id:'grand_station',name:'Novacrest Grand Station',type:'station',bx:1,bz:4,detail:1},
+    {id:'harbor_exchange',name:'Harbor Exchange',type:'harbor',bx:-2,bz:6,detail:1},
+    {id:'eastworks_power',name:'Eastworks Power Facility',type:'power',bx:6,bz:0,detail:1},
+    {id:'rivet_mechanics',name:'Rivet Mechanics Garage',type:'garage',bx:5,bz:3,detail:1},
+    {id:'sunset_mall',name:'Sunset Shopping Center',type:'mall',bx:4,bz:-6,detail:1},
+    {id:'lakeside_park',name:'Lakeside Park',type:'park',bx:-6,bz:4,detail:1}
+  ]
+};
+const LANDMARK_BY_BLOCK=new Map();
+const LANDMARK_BY_ID=new Map(WORLD_DEF.landmarks.map(x=>[x.id,x]));
+WORLD_DEF.landmarks.forEach(x=>{ if(x.bx!==undefined) LANDMARK_BY_BLOCK.set(x.bx+','+x.bz,x); });
+const WORLD_STATE={cityId:WORLD_DEF.city.id,districtId:'downtown',neighborhoodId:'civic_square',landmarkId:null,discovered:new Set(),lastBannerT:0};
+const WORLD_API={definition:WORLD_DEF,state:WORLD_STATE};
+window.OMZ_WORLD=WORLD_API;
+function neighborhoodOf(bx,bz){
+  const ax=Math.abs(bx), az=Math.abs(bz);
+  if(Math.max(ax,az)>14) { const h=hash3(bx,bz,0x63)%3; return h===0?'ring_road':h===1?'rural_edge':'hillside_settlements'; }
+  if(ax<=4&&az<=4){ const h=hash3(bx,bz,0x91)%3; return h===0?'financial_core':h===1?'civic_square':'canal_arts'; }
+  if(bz<-4) { const h=hash3(bx,bz,0x17)%3; return h===0?'pine_hills':h===1?'schoolbelt':'north_market'; }
+  if(bx<-4) { const h=hash3(bx,bz,0x21)%3; return h===0?'old_quarter':h===1?'market_row':'west_green'; }
+  if(bx>4) { const h=hash3(bx,bz,0x31)%3; return h===0?'factory_row':h===1?'freight_yard':'power_corridor'; }
+  if(bz>4) { const h=hash3(bx,bz,0x47)%3; return h===0?'docklands':h===1?'harbor_edge':'south_industrial'; }
+  const h=hash3(bx,bz,0x59)%3; return h===0?'ring_road':h===1?'rural_edge':'hillside_settlements';
+}
+function districtFromNeighborhood(n){ const q=WORLD_DEF.neighborhoods[n]; if(!q) return 'outskirts'; return WORLD_DEF.districts.find(d=>d.neighborhoods.indexOf(n)>=0)?.id||'outskirts'; }
+function districtOf(bx,bz){ return districtFromNeighborhood(neighborhoodOf(bx,bz)); }
+function landmarkForBlock(bx,bz){ return LANDMARK_BY_BLOCK.get(bx+','+bz)||null; }
+function lotReservedByLandmark(bx,bz){ return !!landmarkForBlock(bx,bz); }
+function benReserved(bx,bz,li){ const cx=bx*PITCH+((li&1)?LOT_OFF:-LOT_OFF), cz=bz*PITCH+((li&2)?LOT_OFF:-LOT_OFF); return Math.hypot(cx+21,cz)<23; }
+function parcelProfile(bx,bz,li){
+  const n=neighborhoodOf(bx,bz), p=WORLD_DEF.neighborhoods[n]?.profile||'mixed', h=hash3(bx,bz,li+0x730)%1000/1000;
+  let front=((hash3(bx,bz,li+0x88)>>3)%4); // 0 north, 1 east, 2 south, 3 west frontage hint for contextual props
+  if(p==='tower') return {profile:p,density:'high',front,roof:'flat',variance:h};
+  if(p==='industrial'||p==='utility') return {profile:p,density:'low',front,roof:'flat',variance:h};
+  if(p==='waterfront') return {profile:p,density:'medium',front,roof:'flat',variance:h};
+  if(p==='old'||p==='market') return {profile:p,density:'medium',front,roof:h<.4?'flat':'sloped',variance:h};
+  if(p==='suburban'||p==='rural') return {profile:p,density:'low',front,roof:h<.55?'sloped':'flat',variance:h};
+  return {profile:p,density:'medium',front,roof:h<.5?'flat':'sloped',variance:h};
+}
 function lotSpec(bx,bz,li){
-  const h=hash3(bx,bz,li+1), r=(h%1000)/1000, r2=((h>>>10)%1000)/1000, dist=districtOf(bx,bz);
+  const h=hash3(bx,bz,li+1), r=(h%1000)/1000, r2=((h>>>10)%1000)/1000, n=neighborhoodOf(bx,bz), dist=districtOf(bx,bz), prof=parcelProfile(bx,bz,li), lm=landmarkForBlock(bx,bz);
+  const baseCx=bx*PITCH+((li&1)?LOT_OFF:-LOT_OFF), baseCz=bz*PITCH+((li&2)?LOT_OFF:-LOT_OFF);
+  if(lm) return li===0?{bx,bz,li,kind:'landmark',landmark:lm,cx:bx*PITCH,cz:bz*PITCH,S:1,w:36,d:36,h:12,hBase:12,hm:1,seed:h||1,dist,neighborhood:n,profile:prof}: {bx,bz,li,kind:'void',landmark:lm,cx:baseCx,cz:baseCz,S:1,w:0,d:0,h:0,hBase:0,hm:1,seed:h||1,dist,neighborhood:n,profile:prof};
+  if(bx===0&&bz===0) return {bx,bz,li,kind:'void',cx:baseCx,cz:baseCz,S:1,w:0,d:0,h:0,hBase:0,hm:1,seed:h||1,dist,neighborhood:n,profile:prof};
+  if(benReserved(bx,bz,li)) return {bx,bz,li,kind:'void',cx:baseCx,cz:baseCz,S:1,w:0,d:0,h:0,hBase:0,hm:1,seed:h||1,dist,neighborhood:n,profile:prof};
   let kind;
-  if(bx===0&&bz===0) kind='park'; else if(bx===0&&bz===-1&&li===3) kind='school';
-  else if(dist==='downtown') kind=r<.55?'tower':r<.8?'apartment':r<.95?'shop':'park';
-  else if(dist==='commercial') kind=r<.4?'shop':r<.7?'apartment':r<.9?'tower':'park';
-  else if(dist==='industrial') kind=r<.7?'warehouse':r<.8?'shop':r<.9?'apartment':'park';
-  else if(dist==='parkland') kind=r<.8?'park':r<.9?'house':'shop';
-  else kind=r<.6?'house':r<.85?'apartment':r<.93?'shop':'park';
-  const cx=bx*PITCH+((li&1)?LOT_OFF:-LOT_OFF), cz=bz*PITCH+((li&2)?LOT_OFF:-LOT_OFF), S=S_KIND[kind];
+  if(dist==='downtown') kind=r<.30?'tower':r<.55?'office':r<.70?'apartment':r<.80?'restaurant':r<.90?'shop':'park';
+  else if(dist==='northside') kind=r<.42?'house':r<.62?'townhouse':r<.74?'duplex':r<.84?'apartment':r<.91?'shop':r<.95?'clinic':'park';
+  else if(dist==='westside') kind=r<.26?'townhouse':r<.44?'house':r<.62?'shop':r<.77?'restaurant':r<.86?'market':r<.93?'apartment':'park';
+  else if(dist==='eastworks') kind=r<.45?'warehouse':r<.63?'garage':r<.76?'power':r<.84?'office':r<.91?'kiosk':'parking';
+  else if(dist==='southquays') kind=r<.28?'warehouse':r<.46?'market':r<.59?'restaurant':r<.71?'office':r<.80?'garage':r<.90?'apartment':'park';
+  else kind=r<.45?'house':r<.61?'duplex':r<.73?'townhouse':r<.85?'garage':r<.93?'shop':'park';
+  if(kind==='parking') kind='park';
+  const cx=baseCx, cz=baseCz, Sbase=S_KIND[kind]||1.5;
+  const varS=.88+(h%37)/100;
+  let S=Math.min(2.25,Sbase*varS);
+  if(prof.density==='low') S*=.92;
+  if(prof.density==='high') S*=1.03;
   let w=0,d=0,hh=0,hBase=0,hm=1;
-  if(kind==='house'){ w=12;d=12;hh=8; }
-  else if(kind==='shop'){ w=16;d=14;hh=8.8; }
-  else if(kind==='apartment'){ hBase=6+Math.floor(r2*3)*3; w=d=14; hh=(hBase+.4)*S; }
-  else if(kind==='tower'){ hBase=18+Math.floor(r2*4)*5; hm=dist==='downtown'?1.3+((h>>>20)%100)/100:1; w=d=16; hh=(hBase*hm+.5)*S; }
-  else if(kind==='school'){ w=18.8;d=8;hh=11; }
-  else if(kind==='warehouse'){ w=20;d=14;hh=8.5; }
-  return {bx,bz,li,kind,cx,cz,S,w,d,h:hh,hBase,hm,seed:h||1,dist};
+  if(kind==='house'){w=12;d=12;hh=8;}
+  else if(kind==='townhouse'){w=11;d=13;hh=9.5;}
+  else if(kind==='duplex'){w=14;d=13;hh=10.5;}
+  else if(kind==='shop'){w=16;d=14;hh=8.8;}
+  else if(kind==='restaurant'){w=16;d=13;hh=8;}
+  else if(kind==='market'){w=17;d=15;hh=8.5;}
+  else if(kind==='clinic'){w=16;d=14;hh=10;}
+  else if(kind==='garage'){w=17;d=15;hh=7.5;}
+  else if(kind==='supermarket'){w=18;d=16;hh=8.5;}
+  else if(kind==='office'){hBase=18+Math.floor(r2*4)*4;w=16;d=15;hh=hBase;}
+  else if(kind==='apartment'){hBase=9+Math.floor(r2*4)*3;w=14;d=14;hh=hBase;}
+  else if(kind==='tower'){hBase=26+Math.floor(r2*5)*8;hm=1.05+((h>>>20)%90)/100;w=15;d=15;hh=hBase*hm;}
+  else if(kind==='warehouse'){w=20;d=15;hh=8.5;}
+  else if(kind==='power'){w=18;d=15;hh=9;}
+  else if(kind==='kiosk'){w=8;d=7;hh=5.2;}
+  else if(kind==='park'){w=18;d=18;hh=.4;}
+  // Fit the actual varied footprint against the nearest road's *asphalt*
+  // edge. Different road lines have different widths, so a single global
+  // parcel size would still leak into some boulevards. The extra margin
+  // covers facade drift/roof caps added by modularBuilding().
+  const nlx=nearestLine(cx), nlz=nearestLine(cz);
+  const clearX=Math.max(8,Math.abs(nlx.pos-cx)-nlx.a-.6), clearZ=Math.max(8,Math.abs(nlz.pos-cz)-nlz.a-.6);
+  const maxSpan=2*Math.min(clearX,clearZ), rawSpan=Math.max(w,d)*1.12+.6;
+  S=Math.min(S,maxSpan/rawSpan);
+  return {bx,bz,li,kind,cx,cz,S,w,d,h:hh,hBase,hm,seed:h||1,dist,neighborhood:n,profile:prof};
 }
 function scaleOwner(o,px,pz,S){        // scale everything a builder produced about the lot centre (ground-anchored)
   const gy=GY;
@@ -1120,9 +1385,14 @@ function generateLot(spec){
   const t0=performance.now();
   const o={meshes:[],colliders:[],treeSpots:[],roofSpots:[],vr:seededRng((spec.seed^0x5bd1e995)||12345),hBase:spec.hBase,hm:spec.hm};
   const rf=seededRng(spec.seed), ri=n=>Math.floor(rf()*n);
-  const B={house,shop,apartment,tower,school,park,warehouse}[spec.kind];
-  B(spec.cx,spec.cz,ri,o);
-  if(spec.kind==='park') for(let i=0;i<9;i++){ const a=rf()*6.283, r=2+rf()*4.5; o.treeSpots.push([spec.cx+Math.cos(a)*r,spec.cz+Math.sin(a)*r]); }
+  if(spec.kind==='void') return null;
+  if(spec.kind==='landmark') buildLandmark(spec,o,ri);
+  else {
+    const B={house,shop,apartment,tower,school,park,warehouse}[spec.kind]||modularBuilding;
+    B(spec.cx,spec.cz,ri,o,spec);
+  }
+  decorateParcel(spec,o,ri);
+  if(spec.kind==='park') for(let i=0;i<8+(spec.profile?.density==='low'?3:0);i++){ const a=rf()*6.283, r=2.5+rf()*6; o.treeSpots.push([spec.cx+Math.cos(a)*r,spec.cz+Math.sin(a)*r]); }
   if(spec.S!==1) scaleOwner(o,spec.cx,spec.cz,spec.S);
   o.treeSpots=o.treeSpots.filter(t=>!ENVP_CLEAR(t[0],t[1]));   // keep Ben's house and the Rust Bucket free of trees
   o.meshes=mergeOwner(o);
@@ -1155,7 +1425,7 @@ function planLots(px,pz,sf,horizon,q){
     const cx=bx*PITCH+((li&1)?LOT_OFF:-LOT_OFF), cz=bz*PITCH+((li&2)?LOT_OFF:-LOT_OFF);
     if(Math.abs(cx)>WORLD_LIMIT-30||Math.abs(cz)>WORLD_LIMIT-30) continue;
     let best=1e9; for(let k=0;k<samples.length;k++){ const sm=samples[k], d=Math.hypot(cx-sm[0],cz-sm[1]); if(d<=sm[2]) best=Math.min(best,k?d*1.15:d); }
-    if(best>=1e9) continue; const key=lotKey(bx,bz,li); want.add(key); if(!lots.has(key)) missing.push([bx,bz,li,best]);
+    if(best>=1e9) continue; const sp=lotSpec(bx,bz,li); if(sp.kind==='void') continue; const key=lotKey(bx,bz,li); want.add(key); if(!lots.has(key)) missing.push([bx,bz,li,best]);
   }
   missing.sort((a,b)=>a[3]-b[3]); STREAM.lotQ=missing.length>q.lotMax*1.5?missing.slice(0,Math.round(q.lotMax*1.5)):missing; STREAM.want=want;
   // drop lots that are comfortably outside both the player radius and the predicted corridor (hysteresis keeps edges from thrashing)
@@ -1196,8 +1466,21 @@ function perfTick(dt){
 }
 function setPerf(on){ PERF.on=!!on; document.getElementById('perf-hud').style.display=PERF.on?'block':'none'; }
 addEventListener('keydown',e=>{ if(e.code==='F3'){ e.preventDefault(); setPerf(!PERF.on); } });
+function updateWorldLocation(px,pz,dt){
+  WORLD_STATE.lastBannerT=Math.max(0,WORLD_STATE.lastBannerT-dt);
+  // Determine location from a stable block coordinate so entering an area is deterministic.
+  const bx=Math.floor(px/PITCH), bz=Math.floor(pz/PITCH), nb=neighborhoodOf(bx,bz), dist=districtOf(bx,bz), lmts=WORLD_DEF.landmarks;
+  if(dist!==WORLD_STATE.districtId){ WORLD_STATE.districtId=dist; WORLD_STATE.neighborhoodId=nb; if(WORLD_STATE.lastBannerT<=0){ const dn=WORLD_DEF.districts.find(d=>d.id===dist)?.name||dist; bannerText('ENTERING: '+dn.toUpperCase()); WORLD_STATE.lastBannerT=2.4; } }
+  else if(nb!==WORLD_STATE.neighborhoodId){ WORLD_STATE.neighborhoodId=nb; }
+  let best=null,bd=1e9; for(const lm of lmts){ const lx=lm.bx!==undefined?lm.bx*PITCH:(lm.x||0), lz=lm.bz!==undefined?lm.bz*PITCH:(lm.z||0), dx=px-lx, dz=pz-lz, d=Math.hypot(dx,dz); const rr=lm.radius||30; if(d<rr&&d<bd){best=lm;bd=d;} }
+  const id=best?.id||null; if(id&&id!==WORLD_STATE.landmarkId){ WORLD_STATE.landmarkId=id; WORLD_STATE.discovered.add(id); if(WORLD_STATE.lastBannerT<=0){ bannerText('DISCOVERED: '+best.name.toUpperCase()); WORLD_STATE.lastBannerT=2.8; } }
+  if(!id) WORLD_STATE.landmarkId=null;
+}
+
 function updateMetropolis(px,pz,dt){
+  if(!ROAD_ART.built) buildRoadFeatures();
   perfTick(dt);
+  updateWorldLocation(px,pz,dt);
   const q=QUALITY.presets[QUALITY.level], speed=Math.hypot(velX,velZ), sf=Math.max(0,Math.min(1,(speed-10)/80)), horizon=1+2*sf;   // 1..3 s prediction horizon scaled by speed
   const dirx=speed>1?velX/speed:0, dirz=speed>1?velZ/speed:0, hb=speed>10?Math.round(Math.atan2(dirz,dirx)/.45):99;
   const pk=Math.round(px/PITCH)+','+Math.round(pz/PITCH)+','+hb;
@@ -4640,6 +4923,11 @@ function updateMinimap(dt){
     const rx=Math.cos(y), rz=-Math.sin(y), fx=-Math.sin(y), fz=-Math.cos(y), px=player.pos.x, pz=player.pos.z;
     const dot=(wx,wz,col,r)=>{ const dx=wx-px, dz=wz-pz; let mx=(dx*rx+dz*rz)*k, my=-(dx*fx+dz*fz)*k; const m=Math.hypot(mx,my); if(m>RR-3){ mx*=(RR-3)/m; my*=(RR-3)/m; r*=.7; } c.fillStyle=col; c.beginPath(); c.arc(cx+mx,cy+my,r,0,Math.PI*2); c.fill(); };
     for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e.alive) continue; if(e.npc&&!e.aggro) continue; const p=e.mesh.position; if(Math.abs(p.x-px)>RANGE*1.5||Math.abs(p.z-pz)>RANGE*1.5) continue; dot(p.x,p.z,e.npc?'#ff9a2e':'#ff3a3a',3); }
+    // world context: nearby road hierarchy + discovered/major landmarks, analytical (no extra scene meshes)
+    const roadDot=(wx,wz,lv)=>{ const dx=wx-px,dz=wz-pz; let mx=(dx*rx+dz*rz)*k,my=-(dx*fx+dz*fz)*k; if(Math.abs(mx)>RR||Math.abs(my)>RR) return; c.strokeStyle=lv===3?'#b5b7ba':lv===2?'#7f8790':'#4f5b63'; c.lineWidth=lv===3?3:lv===2?2:1; c.beginPath(); c.moveTo(cx+mx-3*(lv+1),cy+my); c.lineTo(cx+mx+3*(lv+1),cy+my); c.stroke(); };
+    const n0=Math.floor((pz-RANGE-LINE_OFF)/PITCH), n1=Math.ceil((pz+RANGE-LINE_OFF)/PITCH); for(let n=n0;n<=n1;n++){ const lv=lineLevel(n), z=LINE_OFF+n*PITCH; roadDot(px,z,lv); }
+    const m0=Math.floor((px-RANGE-LINE_OFF)/PITCH), m1=Math.ceil((px+RANGE-LINE_OFF)/PITCH); for(let n=m0;n<=m1;n++){ const lv=lineLevel(n), x=LINE_OFF+n*PITCH; roadDot(x,pz,lv); }
+    for(const lm of WORLD_DEF.landmarks){ const wx=lm.bx!==undefined?lm.bx*PITCH:lm.x, wz=lm.bz!==undefined?lm.bz*PITCH:lm.z; if(Math.abs(wx-px)>RANGE||Math.abs(wz-pz)>RANGE) continue; dot(wx,wz,WORLD_STATE.discovered.has(lm.id)?'#ffd35a':'#6f7d7f',WORLD_STATE.discovered.has(lm.id)?3:2); }
     // north marker
     const nx=(0*rx+(-1)*rz), ny=-(0*fx+(-1)*fz); c.fillStyle='#fff'; c.font='bold 11px sans-serif'; c.textAlign='center'; c.textBaseline='middle'; c.fillText('N',cx+nx*(RR-8),cy+ny*(RR-8));
     // player arrow
