@@ -105,11 +105,22 @@
   .hotslot.sel{border-color:var(--green);box-shadow:0 0 8px rgba(57,255,138,0.6);}
   .hotslot canvas{width:100%;height:100%;}
 
-  #joystick-zone{position:absolute;left:max(20px,env(safe-area-inset-left,20px));
-    bottom:max(20px,env(safe-area-inset-bottom,20px));width:120px;height:120px;pointer-events:auto;}
-  #joystick-base{position:absolute;inset:0;border-radius:50%;background:rgba(30,60,45,0.35);border:2px solid rgba(57,255,138,0.35);}
-  #joystick-stick{position:absolute;width:50px;height:50px;border-radius:50%;background:rgba(57,255,138,0.35);
-    border:2px solid rgba(57,255,138,0.6);left:50%;top:50%;transform:translate(-50%,-50%);}
+  #joystick-zone{position:absolute;left:max(6px,env(safe-area-inset-left,6px));
+    bottom:max(6px,env(safe-area-inset-bottom,6px));width:200px;height:200px;pointer-events:auto;}
+  #joystick-base{position:absolute;left:100px;top:100px;width:124px;height:124px;transform:translate(-50%,-50%);border-radius:50%;
+    background:radial-gradient(circle,rgba(20,50,38,.18) 0,rgba(30,60,45,.38) 100%);border:2px solid rgba(57,255,138,0.35);opacity:.65;transition:opacity .12s;}
+  #joystick-base::before{content:'';position:absolute;inset:14px;border-radius:50%;border:1px dashed rgba(57,255,138,.28);}
+  #joystick-zone.held #joystick-base{opacity:1;}
+  #joystick-stick{position:absolute;width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 35% 30%,rgba(190,255,215,.75),rgba(57,255,138,.45));
+    border:2px solid rgba(57,255,138,0.8);left:100px;top:100px;transform:translate(-50%,-50%);box-shadow:0 0 10px rgba(57,255,138,.35);will-change:left,top;}
+  body.driving #joystick-zone{display:none !important;}
+  .steer{display:none;position:absolute;bottom:max(26px,env(safe-area-inset-bottom,26px));width:84px;height:84px;border-radius:50%;border:2px solid var(--theme);
+    background:radial-gradient(circle at 30% 22%,rgba(255,255,255,.3),rgba(255,255,255,0) 46%),linear-gradient(160deg,rgba(12,44,32,.94),rgba(3,12,9,.96));
+    align-items:center;justify-content:center;pointer-events:auto;z-index:22;touch-action:none;}
+  .steer svg{width:42px;height:42px;stroke:var(--theme);fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
+  .steer.on{background:linear-gradient(160deg,#2f9a62,#0a3a24);box-shadow:0 0 16px var(--theme);transform:scale(.95);}
+  #steer-l{left:max(22px,env(safe-area-inset-left,22px));} #steer-r{left:calc(max(22px,env(safe-area-inset-left,22px)) + 104px);}
+  body.driving.tch .steer{display:flex;}
 
 
 
@@ -139,10 +150,12 @@
   #veh-hud .vtrack{width:70px;height:7px;border-radius:4px;background:rgba(255,255,255,.14);overflow:hidden;}
   #veh-hud .vtrack i{display:block;height:100%;width:100%;background:#39ff8a;transition:background .2s;}
   body.driving #actions,body.driving #lock-btn,body.driving #btn-special,body.driving #hotbar{display:none !important;}
-  body.driving #btn-attack svg{display:none;}
-  body.driving #btn-attack::after{content:'HORN';font-size:11px;font-weight:700;letter-spacing:1px;color:var(--green);}
-  body.driving #btn-jump svg{display:none;}
-  body.driving #btn-jump::after{content:'BRAKE';font-size:10px;font-weight:700;letter-spacing:1px;color:var(--green);}
+  body.driving #btn-attack svg,body.driving #btn-attack b,body.driving #btn-jump svg{display:none;}
+  body.driving #btn-attack{background:radial-gradient(circle at 30% 22%,rgba(255,255,255,.4),rgba(255,255,255,0) 42%),linear-gradient(160deg,#e02424,#4a0606) !important;border-color:#ff5a5a !important;box-shadow:0 0 18px rgba(255,60,60,.6) !important;}
+  body.driving #hud #btn-attack{width:104px;height:104px;right:12px;bottom:max(16px,env(safe-area-inset-bottom,16px));}
+  body.driving #btn-attack::after{content:'BRAKE';font-size:15px;font-weight:900;letter-spacing:1.5px;color:#fff;text-shadow:0 1px 3px #000;}
+  body.driving #hud #btn-jump{right:36px;bottom:calc(max(16px,env(safe-area-inset-bottom,16px)) + 126px);}
+  body.driving #btn-jump::after{content:'HORN';font-size:10px;font-weight:700;letter-spacing:1px;color:var(--green);}
   #status-text{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);color:#fff;font-size:12px;
     opacity:0;letter-spacing:1px;pointer-events:none;}
   #status-text.show{opacity:0.85;transition:opacity 0.2s;}
@@ -267,6 +280,8 @@
 
   /* --- left: joystick with RUN above it --- */
     #hud #btn-run{pointer-events:none !important;opacity:.42;transition:opacity .15s,transform .15s,box-shadow .15s;position:absolute;left:calc(max(20px,env(safe-area-inset-left,20px)) + 41px);bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 160px);width:38px;height:38px;border-color:var(--theme);flex-direction:column;gap:0;pointer-events:auto;}
+  #hud #btn-attack b{font-size:9px;letter-spacing:1px;color:#fff;margin-top:1px;text-shadow:0 1px 2px #000;}
+  #hud #btn-attack{flex-direction:column;}
   #hud #btn-run svg{width:18px;height:18px;stroke:var(--theme);filter:drop-shadow(0 0 3px var(--theme));}
   #hud #btn-run b{font-size:5.5px;letter-spacing:.5px;color:#eaffff;margin-top:-1px;}
   #hud #joystick-zone.held ~ #btn-run{opacity:.85;}
@@ -391,12 +406,13 @@
   <div id="cam-btn" title="Camera mode"><svg viewBox="0 0 24 24"><path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.6"/></svg></div>
   <div id="pause-btn" title="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></div>
   <div id="hotbar"></div>
+  <div id="steer-l" class="steer"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div id="steer-r" class="steer"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
   <div id="joystick-zone"><div id="joystick-base"></div><div id="joystick-stick"></div></div>
   <div class="abtn" id="btn-run"><svg viewBox="0 0 24 24"><circle cx="14.5" cy="4.5" r="2"/><path d="M6 21l3-6 3-3-2-4 4-2 3 4h3M9 15l4 1 1 5M8 8l-3 3"/></svg><b>RUN</b></div>
 
   <div id="action-buttons">
     <div class="abtn" id="btn-special"><svg viewBox="0 0 24 24"><path d="M13 2 L4 14 h6 l-1 8 9-12h-6z"/></svg></div>
-    <div class="abtn" id="btn-attack"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M6 22v-4a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v4"/></svg></div>
+    <div class="abtn" id="btn-attack"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="13" height="9" rx="3.2"/><path d="M8.2 9v5M12.5 9v5M4.5 14.2h3.2M7 18v3h8v-3"/><path d="M19 5.2l1.8-1.8M20.4 9.2h2.4M17.6 3v-2"/></svg><b>PUNCH</b></div>
     <div class="abtn" id="btn-jump"><svg viewBox="0 0 24 24"><path d="M12 4 l7 8h-4v8h-6v-8H5z"/></svg></div>
   </div>
 </div>
@@ -1578,11 +1594,14 @@ function animateRig(parts,dt,inp){
   if(inp.hb && inp.flying && !inp.swimming){ // rock flight: Heatblast surfs standing on a flying lava rock - upright, knees soft, arms out for balance
     const t=A.t, sw=Math.sin(t*2.4), sw2=Math.sin(t*3.7+1), sp=Math.min(1,mv+.0), fl=Math.sin(t*9)*.5+Math.sin(t*14)*.5;
     // surfing a lava rock: arms keep balancing - wide, dipping and rising as the rock banks; trail back when moving fast
-    P.tLx=.28+sw*.04; P.tRx=-.22-sw*.04; P.kL=.55+sw2*.06; P.kR=.5-sw2*.06; P.fL=-.2; P.fR=.1; P.tLz=-.08; P.tRz=.08; P.hipsY-=.09;
-    P.sL.z=-(.85+.25*sw+.1*fl*sp); P.sR.z=(.85-.25*sw2+.1*fl*sp);
-    P.sL.x=.1+.35*sw2-.5*sp; P.sR.x=.1-.35*sw-.5*sp;
-    P.eL=.3+.25*(1+sw2)*.5+.15*sp; P.eR=.3+.25*(1-sw)*.5+.15*sp;
-    P.chX+=-.12-.1*sp; P.hdX+=.1+.05*sp; P.chZ+=sw*.05; P.chY+=sw2*.08; P.hdY+=-sw*.06;
+    // low skating/surfing crouch: knees deep, hips dropped, torso leaning into the wind, one foot forward, arms out low for balance
+    P.hipsY-=.34; P.hipsRY=.35+sw*.04; P.hipsZ-=.05;
+    P.tLx=.95+sw*.05; P.tRx=.35-sw*.05; P.kL=1.5+sw2*.07; P.kR=1.25-sw2*.07; P.fL=-.55; P.fR=-.3; P.tLz=-.16; P.tRz=.16;
+    P.chX+=-.5-.12*sp; P.chY+=-.3+sw2*.06; P.chZ+=sw*.05; P.hdX+=.38+.05*sp; P.hdY+=.25-sw*.05;
+    P.sL.z=-(.95+.2*sw+.12*fl*sp); P.sR.z=(.8-.2*sw2+.12*fl*sp);
+    P.sL.x=.35+.3*sw2-.55*sp; P.sR.x=-.25-.3*sw-.7*sp;
+    P.eL=.35+.2*(1+sw2)*.5; P.eR=.3+.2*(1-sw)*.5+.15*sp;
+    if(parts.leftArm2){ P.s2L.x=0; P.s2R.x=0; }
   }
   if(inp.xlLeap && !inp.flying){ // XLR8 running leap: stretched out, arms swept back, one leg reaching, one trailing
     P.chX+=-.45; P.hdX+=.3; P.sL.x=-1.7; P.sR.x=-1.7; P.sL.z=-.25; P.sR.z=.25; P.eL=.25; P.eR=.25;
@@ -3765,13 +3784,24 @@ renderer.domElement.addEventListener('click', ()=>{
   }
 });
 
+// driving: steer buttons (touch). BRAKE (big red) = attack button, HORN = jump button.
+const drv={l:false,r:false};
+if(isTouch) document.body.classList.add('tch');
+[['steer-l','l'],['steer-r','r']].forEach(([id,k])=>{ const el=document.getElementById(id);
+  const on=e=>{ drv[k]=true; el.classList.add('on'); e.preventDefault(); }, off=e=>{ drv[k]=false; el.classList.remove('on'); e.preventDefault(); };
+  el.addEventListener('touchstart',on,{passive:false}); el.addEventListener('touchend',off,{passive:false}); el.addEventListener('touchcancel',off,{passive:false});
+  el.addEventListener('mousedown',on); el.addEventListener('mouseup',off); el.addEventListener('mouseleave',off); });
 // touch joystick (movement)
 const joyZone = document.getElementById('joystick-zone');
 const joyStick = document.getElementById('joystick-stick');
-let joyId=null, joyCenter={x:0,y:0}; const JOY_R=44; const runBtn=document.getElementById('btn-run');
+let joyId=null, joyCenter={x:0,y:0}, joyStart={x:0,y:0}, joyZR=null; const JOY_R=54, JOY_DEAD=.1; const runBtn=document.getElementById('btn-run'); const joyBase=document.getElementById('joystick-base');
+function joyPlace(cx,cy,dx,dy){ joyBase.style.left=(cx-joyZR.left)+'px'; joyBase.style.top=(cy-joyZR.top)+'px'; joyStick.style.left=(cx+dx-joyZR.left)+'px'; joyStick.style.top=(cy+dy-joyZR.top)+'px'; }
+function resetJoy(){ joyBase.style.left=joyBase.style.top=joyStick.style.left=joyStick.style.top='100px'; joyStick.style.transform=''; }
 joyZone.addEventListener('touchstart', e=>{
+  if(joyId!==null){ e.preventDefault(); return; }
   const t=e.changedTouches[0]; joyId=t.identifier; joyZone.classList.add('held');
-  const r=joyZone.getBoundingClientRect(); joyCenter={x:r.left+r.width/2,y:r.top+r.height/2};
+  joyZR=joyZone.getBoundingClientRect(); joyCenter={x:t.clientX,y:t.clientY}; joyStart={x:t.clientX,y:t.clientY}; // floating stick: the base appears under the thumb
+  joyPlace(joyCenter.x,joyCenter.y,0,0);
   e.preventDefault();
 },{passive:false});
 joyZone.addEventListener('touchmove', e=>{
@@ -3779,21 +3809,23 @@ joyZone.addEventListener('touchmove', e=>{
     if(t.identifier!==joyId) continue;
     let dx=t.clientX-joyCenter.x, dy=t.clientY-joyCenter.y;
     const d=Math.hypot(dx,dy);
-    if(d>JOY_R){ dx=dx/d*JOY_R; dy=dy/d*JOY_R; }
-    joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-    moveInput.x = dx/JOY_R; moveInput.y = -dy/JOY_R;
-    // CODM-style sprint: slide the thumb up into the RUN marker (or well past the ring, mostly upward) to lock sprint.
-    // It stays locked while the finger is down and the stick is still pushed; easing back below ~35% or lifting releases it.
+    if(d>JOY_R){ const ex=d-JOY_R; joyCenter.x+=dx/d*ex; joyCenter.y+=dy/d*ex; dx=dx/d*JOY_R; dy=dy/d*JOY_R; } // past the rim the base follows the thumb, so the direction is always where the thumb is relative to the base
+    joyPlace(joyCenter.x,joyCenter.y,dx,dy);
+    const m=Math.min(1,Math.hypot(dx,dy)/JOY_R), dd=Math.hypot(dx,dy)||1;
+    const a=m<JOY_DEAD?0:Math.pow((m-JOY_DEAD)/(1-JOY_DEAD),1.15);   // dead zone + gentle analog curve
+    moveInput.x = dx/dd*a; moveInput.y = -dy/dd*a;
+    // sprint: slide the thumb up into the RUN marker (or far up from where it first touched) to lock sprint.
     { const rb=runBtn.getBoundingClientRect(), tx=t.clientX, ty=t.clientY, pad=14;
       const inBtn = tx>rb.left-pad && tx<rb.right+pad && ty>rb.top-pad && ty<rb.bottom+pad;
-      const farUp = d>JOY_R*1.7 && (t.clientY-joyCenter.y) < -d*0.75;
+      const sx=tx-joyStart.x, sy=ty-joyStart.y, sd=Math.hypot(sx,sy);
+      const farUp = sd>JOY_R*1.9 && sy < -sd*0.8;
       if(!player.runLatch && (inBtn||farUp)){ player.runLatch=true; joyZone.classList.add('run'); runBtn.classList.add('on'); Audio_.click(); }
-      else if(player.runLatch && Math.hypot(moveInput.x,moveInput.y)<0.35){ player.runLatch=false; joyZone.classList.remove('run'); runBtn.classList.remove('on'); } }
+      else if(player.runLatch && Math.hypot(moveInput.x,moveInput.y)<0.3){ player.runLatch=false; joyZone.classList.remove('run'); runBtn.classList.remove('on'); } }
     e.preventDefault();
   }
 },{passive:false});
 function joyEnd(e){
-  for(const t of e.changedTouches){ if(t.identifier===joyId){ joyId=null; moveInput.x=0; moveInput.y=0; joyStick.style.transform='translate(-50%,-50%)'; player.runLatch=false; joyZone.classList.remove('run','held'); runBtn.classList.remove('on'); } }
+  for(const t of e.changedTouches){ if(t.identifier===joyId){ joyId=null; moveInput.x=0; moveInput.y=0; resetJoy(); player.runLatch=false; joyZone.classList.remove('run','held'); runBtn.classList.remove('on'); } }
 }
 joyZone.addEventListener('touchend', joyEnd,{passive:false});
 joyZone.addEventListener('touchcancel', joyEnd,{passive:false});
@@ -3803,7 +3835,7 @@ joyZone.addEventListener('touchcancel', joyEnd,{passive:false});
 // its own dedicated small zone for movement; everything else is look.
 function isUiElement(el){
   while(el && el !== document.body){
-    if(el.id==='joystick-zone' || el.id==='lock-btn' || el.id==='cam-btn' || el.id==='pause-btn' || el.id==='veh-btn' || el.tagName==='BUTTON') return true;
+    if(el.id==='joystick-zone' || el.classList&&el.classList.contains('steer') || el.id==='lock-btn' || el.id==='cam-btn' || el.id==='pause-btn' || el.id==='veh-btn' || el.tagName==='BUTTON') return true;
     if(el.classList && (el.classList.contains('menu-btn') || el.classList.contains('act-btn'))) return true;
     el = el.parentElement;
   }
@@ -3894,7 +3926,7 @@ function selectSlot(t, el){
 // long-press attack button also places blocks (secondary use, desktop uses right-click)
 let attackHoldTimer=null;
 document.getElementById('btn-attack').addEventListener('touchstart', ()=>{
-  attackHoldTimer = setTimeout(()=> tryPlaceBlock(), 420);
+  attackHoldTimer = setTimeout(()=>{ if(!player.driving) tryPlaceBlock(); }, 420);
 },{passive:true});
 document.getElementById('btn-attack').addEventListener('touchend', ()=> clearTimeout(attackHoldTimer));
 
@@ -4066,7 +4098,7 @@ function enterCar(p){
   if(!player.alive||player.driving||carried||player.swimming) return;
   player.driving=p; p.driver='player'; p.traffic=false; p.tBlocked=0; p.push.set(0,0,0); p.by=p.mesh.position.y-CAR_H; p.yaw=p.mesh.rotation.y; p.roll=0; p.mesh.rotation.z=0;
   player.flying=false; player.onLadder=null; player.rolling=false; player.rollHeld=false; player.superSpeed=0; player.superHeld=false; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.vel.set(0,0,0);
-  document.body.classList.add('driving'); bannerText('DRIVING'); statusText('STICK: THROTTLE + STEER   -   BRAKE / REVERSE: PULL BACK');
+  document.body.classList.add('driving'); bannerText('DRIVING'); statusText(isTouch?'◀ ▶ STEER  -  BRAKE (HOLD) TO STOP, THEN REVERSE':'W/S THROTTLE  A/D STEER  SPACE HANDBRAKE');
 }
 function exitCar(forced){
   const p=player.driving; if(!p) return;
@@ -4086,9 +4118,11 @@ function driveTick(dt){
   player.energy=Math.min(player.form.maxEnergy,player.energy+dt*4);
   player.model.visible=false;
   vehHornCd=Math.max(0,vehHornCd-dt);
-  if(player.atkHeld && vehHornCd<=0){ vehHornCd=.4; Audio_.horn(); }
-  let thr=moveInput.y, str=moveInput.x; if(Math.abs(thr)<.12) thr=0; if(Math.abs(str)<.12) str=0;
-  const brake=player.jumpHeld||keys['Space'];
+  if((isTouch?player.jumpHeld:player.atkHeld) && vehHornCd<=0){ vehHornCd=.4; Audio_.horn(); }
+  let thr, str, brake, drift;
+  if(isTouch){   // buttons: LEFT / RIGHT steer, car drives itself forward, BRAKE slows to a stop then reverses while held
+    str=(drv.r?1:0)-(drv.l?1:0); thr=player.atkHeld?-1:1; brake=false; drift=player.atkHeld;
+  } else { thr=moveInput.y; str=moveInput.x; if(Math.abs(thr)<.12) thr=0; if(Math.abs(str)<.12) str=0; brake=!!keys['Space']; drift=brake; }
   const av0=Math.abs(p.v), sgn=p.v>=0?1:-1;
   // ---- longitudinal: torque falls off with speed, drag grows with speed^2, engine braking when you lift off ----
   const top=CAR_MAX_FWD;
@@ -4106,13 +4140,13 @@ function driveTick(dt){
   p.steer += (str-p.steer)*Math.min(1,dt*(str===0?9:5.5));
   const grip=Math.min(1,av/(3.5*CK))*(1-Math.min(.6,av/(44*CK)));
   const oldFx=-Math.sin(p.yaw), oldFz=-Math.cos(p.yaw);
-  const dyaw = -p.steer*2.05*grip*dt*(p.v>=0?1:-1)*(brake&&av>7?1.5:1);
+  const dyaw = -p.steer*2.05*grip*dt*(p.v>=0?1:-1)*(drift&&av>7?1.5:1);
   p.yaw += dyaw; p.yawRate = dyaw/Math.max(dt,1e-4);
   // momentum: part of the old heading's velocity carries on sideways (drift), much more on the handbrake
-  const slip = av*Math.abs(dyaw)*((brake&&av>6)?1.15:.4);
-  p.push.x += oldFx*sgn*slip; p.push.z += oldFz*sgn*slip; p.v *= 1-Math.abs(dyaw)*((brake&&av>6)?.3:.1);
+  const slip = av*Math.abs(dyaw)*((drift&&av>6)?1.15:.4);
+  p.push.x += oldFx*sgn*slip; p.push.z += oldFz*sgn*slip; p.v *= 1-Math.abs(dyaw)*((drift&&av>6)?.3:.1);
   const sl=Math.hypot(p.push.x,p.push.z);
-  Audio_.engine(av/top, Math.max(0,thr)); Audio_.screech(Math.max(0,Math.min(1,(sl-2.2)/5)) + ((brake&&av>9)?.5:0));
+  Audio_.engine(av/top, Math.max(0,thr)); Audio_.screech(Math.max(0,Math.min(1,(sl-2.2)/5)) + ((drift&&av>9)?.5:0));
   // camera swings around behind the car unless the player is actively looking around
   if(performance.now()-lastUserLookT>1400 && av>2){ let d=p.yaw-player.yaw; d=Math.atan2(Math.sin(d),Math.cos(d)); player.yaw+=d*Math.min(1,dt*(p.v>=0?2.2:0)); }
   p.push.multiplyScalar(Math.max(0,1-3.2*dt));
@@ -4502,7 +4536,7 @@ function updatePlayerOnFoot(dt){
   if(window.ENVP&&ENVP.clamp&&player.alive) ENVP.clamp(_prevY);   // head-bump on Ben's roof
   // face movement direction (model rotates toward camera-relative move dir, else camera yaw)
   const facing = player.onLadder ? Math.atan2(player.onLadder.ladder.nx, player.onLadder.ladder.nz) : (moving ? Math.atan2(-moveX,-moveZ) : player.yaw);
-  player.model.rotation.y = THREE.MathUtils.lerp(player.model.rotation.y, facing, 0.25);
+  { let df=facing-player.model.rotation.y; df=Math.atan2(Math.sin(df),Math.cos(df)); player.model.rotation.y += df*(1-Math.exp(-dt*17)); }   // shortest-arc turn: the old plain lerp across the +-PI seam spun the body a full 360
   updateBodyLean(dt);
   const formScale = PS * (player.form.modelScale||1);
   let mh=1, mw=1;
@@ -4685,7 +4719,7 @@ const menuPanel = document.getElementById('menu-panel');
 function showPanel(html){ menuPanel.innerHTML = html; menuPanel.classList.add('show'); }
 document.getElementById('btn-controls').addEventListener('click', ()=> showPanel(
   isTouch
-  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.<br>VEHICLES: walk up to a car and tap ENTER VEHICLE (left side). Stick = throttle/steer (pull back to brake, then reverse), BRAKE = handbrake, HORN = attack button, EXIT to get out. Keyboard: V enter/exit.<br>LOCK-ON: tap an enemy to lock it (tap again to release), or use the reticle button above the joystick. The camera assists toward it and attacks/abilities face it; you can still swipe to look freely.'
+  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.<br>VEHICLES: walk up to a car and tap ENTER VEHICLE (left side). ◀ ▶ buttons steer (the car drives itself), big red BRAKE = brake then reverse while held, HORN = small button above it, EXIT to get out. Keyboard: V enter/exit.<br>LOCK-ON: tap an enemy to lock it (tap again to release), or use the reticle button above the joystick. The camera assists toward it and attacks/abilities face it; you can still swipe to look freely.'
   : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben, V = enter/exit vehicle (Space = handbrake). L / Tab / middle-click = Lock-on. Fly/swim: look up or down while moving.'
 ));
 document.getElementById('btn-about').addEventListener('click', ()=> showPanel(
@@ -4722,7 +4756,7 @@ bindBtn('cam-btn', ()=>{ if(!PAUSED) setCamFree(!camMode.free); });
 let PAUSED=false, gameOn=false, pauseHist=false, ignorePop=0, hudEdit=null;
 const pausePage=document.getElementById('pause-page');
 const ppShow=id=>{ ['pp-main','pp-opts'].forEach(k=>document.getElementById(k).style.display=(k===id?'flex':'none')); document.getElementById('pp-hudbar').style.display='none'; pausePage.classList.remove('editing'); };
-function releaseInputs(){ moveInput.x=0; moveInput.y=0; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.superHeld=false; player.rollHeld=false; player.runLatch=false; joyId=null; joyStick.style.transform='translate(-50%,-50%)'; joyZone.classList.remove('run','held'); camTouchId=null; for(const k in keys) keys[k]=false; try{ if(carried===null) {} }catch(e){} }
+function releaseInputs(){ moveInput.x=0; moveInput.y=0; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.superHeld=false; player.rollHeld=false; player.runLatch=false; joyId=null; resetJoy(); joyZone.classList.remove('run','held'); camTouchId=null; drv.l=drv.r=false; document.querySelectorAll('.steer').forEach(x=>x.classList.remove('on')); for(const k in keys) keys[k]=false; try{ if(carried===null) {} }catch(e){} }
 function openPause(){
   if(PAUSED||!gameOn||!player.alive&&false) return;
   PAUSED=true; releaseInputs(); ppShow('pp-main'); pausePage.classList.add('show');
