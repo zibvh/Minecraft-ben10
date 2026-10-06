@@ -119,8 +119,10 @@
     align-items:center;justify-content:center;pointer-events:auto;z-index:22;touch-action:none;}
   .steer svg{width:42px;height:42px;stroke:var(--theme);fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
   .steer.on{background:linear-gradient(160deg,#2f9a62,#0a3a24);box-shadow:0 0 16px var(--theme);transform:scale(.95);}
+  #gas-btn{display:none;left:auto;right:132px;bottom:max(16px,env(safe-area-inset-bottom,16px));width:92px;height:92px;border-color:#5dff9a;background:linear-gradient(160deg,#1fb862,#06381f);}
+  #gas-btn b{color:#fff;font-size:15px;font-weight:900;letter-spacing:1.5px;text-shadow:0 1px 3px #000;pointer-events:none;}
   #steer-l{left:max(22px,env(safe-area-inset-left,22px));} #steer-r{left:calc(max(22px,env(safe-area-inset-left,22px)) + 104px);}
-  body.driving.tch .steer{display:flex;}
+  body.driving.tch .steer,body.driving.tch #gas-btn{display:flex;}
 
 
 
@@ -407,6 +409,7 @@
   <div id="pause-btn" title="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></div>
   <div id="hotbar"></div>
   <div id="steer-l" class="steer"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div id="steer-r" class="steer"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+  <div id="gas-btn" class="steer"><b>GAS</b></div>
   <div id="joystick-zone"><div id="joystick-base"></div><div id="joystick-stick"></div></div>
   <div class="abtn" id="btn-run"><svg viewBox="0 0 24 24"><circle cx="14.5" cy="4.5" r="2"/><path d="M6 21l3-6 3-3-2-4 4-2 3 4h3M9 15l4 1 1 5M8 8l-3 3"/></svg><b>RUN</b></div>
 
@@ -2317,7 +2320,7 @@ const ENVP=(function(){
     const p=makeBoulder(RV_POS.x,GY+CAR_H,RV_POS.z,CAR_S,0xe8d9a0,true);
     while(p.mesh.children.length) p.mesh.remove(p.mesh.children[0]);
     const me=new THREE.Mesh(geo,mat); me.castShadow=true; p.mesh.add(me);
-    p.mesh.rotation.y=RV_POS.yaw; p.yaw=RV_POS.yaw; p.by=GY; p.rv=true; p.hp=p.hpMax=220; p.hw=1.45; p.hl=3.35; p.colH=3.6; ENVP.rv=p;
+    p.mesh.rotation.y=RV_POS.yaw; p.yaw=RV_POS.yaw; p.by=GY; p.rv=true; p.hp=240; p.hp=p.hpMax=220; p.hw=1.45; p.hl=3.35; p.colH=3.6; ENVP.rv=p;
   }
   function init(){ const D=window.__PROP_DATA; if(!D||!THREE.GLTFLoader) return Promise.resolve();
     return (async()=>{ try{ if(D.house) await buildHouse(D); }catch(e){ console.warn('house',e); } try{ if(D.rustbucket) await buildRV(D); }catch(e){ console.warn('rustbucket',e); } delete window.__PROP_DATA; })(); }
@@ -3051,7 +3054,7 @@ function updateSpeedEffects(dt){
   // XLR8 widens the FOV only a little; vehicles keep their existing wider speed FOV.
   const targetFov = BASE_FOV
     + (player.form.id==='xlr8' ? XLR8_MAX_FOV_BOOST*s : 0)
-    + (player.driving ? MAX_FOV_BOOST*0.45*Math.min(1,Math.abs(player.driving.v)/CAR_MAX_FWD) : 0);
+    + (player.driving ? MAX_FOV_BOOST*0.45*Math.min(1,Math.abs(player.driving.v)/VTof(player.driving).top) : 0);
   const newFov = lastFov + (targetFov-lastFov)*Math.min(1, dt*6);
   if(Math.abs(newFov-lastFov) > 0.02){ lastFov = newFov; camera.fov = newFov; camera.updateProjectionMatrix(); }
 
@@ -3116,7 +3119,7 @@ function makeBoulder(x,y,z,s,color,car){
     b.scale.set(.7,.6,.7); b.position.set(.15,.55,.1); a.castShadow=b.castShadow=true; g.add(a,b);
   }
   g.scale.setScalar(s); g.rotation.y=Math.random()*3; g.position.set(x,y,z); scene.add(g);
-  const p={mesh:g,s,vel:new THREE.Vector3(),state:'rest',color,car}; props.push(p); if(car) initVeh(p); return p;
+  const p={mesh:g,s,vel:new THREE.Vector3(),state:'rest',color,car}; props.push(p); if(car){ initVeh(p); applyVTVis(p); } return p;
 }
 // (parked cars are now generated per-chunk in generateChunk(), see chunk.props.carRef)
 function shatter(p,blast){
@@ -3785,9 +3788,9 @@ renderer.domElement.addEventListener('click', ()=>{
 });
 
 // driving: steer buttons (touch). BRAKE (big red) = attack button, HORN = jump button.
-const drv={l:false,r:false};
+const drv={l:false,r:false,g:false};
 if(isTouch) document.body.classList.add('tch');
-[['steer-l','l'],['steer-r','r']].forEach(([id,k])=>{ const el=document.getElementById(id);
+[['steer-l','l'],['steer-r','r'],['gas-btn','g']].forEach(([id,k])=>{ const el=document.getElementById(id);
   const on=e=>{ drv[k]=true; el.classList.add('on'); e.preventDefault(); }, off=e=>{ drv[k]=false; el.classList.remove('on'); e.preventDefault(); };
   el.addEventListener('touchstart',on,{passive:false}); el.addEventListener('touchend',off,{passive:false}); el.addEventListener('touchcancel',off,{passive:false});
   el.addEventListener('mousedown',on); el.addEventListener('mouseup',off); el.addEventListener('mouseleave',off); });
@@ -4022,6 +4025,23 @@ function flySpeedOf(p){ return (p.form.flySpeed||8) * 0.6; }
    Arcade model only: speed target + accel/brake, speed-scaled steering, 5-point wall probe, circle car-vs-car.
    No suspension or tyre simulation, so it stays cheap on phones.
 ========================================================================= */
+// ---- vehicle classes: colour decides the model; each has its own top speed, pickup, reverse, steering, toughness ----
+var _VT; function VTYPES(){ return _VT||(_VT={
+  0xd63a3a:{name:'SPORTS COUPE', top:39,acc:1.4,rev:9, turn:1.15,hp:70 ,low:1},
+  0x2f6fd6:{name:'SEDAN',        top:25,acc:1.0 ,rev:8, turn:1.0 ,hp:100},
+  0xe8c33a:{name:'TAXI HATCH',   top:28,acc:1.25,rev:8, turn:1.2 ,hp:80 },
+  0xf0f0f0:{name:'CARGO VAN',    top:20,acc:.7  ,rev:6, turn:.75,hp:150,tall:1},
+  0x2a2a2e:{name:'MUSCLE CAR',   top:32,acc:1.8 ,rev:8, turn:.85,hp:120,muscle:1},
+  0x3aa860:{name:'OFF-ROADER',   top:24,acc:1.1 ,rev:9, turn:1.0 ,hp:180,jeep:1},
+  rv:      {name:'RUST BUCKET',  top:17,acc:.55 ,rev:5, turn:.7 ,hp:240},
+  def:     {name:'SEDAN',        top:25,acc:1.0 ,rev:8, turn:1.0 ,hp:100}}); }
+function VTof(p){ if(p.rv) return VTYPES().rv; return p.vt||(p.vt=VTYPES()[p.color]||VTYPES().def); }
+function applyVTVis(p){ if(!p.mesh||p.rv) return; const T=VTof(p), c=p.mesh.children; if(c.length<3) return; const [a,b,w]=c; p.hp=T.hp;
+  if(T.low){ a.scale.set(1.02,.33,2.25); a.position.y=-.29; b.scale.set(.8,.27,.78); b.position.set(0,.03,.08); w.position.y=-.47; }
+  else if(T.tall){ a.scale.set(1.02,.52,2.15); a.position.y=-.19; b.scale.set(.92,.5,1.4); b.position.set(0,.2,.08); }
+  else if(T.muscle){ a.scale.set(1.05,.4,2.25); a.position.y=-.26; b.scale.set(.8,.3,.7); b.position.set(0,.1,.22); }
+  else if(T.jeep){ a.scale.set(1.06,.5,1.95); a.position.y=-.19; b.scale.set(.92,.36,.85); b.position.set(0,.17,.06); w.scale.set(1.1,.18,1.6); }
+  else if(T.name==='TAXI HATCH'){ b.scale.set(.85,.4,.9); b.position.set(0,.15,.0); a.scale.set(1,.42,1.95); } }
 var CAR_HP=100, CAR_MAX_FWD=25, CAR_MAX_REV=8, CK=1.3;   // CK: speed/acceleration scale versus the original tuning // var: initVeh() can run during first chunk generation, before this line
 var TRAFFIC_MAX={LOW:3,MEDIUM:6,HIGH:9};
 var vehNear=null, vehHornCd=0, vehTick=0, trafficT=0;
@@ -4098,7 +4118,7 @@ function enterCar(p){
   if(!player.alive||player.driving||carried||player.swimming) return;
   player.driving=p; p.driver='player'; p.traffic=false; p.tBlocked=0; p.push.set(0,0,0); p.by=p.mesh.position.y-CAR_H; p.yaw=p.mesh.rotation.y; p.roll=0; p.mesh.rotation.z=0;
   player.flying=false; player.onLadder=null; player.rolling=false; player.rollHeld=false; player.superSpeed=0; player.superHeld=false; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.vel.set(0,0,0);
-  document.body.classList.add('driving'); bannerText('DRIVING'); statusText(isTouch?'◀ ▶ STEER  -  BRAKE (HOLD) TO STOP, THEN REVERSE':'W/S THROTTLE  A/D STEER  SPACE HANDBRAKE');
+  document.body.classList.add('driving'); bannerText(VTof(p).name); statusText(isTouch?'◀ ▶ STEER - GAS - BRAKE (HOLD) TO STOP, THEN REVERSE':'W/S THROTTLE  A/D STEER  SPACE HANDBRAKE');
 }
 function exitCar(forced){
   const p=player.driving; if(!p) return;
@@ -4121,18 +4141,18 @@ function driveTick(dt){
   if((isTouch?player.jumpHeld:player.atkHeld) && vehHornCd<=0){ vehHornCd=.4; Audio_.horn(); }
   let thr, str, brake, drift;
   if(isTouch){   // buttons: LEFT / RIGHT steer, car drives itself forward, BRAKE slows to a stop then reverses while held
-    str=(drv.r?1:0)-(drv.l?1:0); thr=player.atkHeld?-1:1; brake=false; drift=player.atkHeld;
+    str=(drv.r?1:0)-(drv.l?1:0); thr=player.atkHeld?-1:(drv.g?1:0); brake=false; drift=player.atkHeld;
   } else { thr=moveInput.y; str=moveInput.x; if(Math.abs(thr)<.12) thr=0; if(Math.abs(str)<.12) str=0; brake=!!keys['Space']; drift=brake; }
   const av0=Math.abs(p.v), sgn=p.v>=0?1:-1;
   // ---- longitudinal: torque falls off with speed, drag grows with speed^2, engine braking when you lift off ----
-  const top=CAR_MAX_FWD;
+  const VT=VTof(p), top=VT.top;
   if(brake){ p.v -= Math.sign(p.v)*Math.min(av0,(av0>1?15:9)*CK*dt); }
   else if(thr>0){
     if(p.v<-.6){ p.v += 15*CK*dt; }                                             // brake out of reverse first
-    else { const want=thr*top; if(p.v<want){ const f=Math.max(0,p.v)/top; p.v += (11*(1-Math.pow(f,1.6))+1.1)*CK*dt*Math.min(1,.4+thr); } else p.v -= 3.5*CK*dt; }
+    else { const want=thr*top; if(p.v<want){ const f=Math.max(0,p.v)/top; p.v += (11*(1-Math.pow(f,1.6))+1.1)*VT.acc*CK*dt*Math.min(1,.4+thr); } else p.v -= 3.5*CK*dt; }
   } else if(thr<0){
     if(p.v>.6){ p.v -= 15*CK*dt; }                                              // brakes, then reverse
-    else { const want=thr*CAR_MAX_REV; if(p.v>want) p.v -= (5.5*(1-Math.pow(Math.max(0,-p.v)/CAR_MAX_REV,1.4))+.8)*CK*dt; }
+    else { const want=thr*VT.rev; if(p.v>want) p.v -= (5.5*(1-Math.pow(Math.max(0,-p.v)/VT.rev,1.4))+.8)*VT.acc*CK*dt; }
   } else { p.v -= Math.sign(p.v)*Math.min(av0,(2.6*CK+av0*.12)*dt); }         // engine braking / coast
   p.v -= Math.sign(p.v)*Math.min(Math.abs(p.v),CK*(.5+.0105*(p.v/CK)*(p.v/CK))*dt);      // rolling resistance + aero drag: this is what stops it zooming forever
   // ---- steering: wheel angle eases toward the stick (no instant snap), yaw rate depends on speed, high speed understeers ----
@@ -4140,7 +4160,7 @@ function driveTick(dt){
   p.steer += (str-p.steer)*Math.min(1,dt*(str===0?9:5.5));
   const grip=Math.min(1,av/(3.5*CK))*(1-Math.min(.6,av/(44*CK)));
   const oldFx=-Math.sin(p.yaw), oldFz=-Math.cos(p.yaw);
-  const dyaw = -p.steer*2.05*grip*dt*(p.v>=0?1:-1)*(drift&&av>7?1.5:1);
+  const dyaw = -p.steer*2.05*VT.turn*grip*dt*(p.v>=0?1:-1)*(drift&&av>7?1.5:1);
   p.yaw += dyaw; p.yawRate = dyaw/Math.max(dt,1e-4);
   // momentum: part of the old heading's velocity carries on sideways (drift), much more on the handbrake
   const slip = av*Math.abs(dyaw)*((drift&&av>6)?1.15:.4);
@@ -4719,7 +4739,7 @@ const menuPanel = document.getElementById('menu-panel');
 function showPanel(html){ menuPanel.innerHTML = html; menuPanel.classList.add('show'); }
 document.getElementById('btn-controls').addEventListener('click', ()=> showPanel(
   isTouch
-  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.<br>VEHICLES: walk up to a car and tap ENTER VEHICLE (left side). ◀ ▶ buttons steer (the car drives itself), big red BRAKE = brake then reverse while held, HORN = small button above it, EXIT to get out. Keyboard: V enter/exit.<br>LOCK-ON: tap an enemy to lock it (tap again to release), or use the reticle button above the joystick. The camera assists toward it and attacks/abilities face it; you can still swipe to look freely.'
+  ? 'LEFT: joystick to move.<br>RIGHT SIDE: swipe to look around.<br>Swipe the alien portrait (top-left) to switch aliens, tap it to revert to Ben.<br>Big button = Attack (hold = place block). Arrow button = Jump. Bolt button = Special.<br>VEHICLES: walk up to a car and tap ENTER VEHICLE (left side). ◀ ▶ buttons steer (hold GAS to accelerate), big red BRAKE = brake then reverse while held, HORN = small button above it, EXIT to get out. Keyboard: V enter/exit.<br>LOCK-ON: tap an enemy to lock it (tap again to release), or use the reticle button above the joystick. The camera assists toward it and attacks/abilities face it; you can still swipe to look freely.'
   : 'WASD to move, mouse to look (click to lock).<br>Left click = Attack, Right click = Place block.<br>F = Attack, G = Place, Space = Jump, E/R/T/Y = alien actions, Q = Revert to Ben, V = enter/exit vehicle (Space = handbrake). L / Tab / middle-click = Lock-on. Fly/swim: look up or down while moving.'
 ));
 document.getElementById('btn-about').addEventListener('click', ()=> showPanel(
@@ -4756,7 +4776,7 @@ bindBtn('cam-btn', ()=>{ if(!PAUSED) setCamFree(!camMode.free); });
 let PAUSED=false, gameOn=false, pauseHist=false, ignorePop=0, hudEdit=null;
 const pausePage=document.getElementById('pause-page');
 const ppShow=id=>{ ['pp-main','pp-opts'].forEach(k=>document.getElementById(k).style.display=(k===id?'flex':'none')); document.getElementById('pp-hudbar').style.display='none'; pausePage.classList.remove('editing'); };
-function releaseInputs(){ moveInput.x=0; moveInput.y=0; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.superHeld=false; player.rollHeld=false; player.runLatch=false; joyId=null; resetJoy(); joyZone.classList.remove('run','held'); camTouchId=null; drv.l=drv.r=false; document.querySelectorAll('.steer').forEach(x=>x.classList.remove('on')); for(const k in keys) keys[k]=false; try{ if(carried===null) {} }catch(e){} }
+function releaseInputs(){ moveInput.x=0; moveInput.y=0; player.flameHeld=false; player.sprayHeld=false; player.atkHeld=false; player.superHeld=false; player.rollHeld=false; player.runLatch=false; joyId=null; resetJoy(); joyZone.classList.remove('run','held'); camTouchId=null; drv.l=drv.r=drv.g=false; document.querySelectorAll('.steer').forEach(x=>x.classList.remove('on')); for(const k in keys) keys[k]=false; try{ if(carried===null) {} }catch(e){} }
 function openPause(){
   if(PAUSED||!gameOn||!player.alive&&false) return;
   PAUSED=true; releaseInputs(); ppShow('pp-main'); pausePage.classList.add('show');
