@@ -82,12 +82,6 @@
   .od.off{opacity:.32;}
   .od:active{transform:scale(.9);border-color:var(--green);}
 
-  #loc-banner{position:absolute;left:50%;top:14%;transform:translateX(-50%) translateY(-6px);text-align:center;opacity:0;transition:opacity .35s,transform .35s;pointer-events:none;z-index:30;text-shadow:0 2px 6px #000;}
-  #loc-banner.show{opacity:1;transform:translateX(-50%) translateY(0);}
-  #loc-banner b{display:block;font-size:11px;letter-spacing:3px;color:#9ad8b0;font-weight:700;}
-  #loc-banner span{display:block;font-size:22px;letter-spacing:3px;color:#fff;font-weight:900;margin-top:2px;}
-  #loc-banner i{display:block;font-style:normal;font-size:11px;letter-spacing:2px;color:#cfe;margin-top:1px;}
-  #loc-name{position:absolute;right:max(10px,env(safe-area-inset-right,10px));top:calc(max(8px,env(safe-area-inset-top,8px)) + 88px);width:92px;text-align:center;font-size:7px;letter-spacing:.8px;color:#bff;font-weight:700;text-shadow:0 1px 3px #000;pointer-events:none;line-height:1.2;}
   #alien-banner{
     position:absolute;top:80px;left:50%;transform:translateX(-50%);
     color:var(--green);font-size:20px;letter-spacing:4px;text-shadow:0 0 12px rgba(57,255,138,0.8);
@@ -403,7 +397,6 @@
   <div id="omni-dial"></div>
   <div id="omni-x"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg></div>
   <div id="alien-banner"></div>
-  <div id="loc-banner"><b id="loc-t"></b><span id="loc-m"></span><i id="loc-s"></i></div><div id="loc-name"></div>
   <div id="actions"></div>
   <div id="squad-panel"></div>
   <div id="crosshair"></div>
@@ -1083,7 +1076,7 @@ function lotSpec(bx,bz,li){
   else if(kind==='tower'){ hBase=18+Math.floor(r2*4)*5; hm=dist==='downtown'?1.3+((h>>>20)%100)/100:1; w=d=16; hh=(hBase*hm+.5)*S; }
   else if(kind==='school'){ w=18.8;d=8;hh=11; }
   else if(kind==='warehouse'){ w=20;d=14;hh=8.5; }
-  else if(NEW_KIND_SIZE[kind]){ const z=SKY_BOX[kind]||[0,0,0]; w=z[0]; d=z[1]; hh=z[2]; if(kind==='office'){ hh=(dist==='downtown'?20+((h>>>12)%12)*3:12+((h>>>12)%5)*3)*.7+0; } }
+  else if(NEW_KIND_SIZE[kind]){ const z=SKY_BOX[kind]||[0,0,0]; w=z[0]; d=z[1]; hh=z[2]; if(kind==='office'){ hh=dist==='downtown'?22:13; } }
   return {bx,bz,li,kind,cx,cz,S,w,d,h:hh,hBase,hm,seed:h||1,dist,type:dist,f,hood:loc.hood,district:loc.district,lm};
 }
 function scaleOwner(o,px,pz,S){        // scale everything a builder produced about the lot centre (ground-anchored)
@@ -1302,7 +1295,7 @@ NB.trainstation=(cx,cz,o,R,sp)=>{ cbox(cx,GY,cz-3,18,7,8,wallMat('#c8b890','#8fb
 
 Object.assign(SKY_COL,{});
 // skyline stand-in volumes: kept strictly INSIDE the real building so they never poke through; kinds that are mostly open ground have none
-const SKY_BOX={house2:[6,5,2.5],duplex:[10,6,5],townhouse:[9,6,5],cornershop:[6,5,3],restaurant:[8,6,3.5],stripmall:[14,6,3.5],supermarket:[16,9,5],office:[8,7,12],bank:[8,7,5],factory:[14,10,7],garage:[9,6,3.5],hospital:[14,7,8],police:[10,6,5.5],fire:[12,7,5.5],cityhall:[14,5,7],trainstation:[14,4,6],abandoned:[7,5,5]};
+const SKY_BOX={house2:[8,7,3.2],duplex:[12,7,5.8],townhouse:[13,9,5.8],cornershop:[9,8,4],restaurant:[10,8,4.4],stripmall:[17,8,4.3],supermarket:[19,11,5.9],office:[12,11,13],bank:[10,9,5.9],factory:[16,12,6.9],garage:[11,8,4.5],hospital:[22,9,8.9],police:[13,8,6.3],fire:[15,9,6.5],cityhall:[17,8,7.9],trainstation:[17,7,6.9],abandoned:[10,7,5.9]};
 const NEW_KIND_SIZE={ house2:[10,9,6],duplex:[13,8,6.5],townhouse:[14,10,9],cornershop:[10,8,5],restaurant:[11,9,5],stripmall:[16,8,5],supermarket:[20,12,6.6],office:[13,12,22],bank:[11,10,6.6],gasstation:[24,20,5.5],parking:[22,20,0],parkgarage:[18,14,9],plaza:[24,22,0],kiosklot:[22,18,0],
   factory:[18,14,17],utility:[24,20,9],garage:[12,9,5],yard:[24,20,0],construction:[24,22,10],containers:[26,22,8],abandoned:[10,8,6.5],emptylot:[22,22,0],field:[0,0,0],playground:[18,16,0],sports:[26,20,0],farm:[24,22,9],market:[24,20,0],
   hospital:[24,10,13],police:[14,9,7],fire:[16,10,13],cityhall:[18,9,12],trainstation:[26,22,11]};
@@ -1387,7 +1380,7 @@ function generateLot(spec){
   }
   o.colliders.forEach(gridAdd);
   let car=null; if(!['park','field','emptylot','playground','sports','farm','plaza'].includes(spec.kind) && ((spec.seed>>>5)%1000)<(spec.type==='rural'?200:450)) car=placeParkedCar(spec);
-  const lot={key,spec,o,car}; lots.set(key,lot);
+  const lot={key,spec,o,car}; lots.set(key,lot); skyStale=true;
   const ms=performance.now()-t0; STAT.lotsBuilt++; STAT.lotMsLast=ms; STAT.lotMsSum+=ms; if(ms>STAT.lotMsMax) STAT.lotMsMax=ms;
   return lot;
 }
@@ -1395,7 +1388,7 @@ function disposeLot(l){
   for(const m of l.o.meshes){ if(m.parent) m.parent.remove(m); if(m.isInstancedMesh){ if(m.dispose) m.dispose(); } else if(m.geometry && m.geometry!==UB) m.geometry.dispose(); }
   l.o.colliders.forEach(gridRemove);
   if(l.car && !l.car.driver && l.car!==carried) removeVehicle(l.car);
-  lots.delete(l.key); STAT.lotsDropped++;
+  lots.delete(l.key); STAT.lotsDropped++; skyStale=true;
 }
 
 // ---- predictive planner: which lots do we want around the player AND along the predicted corridor? ----
@@ -1450,21 +1443,7 @@ function perfTick(dt){
 }
 function setPerf(on){ PERF.on=!!on; document.getElementById('perf-hud').style.display=PERF.on?'block':'none'; }
 addEventListener('keydown',e=>{ if(e.code==='F3'){ e.preventDefault(); setPerf(!PERF.on); } });
-/* ---- location awareness: districts, neighbourhoods, landmark discovery (data from WORLDDEF; missions can read LOC / DISCOVERED) ---- */
-const LOC={district:'',hood:'',landmark:null,t:0,bT:null}, DISCOVERED=new Set(['bens_house']);
-try{ JSON.parse(localStorage.getItem('omniverse_disc_v1')||'[]').forEach(i=>DISCOVERED.add(i)); }catch(e){}
-function locBanner(top,main,sub){ const el=document.getElementById('loc-banner'); if(!el) return; document.getElementById('loc-t').textContent=top; document.getElementById('loc-m').textContent=main; document.getElementById('loc-s').textContent=sub||''; el.classList.add('show'); clearTimeout(LOC.bT); LOC.bT=setTimeout(()=>el.classList.remove('show'),2800); }
-function updateLocation(px,pz,dt){
-  LOC.t-=dt; if(LOC.t>0) return; LOC.t=.4;
-  const L=WORLDDEF.locate(px,pz), nm=document.getElementById('loc-name');
-  if(nm) nm.textContent=L.district+'\n'+L.hood.toUpperCase();
-  if(L.district!==LOC.district){ const first=LOC.district===''; LOC.district=L.district; LOC.hood=L.hood; if(!first||true) locBanner('ENTERING',L.district,L.hood.toUpperCase()); }
-  else if(L.hood!==LOC.hood){ LOC.hood=L.hood; locBanner('NEIGHBOURHOOD',L.hood.toUpperCase(),L.district); }
-  LOC.landmark=L.landmark;
-  if(L.landmark&&L.landmarkDist<42&&!DISCOVERED.has(L.landmark.id)){ DISCOVERED.add(L.landmark.id); locBanner('DISCOVERED',L.landmark.name,L.district); try{ localStorage.setItem('omniverse_disc_v1',JSON.stringify([...DISCOVERED])); }catch(e){} }
-}
 function updateMetropolis(px,pz,dt){
-  updateLocation(px,pz,dt);
   perfTick(dt);
   const q=QUALITY.presets[QUALITY.level], speed=Math.hypot(velX,velZ), sf=Math.max(0,Math.min(1,(speed-10)/80)), horizon=1+2*sf;   // 1..3 s prediction horizon scaled by speed
   const dirx=speed>1?velX/speed:0, dirz=speed>1?velZ/speed:0, hb=speed>10?Math.round(Math.atan2(dirz,dirx)/.45):99;
@@ -1478,14 +1457,14 @@ function updateMetropolis(px,pz,dt){
 }
 
 // ---- Tier 2: skyline (all building volumes beyond the full-detail radius share ONE instanced mesh, rebuilt incrementally) ----
-var skyDirty=true; const SKY={mesh:null,center:[1e9,1e9],job:null,col:new THREE.Color(),offs:null,offsR:0};
-(function(){ const m=new THREE.InstancedMesh(UB,new THREE.MeshLambertMaterial({color:0xffffff}),1700); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.count=0; m.frustumCulled=false; m.setColorAt(0,new THREE.Color(1,1,1)); scene.add(m); SKY.mesh=m; })();
+var skyDirty=true, skyStale=false, skyLastT=0; const SKY={mesh:null,center:[1e9,1e9],job:null,col:new THREE.Color(),offs:null,offsR:0};
+(function(){ const m=new THREE.InstancedMesh(UB,new THREE.MeshLambertMaterial({color:0xffffff}),1700); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.count=0; m.frustumCulled=false; m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(1700*3).fill(1),3); m.instanceColor.setUsage(THREE.DynamicDrawUsage); /* setColorAt after count=0 allocated a ZERO-length array: skyline stand-ins were black */ scene.add(m); SKY.mesh=m; })();
 function skyOffsets(bR){ if(SKY.offs&&SKY.offsR===bR) return SKY.offs; const a=[]; for(let i=-bR;i<=bR;i++) for(let j=-bR;j<=bR;j++) a.push([i,j,i*i+j*j]); a.sort((p,q2)=>p[2]-q2[2]); SKY.offs=a; SKY.offsR=bR; return a; }
 function* skylineJob(px,pz,q){
   const R=q.skyR, bR=Math.ceil(R/PITCH)+1, bx0=Math.round(px/PITCH), bz0=Math.round(pz/PITCH), offs=skyOffsets(bR), m=SKY.mesh, arr=m.instanceMatrix.array, car=m.instanceColor.array, cap=Math.min(1700,q.skyMax), col=SKY.col;
   let n=0, blocks=0;
   outer: for(const [dx,dz] of offs){
-    for(let li=0;li<4;li++){ const sp=lotSpec(bx0+dx,bz0+dz,li); if(!sp.h||sp.kind==='park') continue; if(Math.hypot(sp.cx-px,sp.cz-pz)>R) continue;
+    for(let li=0;li<4;li++){ if(lots.has(lotKey(bx0+dx,bz0+dz,li))) continue; const sp=lotSpec(bx0+dx,bz0+dz,li); if(!sp.h||sp.kind==='park') continue; if(Math.hypot(sp.cx-px,sp.cz-pz)>R) continue;
       if(Math.abs(sp.cx)>WORLD_LIMIT||Math.abs(sp.cz)>WORLD_LIMIT) continue;
       const o=n*16; arr[o]=sp.w*(sp.kw||.96); arr[o+1]=0; arr[o+2]=0; arr[o+3]=0; arr[o+4]=0; arr[o+5]=sp.h; arr[o+6]=0; arr[o+7]=0; arr[o+8]=0; arr[o+9]=0; arr[o+10]=sp.d*(sp.kw||.96); arr[o+11]=0; arr[o+12]=sp.cx; arr[o+13]=GY+sp.h/2; arr[o+14]=sp.cz; arr[o+15]=1;
       col.setHex(SKY_COL[sp.kind]||0x888888); const vv=.86+((sp.seed>>>7)%100)/360; car[n*3]=col.r*vv; car[n*3+1]=col.g*vv; car[n*3+2]=col.b*vv;
@@ -1495,7 +1474,7 @@ function* skylineJob(px,pz,q){
   m.count=n; m.instanceMatrix.needsUpdate=true; m.instanceColor.needsUpdate=true; SKY.center=[px,pz]; STAT.skyBuilds++;
 }
 function skylineTick(px,pz,q){
-  if(!SKY.job && (skyDirty || Math.hypot(px-SKY.center[0],pz-SKY.center[1])>90)){ skyDirty=false; SKY.job=skylineJob(px,pz,q); }
+  if(!SKY.job && (skyDirty || Math.hypot(px-SKY.center[0],pz-SKY.center[1])>90 || (skyStale&&performance.now()-skyLastT>1400))){ skyDirty=false; skyStale=false; skyLastT=performance.now(); SKY.job=skylineJob(px,pz,q); }
   if(SKY.job){ const t0=performance.now(); let r; do{ r=SKY.job.next(); }while(!r.done && performance.now()-t0<FB.skyMs); if(r.done) SKY.job=null; const ms=performance.now()-t0; if(ms>STAT.skyMsMax) STAT.skyMsMax=ms; }
 }
 
@@ -1512,65 +1491,60 @@ function grassPattern(){
   if(grassPattern.c) return grassPattern.c; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'); g.fillStyle='#5fae3c'; g.fillRect(0,0,64,64); let sd=7; const rn=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
   for(let i=0;i<90;i++){ g.fillStyle=rn()<.5?'rgba(60,130,40,.4)':'rgba(130,200,80,.35)'; g.fillRect(rn()*64,rn()*64,3,3); } return grassPattern.c=c;
 }
-function drawStreet(c){
-  const S=320, u=S/PITCH, g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); g.scale(c.width/S,c.width/S);
-  const ASPH=roadPattern(g,'asphalt',256,'#3a3a40'), PAVE=roadPattern(g,'paving',128,'#bdb6a8');
-  const sc=(p,k)=>{ if(p&&p.setTransform){ try{ p.setTransform(new DOMMatrix().scale(k,k)); }catch(e){} } return p; };
-  g.fillStyle='#5fae3c'; g.fillRect(0,0,S,S); let sd=11; const rn=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
-  for(let i=0;i<420;i++){ g.fillStyle=rn()<.5?'rgba(60,130,40,.35)':'rgba(130,200,80,.3)'; g.fillRect(rn()*S,rn()*S,4,4); }
-  const T=ROAD_LV[1].t*u, A=ROAD_LV[1].a*u;
-  const bands=(h,col)=>{ g.fillStyle=col; g.fillRect(0,0,h,S); g.fillRect(S-h,0,h,S); g.fillRect(0,0,S,h); g.fillRect(0,S-h,S,h); };
-  bands(T,sc(PAVE,.25)); g.fillStyle='#8f897f'; g.fillRect(T-1.5,0,1.5,S); g.fillRect(S-T,0,1.5,S); g.fillRect(0,T-1.5,S,1.5); g.fillRect(0,S-T,S,1.5);
-  bands(A,sc(ASPH,.25));
-  g.fillStyle='#e8d27a'; for(let y=T+10;y<S-T-14;y+=26){ g.fillRect(-1.5,y,3,13); g.fillRect(S-1.5,y,3,13); } for(let x=T+10;x<S-T-14;x+=26){ g.fillRect(x,-1.5,13,3); g.fillRect(x,S-1.5,13,3); }
-  g.fillStyle='rgba(255,255,255,.85)'; for(let k=-A+4;k<A-3;k+=9){ g.fillRect(k,T+4,5,10); g.fillRect(k,S-T-14,5,10); g.fillRect(S+k,T+4,5,10); g.fillRect(T+4,k,10,5); g.fillRect(S-T-14,k,10,5); g.fillRect(T+4,S+k,10,5); }
+/* ---- ROAD SYSTEM: modular, NON-OVERLAPPING pieces built from the supplied road template (asphalt + paving textures, www/props.js).
+   The lattice is cut into cells centred on each intersection: one centre square + four arms (each arm runs from the square to the cell edge
+   and meets the neighbour cell's arm exactly). No two pieces ever cover the same ground, are opaque, and need no sorting, so nothing can
+   flicker at junctions. Pieces are instanced (one draw call per piece type) and re-centred as the player travels. ---- */
+const RPX=16;                                              // texture pixels per world unit
+function _roadFill(g,kind,px,fb,k){ const p=roadPattern(g,kind,px,fb); if(p&&p.setTransform){ try{ p.setTransform(new DOMMatrix().scale(k,k)); }catch(e){} } return p; }
+function drawArmTex(c,ln,lc){          // canvas y=0 is the far (cell-edge) end, y=H the end at the intersection
+  const L=ROAD_LV[ln], X=ROAD_LV[lc], u=RPX, W=L.t*2*u, H=(40-X.t)*u, g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H);
+  const ASPH=_roadFill(g,'asphalt',256,'#3a3a40',.25), x0=(L.t-L.a)*u, x1=W-x0; const PAVE=_roadFill(g,'paving',128,'#bdb6a8',.25), GR=g.createPattern(grassPattern(),'repeat');
+  g.fillStyle=PAVE; g.fillRect(0,0,x0,H); g.fillRect(x1,0,W-x1,H); g.fillStyle='#8f897f'; g.fillRect(x0-2,0,2,H); g.fillRect(x1,0,2,H);
+  g.fillStyle=ASPH; g.fillRect(x0,0,x1-x0,H);
+  const yEnd=H-4.4*u;                                      // markings stop before the crosswalk
+  if(ln===1){ g.fillStyle='#e8d27a'; for(let y=6;y<yEnd-14;y+=26) g.fillRect(W/2-1.5,y,3,13); }
+  else { const lanes=ln===3?6:4, lw=L.a*2*u/lanes, mw=(ln===3?3.6:1.8)*u;
+    for(let k=1;k<lanes;k++){ const x=x0+k*lw;
+      if(k===lanes/2){ g.fillStyle=GR; g.fillRect(x-mw/2,0,mw,yEnd); g.fillStyle='#d6d2c8'; g.fillRect(x-mw/2-1.6,0,1.6,yEnd); g.fillRect(x+mw/2,0,1.6,yEnd); }
+      else { g.fillStyle='rgba(255,255,255,.85)'; for(let y=6;y<yEnd-16;y+=32) g.fillRect(x-1.2,y,2.4,16); } } }
+  g.fillStyle='rgba(255,255,255,.9)'; for(let x=x0+.6*u;x<x1-.9*u;x+=1.2*u) g.fillRect(x,H-3.4*u,.65*u,2.5*u);   // zebra crossing
+  g.fillRect(x0,H-4.2*u,x1-x0,.35*u);                       // stop line
 }
-function makeStreetTile(){
-  const c=document.createElement('canvas'); c.width=c.height=640; drawStreet(c);
-  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(16,16); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1;
-  ROADREDRAW.push(()=>{ drawStreet(c); t.needsUpdate=true; }); return t;
+function drawCenterTex(c,ln,lm){
+  const A=ROAD_LV[ln], B=ROAD_LV[lm], u=RPX, W=A.t*2*u, H=B.t*2*u, g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H);
+  const ASPH=_roadFill(g,'asphalt',256,'#3a3a40',.25), PAVE=_roadFill(g,'paving',128,'#bdb6a8',.25), xa=(A.t-A.a)*u, ya=(B.t-B.a)*u;
+  g.fillStyle=PAVE; g.fillRect(0,0,W,H); g.fillStyle=ASPH; g.fillRect(xa,0,W-2*xa,H); g.fillRect(0,ya,W,H-2*ya);
+  g.fillStyle='#8f897f'; g.fillRect(xa-2,0,2,ya); g.fillRect(W-xa,0,2,ya); g.fillRect(xa-2,H-ya,2,ya); g.fillRect(W-xa,H-ya,2,ya);
+  g.fillRect(0,ya-2,xa,2); g.fillRect(W-xa,ya-2,xa,2); g.fillRect(0,H-ya,xa,2); g.fillRect(W-xa,H-ya,xa,2);
 }
-function drawStrip(c,level,layer){          // layer 0 = sidewalk (transparent over the carriageway), 1 = asphalt + markings + median (transparent over the sidewalks)
-  const L=ROAD_LV[level], u=4, W=L.t*2*u, H=128, g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); g.scale(c.width/W,c.height/H);
-  const ASPH=roadPattern(g,'asphalt',256,'#3a3a40'), PAVE=roadPattern(g,'paving',128,'#bdb6a8'), GR=g.createPattern(grassPattern(),'repeat');
-  const sc=(p,k)=>{ if(p&&p.setTransform){ try{ p.setTransform(new DOMMatrix().scale(k,k)); }catch(e){} } return p; };
-  const x0=(L.t-L.a)*u, x1=W-x0;
-  if(layer===0){
-    g.fillStyle=sc(PAVE,.25); g.fillRect(0,0,x0,H); g.fillRect(x1,0,W-x1,H);
-    g.fillStyle='#8f897f'; g.fillRect(x0-2,0,2,H); g.fillRect(x1,0,2,H);
-    return; }
-  g.fillStyle=sc(ASPH,.25); g.fillRect(x0,0,x1-x0,H);
-  const lanes=level===3?6:4, lw=L.a*2*u/lanes, mw=(level===3?3.6:1.8)*u;   // grass median down the middle (wider on boulevards)
-  for(let k=1;k<lanes;k++){ const x=x0+k*lw;
-    if(k===lanes/2){ g.fillStyle=GR; g.fillRect(x-mw/2,0,mw,H); g.fillStyle='#d6d2c8'; g.fillRect(x-mw/2-1.6,0,1.6,H); g.fillRect(x+mw/2,0,1.6,H); }
-    else { g.fillStyle='rgba(255,255,255,.85)'; for(let y=0;y<H;y+=32) g.fillRect(x-1.2,y,2.4,16); } }
-}
-function makeStripTexture(level,layer){
-  const L=ROAD_LV[level], W=L.t*2*4, c=document.createElement('canvas'); c.width=W*2; c.height=256; drawStrip(c,level,layer);
-  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1,45); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1;
-  ROADREDRAW.push(()=>{ drawStrip(c,level,layer); t.needsUpdate=true; }); return t;
-}
-const GROUND={plane:null,strips:[],mat:[null,null,null,null]};
+const RS={cx:1e9,cz:1e9,arm:[],cen:[],grass:null};
 (function(){
-  const tile=makeStreetTile(), pm=new THREE.MeshLambertMaterial({map:tile}), pl=new THREE.Mesh(new THREE.PlaneGeometry(1280,1280),pm);
-  pl.rotation.x=-Math.PI/2; pl.position.y=GY-0.03; pl.receiveShadow=true; pl.frustumCulled=false; scene.add(pl); GROUND.plane=pl;
-  // avenue/boulevard strips are decals drawn in two passes (all sidewalks first, then all asphalt) so crossing roads never cut sidewalk bands through each other
-  const dm=(lv,layer,off)=>new THREE.MeshLambertMaterial({map:makeStripTexture(lv,layer),alphaTest:.5,depthWrite:false,polygonOffset:true,polygonOffsetFactor:off,polygonOffsetUnits:off});
-  GROUND.matS=[null,null,dm(2,0,-1),dm(3,0,-1)]; GROUND.matA=[null,null,dm(2,1,-2),dm(3,1,-2)];
-  for(let i=0;i<20;i++){ const mk=(mat,ro)=>{ const m=new THREE.Mesh(UB,mat); m.visible=false; m.frustumCulled=false; m.receiveShadow=true; m.renderOrder=ro; scene.add(m); return m; };
-    GROUND.strips.push({s:mk(GROUND.matS[2],1),a:mk(GROUND.matA[2],2)}); }
+  const geo=new THREE.PlaneGeometry(1,1); geo.rotateX(-Math.PI/2);
+  const mk=(draw,w,h,cap)=>{ const c=document.createElement('canvas'); c.width=Math.round(w); c.height=Math.round(h); draw(c);
+    const t=new THREE.CanvasTexture(c); t.anisotropy=(renderer.capabilities&&renderer.capabilities.getMaxAnisotropy)?Math.min(4,renderer.capabilities.getMaxAnisotropy()):1;
+    ROADREDRAW.push(()=>{ draw(c); t.needsUpdate=true; });
+    const m=new THREE.InstancedMesh(geo,new THREE.MeshLambertMaterial({map:t,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}),cap); m.count=0; m.frustumCulled=false; m.receiveShadow=true; scene.add(m); return m; };
+  for(let a=1;a<=3;a++) for(let b=1;b<=3;b++){
+    RS.arm[(a-1)*3+(b-1)]=mk(c=>drawArmTex(c,a,b),ROAD_LV[a].t*2*RPX,(40-ROAD_LV[b].t)*RPX,1400);
+    RS.cen[(a-1)*3+(b-1)]=mk(c=>drawCenterTex(c,a,b),ROAD_LV[a].t*2*RPX,ROAD_LV[b].t*2*RPX,400); }
+  // far-field grass (voxel ground only exists near the player); roads sit just above it
+  const gc=document.createElement('canvas'); gc.width=gc.height=64; gc.getContext('2d').drawImage(grassPattern(),0,0); const gt=new THREE.CanvasTexture(gc); gt.wrapS=gt.wrapT=THREE.RepeatWrapping; gt.repeat.set(80,80);
+  const pl=new THREE.Mesh(new THREE.PlaneGeometry(1280,1280),new THREE.MeshLambertMaterial({map:gt})); pl.rotation.x=-Math.PI/2; pl.position.y=GY-0.03; pl.receiveShadow=true; pl.frustumCulled=false; scene.add(pl); RS.grass=pl;
 })();
 function updateGroundLayers(px,pz){
-  GROUND.plane.position.x=LINE_OFF+PITCH*Math.round((px-LINE_OFF)/PITCH); GROUND.plane.position.z=LINE_OFF+PITCH*Math.round((pz-LINE_OFF)/PITCH);
-  const R=700; let k=0;
-  for(let axis=0;axis<2;axis++){
-    const p=axis?pz:px, o=axis?px:pz, n0=Math.floor((p-R-LINE_OFF)/PITCH), n1=Math.ceil((p+R-LINE_OFF)/PITCH);
-    for(let n=n0;n<=n1&&k<GROUND.strips.length;n++){ const lv=lineLevel(n); if(lv<2) continue;
-      const e=GROUND.strips[k++], Lw=ROAD_LV[lv].t*2, along=32*Math.round(o/32);
-      for(const m of [e.s,e.a]){ m.material=(m===e.s?GROUND.matS:GROUND.matA)[lv]; m.visible=true; m.scale.set(Lw,.05,1440);
-        if(axis===0){ m.position.set(LINE_OFF+n*PITCH,GY-.015,along); m.rotation.y=0; } else { m.position.set(along,GY-.015,LINE_OFF+n*PITCH); m.rotation.y=Math.PI/2; } } }
-  }
-  for(;k<GROUND.strips.length;k++){ GROUND.strips[k].s.visible=false; GROUND.strips[k].a.visible=false; }
+  RS.grass.position.x=16*Math.round(px/16); RS.grass.position.z=16*Math.round(pz/16);
+  if(Math.hypot(px-RS.cx,pz-RS.cz)<56) return; RS.cx=px; RS.cz=pz;
+  const R=720, n0=Math.floor((px-R-LINE_OFF)/PITCH), n1=Math.ceil((px+R-LINE_OFF)/PITCH), m0=Math.floor((pz-R-LINE_OFF)/PITCH), m1=Math.ceil((pz+R-LINE_OFF)/PITCH), Y=GY+.02;
+  const ac=new Array(9).fill(0), cc=new Array(9).fill(0), d=dummy;
+  const put=(mesh,cnt,i,x,z,ry,sx,sz)=>{ if(cnt[i]>=mesh.instanceMatrix.count) return; d.position.set(x,Y,z); d.rotation.set(0,ry,0); d.scale.set(sx,1,sz); d.updateMatrix(); mesh.setMatrixAt(cnt[i]++,d.matrix); };
+  for(let n=n0;n<=n1;n++){ const X=LINE_OFF+n*PITCH; if(Math.abs(X)>WORLD_LIMIT) continue; const ln=lineLevel(n), tn=ROAD_LV[ln].t;
+    for(let m=m0;m<=m1;m++){ const Z=LINE_OFF+m*PITCH; if(Math.abs(Z)>WORLD_LIMIT) continue; const lm=lineLevel(m), tm=ROAD_LV[lm].t, Ln=40-tm, Lm=40-tn;
+      const ci=(ln-1)*3+(lm-1); put(RS.cen[ci],cc,ci,X,Z,0,tn*2,tm*2);
+      const ai=(ln-1)*3+(lm-1), bi=(lm-1)*3+(ln-1);                                        // road n (along z) arms / road m (along x) arms
+      put(RS.arm[ai],ac,ai,X,Z-(tm+Ln/2),0,tn*2,Ln); put(RS.arm[ai],ac,ai,X,Z+(tm+Ln/2),Math.PI,tn*2,Ln);
+      put(RS.arm[bi],ac,bi,X+(tn+Lm/2),Z,-Math.PI/2,tm*2,Lm); put(RS.arm[bi],ac,bi,X-(tn+Lm/2),Z,Math.PI/2,tm*2,Lm); } }
+  for(let i=0;i<9;i++){ RS.arm[i].count=ac[i]; RS.arm[i].instanceMatrix.needsUpdate=true; RS.cen[i].count=cc[i]; RS.cen[i].instanceMatrix.needsUpdate=true; }
 }
 // Used once at startup only: generates every currently-queued chunk immediately (a one-time loading
 // pause is fine before the player can even see or move), so the spawn area is fully solid on frame one.
@@ -4911,7 +4885,7 @@ function updateMinimap(dt){
       c.lineCap='butt'; for(let pass=0;pass<2;pass++){
         for(let n=n0;n<=n1;n++){ const lv=ROAD_LV[lineLevel(n)], x=LINE_OFF+n*PITCH; const a=toM(x,pz-RANGE*1.6), b=toM(x,pz+RANGE*1.6); c.strokeStyle=pass?'rgba(150,160,170,.55)':'rgba(70,80,90,.5)'; c.lineWidth=(lv.a*2*k)*(pass?.55:1); c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.stroke(); }
         for(let n=m0;n<=m1;n++){ const lv=ROAD_LV[lineLevel(n)], z=LINE_OFF+n*PITCH; const a=toM(px-RANGE*1.6,z), b=toM(px+RANGE*1.6,z); c.strokeStyle=pass?'rgba(150,160,170,.55)':'rgba(70,80,90,.5)'; c.lineWidth=(lv.a*2*k)*(pass?.55:1); c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.stroke(); } }
-      for(const l of WORLDDEF.LANDMARKS){ if(Math.abs(l.x-px)>RANGE*1.4||Math.abs(l.z-pz)>RANGE*1.4) continue; let [mx,my]=toM(l.x,l.z); const m=Math.hypot(mx-cx,my-cy); if(m>RR-4){ mx=cx+(mx-cx)*(RR-4)/m; my=cy+(my-cy)*(RR-4)/m; } c.fillStyle=DISCOVERED.has(l.id)?'#ffd84a':'rgba(255,216,74,.35)'; c.fillRect(mx-2.5,my-2.5,5,5); } }
+    }
     const dot=(wx,wz,col,r)=>{ const dx=wx-px, dz=wz-pz; let mx=(dx*rx+dz*rz)*k, my=-(dx*fx+dz*fz)*k; const m=Math.hypot(mx,my); if(m>RR-3){ mx*=(RR-3)/m; my*=(RR-3)/m; r*=.7; } c.fillStyle=col; c.beginPath(); c.arc(cx+mx,cy+my,r,0,Math.PI*2); c.fill(); };
     for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e.alive) continue; if(e.npc&&!e.aggro) continue; const p=e.mesh.position; if(Math.abs(p.x-px)>RANGE*1.5||Math.abs(p.z-pz)>RANGE*1.5) continue; dot(p.x,p.z,e.npc?'#ff9a2e':'#ff3a3a',3); }
     // north marker
