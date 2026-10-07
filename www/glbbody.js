@@ -43,7 +43,18 @@ const GLBBODY=(function(){
         tL:['Right_WideLeg_L_048'], kL:['Right_WideKnee_L_049'], fL:['Right_WideAnkle_L_050'],
         tR:['Right_WideLeg_R_02'], kR:['Right_WideKnee_R_03'], fR:['Right_WideAnkle_R_04'] },
       down:{ Left_arm_029:['Left_elbow_030',12], Left_elbow_030:['Left_wrist_Cannonbolt_031',12],
-             Right_arm_09:['Right_elbow_010',12], Right_elbow_010:['Right_wrist_Cannonbolt_011',12] } }
+             Right_arm_09:['Right_elbow_010',12], Right_elbow_010:['Right_wrist_Cannonbolt_011',12] } },
+    jetray:{ syn:'jetray', face:0, minY:0, map:{ hips:['hips'], chest:['spine'], head:['neck'], sL:['upperArmL'], eL:['foreArmL'], sR:['upperArmR'], eR:['foreArmR'],
+        tL:['thighL'], kL:['shinL'], fL:['footL'], tR:['thighR'], kR:['shinR'], fR:['footR'] },
+      down:{ upperArmL:['foreArmL',34], foreArmL:[null,34], upperArmR:['foreArmR',34], foreArmR:[null,34] } },
+    chromastone:{ syn:'chromastone', face:0, map:{ hips:['hips'], chest:['spine'], head:['neck'], sL:['upperArmL'], eL:['foreArmL'], sR:['upperArmR'], eR:['foreArmR'],
+        tL:['thighL'], kL:['shinL'], fL:['footL'], tR:['thighR'], kR:['shinR'], fR:['footR'] },
+      down:{ upperArmL:['foreArmL',8], foreArmL:[null,8], upperArmR:['foreArmR',8], foreArmR:[null,8] } },
+    wildvine:{ syn:'wildvine', face:0, map:{ hips:['hips'], chest:['spine'], head:['neck'], sL:['upperArmL'], eL:['foreArmL'], sR:['upperArmR'], eR:['foreArmR'],
+        fl_t:['thighFL'], fl_k:['shinFL'], fl_f:['footFL'], fr_t:['thighFR'], fr_k:['shinFR'], fr_f:['footFR'],
+        bl_t:['thighBL'], bl_k:['shinBL'], bl_f:['footBL'], br_t:['thighBR'], br_k:['shinBR'], br_f:['footBR'] },
+      extra:['fl_t','fl_k','fl_f','fr_t','fr_k','fr_f','bl_t','bl_k','bl_f','br_t','br_k','br_f'], tail:['leafL','leafR'],
+      down:{ upperArmL:['foreArmL',28], foreArmL:[null,28], upperArmR:['foreArmR',28], foreArmR:[null,28] } }
   };
   const store={}, state={};          // store[kind] = parsed template; state[kind] = 'wait' | 'ok' | 'fail'
   const _qg=new THREE.Quaternion(), _q=new THREE.Quaternion(), _q2=new THREE.Quaternion(), _v=new THREE.Vector3(), _v2=new THREE.Vector3(), _m=new THREE.Matrix4(), _s=new THREE.Vector3();
@@ -82,15 +93,50 @@ const GLBBODY=(function(){
       mesh:(n)=>{ const m=/^polySurface(\d+)_/.exec(n), id=m?+m[1]:0;
         const T={9:'upperArmL',10:'foreArmL',8:'foreArmL',4:'spine',12:'upperArmR',11:'foreArmR',16:'foreArmR',15:'spine',6:'neck'};
         if(!m) return 'spine'; return T[id]||null; },                         // pCylinder (Omnitrix) -> chest; 5 / 14 = suit halves incl. a leg: split by height below
-      seg:(x,y,z,nm)=>{ const S=/polySurface5_/.test(nm)?'L':'R'; if(y>6.6) return 'spine'; if(y>5.6) return 'hips'; return y<1.0?'foot'+S:y<3.5?'shin'+S:'thigh'+S; } }
+      seg:(x,y,z,nm)=>{ const S=/polySurface5_/.test(nm)?'L':'R'; if(y>6.6) return 'spine'; if(y>5.6) return 'hips'; return y<1.0?'foot'+S:y<3.5?'shin'+S:'thigh'+S; } },
+    jetray:{ xf:(x,y,z)=>[-x,y,-z], iter:6,
+      joint:{ hips:[0,.78,-.1], spine:[0,.98,-.1], neck:[0,1.42,-.1], upperArmL:[-.34,1.3,-.1], foreArmL:[-.72,.97,-.1], upperArmR:[.34,1.3,-.1], foreArmR:[.72,.97,-.1],
+              thighL:[-.14,.74,-.1], shinL:[-.27,.42,-.12], footL:[-.32,.1,-.15], thighR:[.14,.74,-.1], shinR:[.27,.42,-.12], footR:[.32,.1,-.15] },
+      par:{ spine:'hips', neck:'spine', upperArmL:'spine', upperArmR:'spine', foreArmL:'upperArmL', foreArmR:'upperArmR', thighL:'hips', thighR:'hips', shinL:'thighL', shinR:'thighR', footL:'shinL', footR:'shinR' },
+      mesh:()=>null,
+      seg:(x,y,z)=>{ const ax=Math.abs(x), S=x<0?'L':'R';
+        if(y>1.42) return 'neck';
+        if(ax>.5||(ax>.34&&y>.7)) return ax<.72?'upperArm'+S:'foreArm'+S;
+        if(y<.7&&ax>.08) return y>.42?'thigh'+S:y>.1?'shin'+S:'foot'+S;
+        if(y<.7) return 'hips';
+        return y>.98?'spine':'hips'; } },
+    chromastone:{ xf:(x,y,z)=>[-100*x,100*y,-100*z], iter:4,
+      joint:{ hips:[0,1.28,0], spine:[0,1.5,0], neck:[0,1.98,0], upperArmL:[-.36,1.88,0], foreArmL:[-.85,1.88,0], upperArmR:[.36,1.88,0], foreArmR:[.85,1.88,0],
+              thighL:[-.17,1.25,0], shinL:[-.17,.72,0], footL:[-.17,.08,0], thighR:[.17,1.25,0], shinR:[.17,.72,0], footR:[.17,.08,0] },
+      par:{ spine:'hips', neck:'spine', upperArmL:'spine', upperArmR:'spine', foreArmL:'upperArmL', foreArmR:'upperArmR', thighL:'hips', thighR:'hips', shinL:'thighL', shinR:'thighR', footL:'shinL', footR:'shinR' },
+      mesh:()=>null,
+      seg:(x,y,z)=>{ const ax=Math.abs(x), S=x<0?'L':'R';
+        if(y>1.97) return 'neck';
+        if(ax>.3&&y>1.6) return ax<.85?'upperArm'+S:'foreArm'+S;
+        if(y<1.28) return y>.72?'thigh'+S:y>.1?'shin'+S:'foot'+S;
+        return y>1.5?'spine':'hips'; } },
+    wildvine:{ xf:(x,y,z)=>[-.006*x,.006*y,-.006*z], iter:6,
+      bones:['hips','spine','neck','upperArmL','foreArmL','upperArmR','foreArmR','leafL','leafR','thighFL','shinFL','footFL','thighFR','shinFR','footFR','thighBL','shinBL','footBL','thighBR','shinBR','footBR'],
+      joint:{ hips:[0,1.05,0], spine:[0,1.45,0], neck:[0,1.78,0], upperArmL:[-.28,1.74,0], foreArmL:[-.8,1.74,0], upperArmR:[.28,1.74,0], foreArmR:[.8,1.74,0], leafL:[-.15,1.9,0], leafR:[.15,1.9,0],
+              thighFL:[-.06,1,-.06], shinFL:[-.76,.62,-.6], footFL:[-.78,.1,-.62], thighFR:[.06,1,-.06], shinFR:[.76,.62,-.6], footFR:[.78,.1,-.62],
+              thighBL:[-.06,1,.06], shinBL:[-.76,.62,.6], footBL:[-.78,.1,.62], thighBR:[.06,1,.06], shinBR:[.76,.62,.6], footBR:[.78,.1,.62] },
+      par:{ spine:'hips', neck:'spine', upperArmL:'spine', upperArmR:'spine', foreArmL:'upperArmL', foreArmR:'upperArmR', leafL:'spine', leafR:'spine',
+            thighFL:'hips', shinFL:'thighFL', footFL:'shinFL', thighFR:'hips', shinFR:'thighFR', footFR:'shinFR', thighBL:'hips', shinBL:'thighBL', footBL:'shinBL', thighBR:'hips', shinBR:'thighBR', footBR:'shinBR' },
+      mesh:()=>null,
+      seg:(x,y,z)=>{ const ax=Math.abs(x), S=x<0?'L':'R';
+        if(y<1.05){ const q=(z<0?'F':'B')+S; return y>.64?'thigh'+q:y>.14?'shin'+q:'foot'+q; }
+        if(y>1.85&&ax>.2) return 'leaf'+S;
+        if(ax>.3&&y>1.4&&y<1.95) return ax<.78?'upperArm'+S:'foreArm'+S;
+        if(y>1.8) return 'neck';
+        return y>1.45?'spine':'hips'; } }
   };
   function synth(kind,gltf){
-    const Z=SYN[kind], src=gltf.scene; src.updateMatrixWorld(true);
+    const Z=SYN[kind], BL=Z.bones||BONES, src=gltf.scene; src.updateMatrixWorld(true);
     const bones={}, list=[]; const root=new THREE.Group();
-    for(const n of BONES){ const b=new THREE.Bone(); b.name=n; bones[n]=b; list.push(b); }
-    for(const n of BONES){ const p=Z.par[n], j=Z.joint[n]; if(p){ const pj=Z.joint[p]; bones[n].position.set(j[0]-pj[0],j[1]-pj[1],j[2]-pj[2]); bones[p].add(bones[n]); } else { bones[n].position.set(j[0],j[1],j[2]); root.add(bones[n]); } }
+    for(const n of BL){ const b=new THREE.Bone(); b.name=n; bones[n]=b; list.push(b); }
+    for(const n of BL){ const p=Z.par[n], j=Z.joint[n]; if(p){ const pj=Z.joint[p]; bones[n].position.set(j[0]-pj[0],j[1]-pj[1],j[2]-pj[2]); bones[p].add(bones[n]); } else { bones[n].position.set(j[0],j[1],j[2]); root.add(bones[n]); } }
     root.updateMatrixWorld(true);
-    const skel=new THREE.Skeleton(list), BI={}; BONES.forEach((n,i)=>BI[n]=i);
+    const skel=new THREE.Skeleton(list), BI={}; BL.forEach((n,i)=>BI[n]=i);
     const meshes=[]; src.traverse(o=>{ if(o.isMesh) meshes.push(o); });
     for(const m of meshes){
       const g=m.geometry.clone(); g.applyMatrix4(m.matrixWorld);
@@ -102,7 +148,7 @@ const GLBBODY=(function(){
         return e[0][0]*(e[1][1]*e[2][2]-e[1][2]*e[2][1])-e[0][1]*(e[1][0]*e[2][2]-e[1][2]*e[2][0])+e[0][2]*(e[1][0]*e[2][1]-e[1][1]*e[2][0]); })();
       if(det<0&&g.index){ const ix=g.index; for(let i=0;i<ix.count;i+=3){ const a=ix.getX(i+1); ix.setX(i+1,ix.getX(i+2)); ix.setX(i+2,a); } }
       // initial hard weights
-      const whole=Z.mesh(m.name), B=BONES.length, W=new Float32Array(n*B);
+      const whole=Z.mesh(m.name), B=BL.length, W=new Float32Array(n*B);
       for(let i=0;i<n;i++){ const bn=whole||Z.seg(pos.getX(i),pos.getY(i),pos.getZ(i),m.name); W[i*B+BI[bn]]=1; }
       if(!whole){   // diffuse weights across welded neighbours so joints bend smoothly
         const key=new Map(), wid=new Int32Array(n); let nw=0;
@@ -142,7 +188,7 @@ const GLBBODY=(function(){
     sc.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true; } });
     const bb=skinnedBounds(sc);
     const hb=bones[C.map.hips[0]]; hb.updateWorldMatrix(true,false); const hp=new THREE.Vector3().setFromMatrixPosition(hb.matrixWorld);
-    store[kind]={ scene:sc, height:bb.max.y-bb.min.y, minY:bb.min.y, cx:hp.x, cz:hp.z };
+    const my=(C.minY!=null)?C.minY:bb.min.y; store[kind]={ scene:sc, height:bb.max.y-my, minY:my, cx:hp.x, cz:hp.z };
   }
 
   function load(kind,buf){
@@ -238,6 +284,7 @@ const GLBBODY=(function(){
         t:{hips:new THREE.Quaternion(),chest:new THREE.Quaternion(),head:new THREE.Quaternion(),sL:new THREE.Quaternion(),eL:new THREE.Quaternion(),sR:new THREE.Quaternion(),eR:new THREE.Quaternion(),
            s2L:new THREE.Quaternion(),e2L:new THREE.Quaternion(),s2R:new THREE.Quaternion(),e2R:new THREE.Quaternion(),
            tL:new THREE.Quaternion(),kL:new THREE.Quaternion(),fL:new THREE.Quaternion(),tR:new THREE.Quaternion(),kR:new THREE.Quaternion(),fR:new THREE.Quaternion()}, clock:Math.random()*10 };
+      if(C.extra) C.extra.forEach(k=>{ G.t[k]=new THREE.Quaternion(); });
       // success: only now hide the box anatomy (keeping the cannonbolt roll shell) and mount the GLB body
       g.traverse(o=>{ if(!o.isMesh) return; for(let p=o;p;p=p.parent){ if(p===shellRoot) return; if(p===g) break; } o.visible=false; });
       g.add(pivot); parts.glb=G; apply(parts,0); if(kind==='cannonbolt') attachBall(parts);
@@ -245,6 +292,24 @@ const GLBBODY=(function(){
     }catch(e){ console.warn('GLB attach '+kind+': '+e.message); return false; }
   }
 
+
+  // Wildvine walks on FOUR tentacle legs set in an X. The rig has two legs, so each diagonal pair (front-left + back-right, front-right + back-left)
+  // copies one rig leg: the stride becomes a sweep of the strut around the vertical axis, the knee flex lifts and tucks it.
+  const WVL={ fl:{sx:-1,sz:-1,L:1}, br:{sx:1,sz:1,L:1}, fr:{sx:1,sz:-1,L:0}, bl:{sx:-1,sz:1,L:0} };
+  const _a1=new THREE.Quaternion(), _a2=new THREE.Quaternion(), _a3=new THREE.Quaternion(), _ax=new THREE.Vector3(), _ay=new THREE.Vector3(0,1,0);
+  function wvLegs(p,t,sw){
+    let ph=0;
+    for(const k in WVL){ const w=WVL[k], Lg=w.L?p.leftLeg:p.rightLeg, Kn=w.L?p.kneeL:p.kneeR, Ft=w.L?p.footL:p.footR;
+      const th=Lg.rotation.x, fl=Math.max(0,-Kn.rotation.x), ft=Ft.rotation.x, hl=Math.hypot(w.sx,w.sz);
+      _ax.set(w.sz/hl,0,-w.sx/hl);                                         // lift axis: horizontal, perpendicular to the strut
+      _a1.setFromAxisAngle(_ay,w.sx*th*1.15);                                // sweep forward / back
+      _a2.setFromAxisAngle(_ax,-(fl*.55+Math.max(0,th)*.18));                // raise the strut as the knee folds
+      t[k+'_t'].copy(t.hips).multiply(_a1).multiply(_a2);
+      const rip=Math.sin(sw*7+ph)*.1; ph+=1.6;
+      _a3.setFromAxisAngle(_ax,-(fl*.9)+rip); t[k+'_k'].copy(t[k+'_t']).multiply(_a3);
+      _a3.setFromAxisAngle(_ax,ft*.5+fl*.3-rip*1.4); t[k+'_f'].copy(t[k+'_k']).multiply(_a3);
+    }
+  }
   // Copy the animator's pivot rotations onto the GLB bones. Call right after animateRig().
   function apply(parts,dt){
     const G=parts.glb; if(!G) return; const p=parts, t=G.t, gn=G.gain;
@@ -260,6 +325,7 @@ const GLBBODY=(function(){
     t.tR.copy(t.hips).multiply(Q(p.rightLeg,'tR')); t.kR.copy(t.tR).multiply(Q(p.kneeR,'kR')); t.fR.copy(t.kR).multiply(Q(p.footR,'fR'));
     const dy=p.hips.position.y-p.hipY, dz=p.hips.position.z, dx=p.hips.position.x;
     const sw=(dt>0)?(G.clock+=dt):G.clock, spd=Math.min(1.6,(p.anim&&p.anim.spd||0)/4);
+    if(G.kind==='wildvine') wvLegs(p,t,sw);
     const n=G.bones.length;
     for(let i=0;i<n;i++){
       const b=G.bones[i], pi=G.par[i], e=G.ent[i];
@@ -320,7 +386,7 @@ const GLBBODY=(function(){
     G.pivot.position.set(G.base.x*s, G.base.y*s+parts.hipY*(1-s), G.base.z*s);
   }
   // true top of the model (portrait framing: Box3.setFromObject cannot measure skinned meshes)
-  const PZ={four_arms:.68,heatblast:.68,xlr8:.92,echo_echo:.72,cannonbolt:1};
+  const PZ={four_arms:.68,heatblast:.68,xlr8:.92,echo_echo:.72,cannonbolt:1,jetray:.82,chromastone:.8,wildvine:.78};
   function topOf(parts){ return parts.glb?(parts.dims.total-.12):null; }
 
   return { init, attach, attachBall, setBall, apply, scaleBody, topOf, pz:k=>PZ[k]||.7, leanMul:k=>(CFG[k]&&CFG[k].leanMul!=null)?CFG[k].leanMul:1, ready:k=>state[k]==='ok', pending:k=>!!CFG[k]&&(state[k]==='wait'||state[k]===undefined), CFG };
