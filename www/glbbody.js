@@ -286,7 +286,8 @@ const GLBBODY=(function(){
            tL:new THREE.Quaternion(),kL:new THREE.Quaternion(),fL:new THREE.Quaternion(),tR:new THREE.Quaternion(),kR:new THREE.Quaternion(),fR:new THREE.Quaternion()}, clock:Math.random()*10 };
       if(C.extra) C.extra.forEach(k=>{ G.t[k]=new THREE.Quaternion(); });
       // success: only now hide the box anatomy (keeping the cannonbolt roll shell) and mount the GLB body
-      g.traverse(o=>{ if(!o.isMesh) return; for(let p=o;p;p=p.parent){ if(p===shellRoot) return; if(p===g) break; } o.visible=false; });
+      const _brick=[]; g.traverse(o=>{ if(!o.isMesh) return; for(let p=o;p;p=p.parent){ if(p===shellRoot) return; if(p===g) break; } _brick.push(o); });
+      _brick.forEach(o=>{ if(o.parent) o.parent.remove(o); if(o.geometry) o.geometry.dispose(); });   // the skin is on: delete the brick anatomy for good
       g.add(pivot); parts.glb=G; apply(parts,0); if(kind==='cannonbolt') attachBall(parts);
       return true;
     }catch(e){ console.warn('GLB attach '+kind+': '+e.message); return false; }

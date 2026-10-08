@@ -252,7 +252,10 @@
   #hud .ident{min-width:0;}
 
   #minimap{position:absolute;right:max(12px,env(safe-area-inset-right,12px));top:max(8px,env(safe-area-inset-top,8px));width:80px;height:80px;border-radius:50%;border:2px solid var(--theme);background:#04120c;box-shadow:0 0 10px rgba(0,0,0,.6);pointer-events:none;}
-
+  #speed-fx{position:fixed;inset:-12%;pointer-events:none;z-index:6;opacity:0;will-change:transform,opacity;
+    background:repeating-conic-gradient(from 3deg at 50% 50%,rgba(150,238,255,0) 0 3.2deg,rgba(150,238,255,.55) 3.5deg 3.75deg,rgba(150,238,255,0) 4deg 8.4deg,rgba(220,250,255,.35) 8.6deg 8.75deg,rgba(150,238,255,0) 9deg 14deg);
+    -webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 34%,#000 78%);mask-image:radial-gradient(circle at 50% 50%,transparent 34%,#000 78%);animation:spdzoom .22s linear infinite;}
+  @keyframes spdzoom{from{transform:scale(1)}to{transform:scale(1.22)}}
   #perf-hud{position:absolute;left:14px;top:132px;font:9px/1.25 monospace;color:#9dffc8;background:rgba(0,10,6,.7);padding:4px 6px;border-radius:3px;pointer-events:none;white-space:pre;display:none;z-index:30;}
   #squad-panel{right:104px !important;top:max(12px,env(safe-area-inset-top,12px)) !important;}
 
@@ -394,6 +397,7 @@
     <div class="bar-row"><span class="bar-label">OM</span><div class="bar-track"><div id="omni-fill" class="bar-fill"></div></div></div>
   </div>
   <div id="perf-hud"></div>
+<div id="speed-fx"></div>
   <canvas id="minimap" width="120" height="120"></canvas>
   <div id="omni-dim"></div>
   <div id="omni-dial"></div>
@@ -450,8 +454,8 @@ window.addEventListener('error',function(e){
 <script src="models.js"></script>
 <script src="props.js"></script>
 <script src="world.js"></script>
-<script src="vfx.js"></script>
 <script src="glbbody.js"></script>
+<script src="vfx.js"></script>
 <script>
 (function(){
 'use strict';
@@ -592,8 +596,8 @@ const QUALITY = { level:'MEDIUM',
 ========================================================================= */
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 400);
-try{ VFX.init(THREE,scene,camera); }catch(e){ console.warn('VFX init',e); }
 const renderer = new THREE.WebGLRenderer({antialias:true});
+try{ VFX.init(scene,camera); }catch(e){ console.warn('VFX init',e); }
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
@@ -2003,6 +2007,103 @@ function buildCharacter(kind){
     if(o.foot) o.foot(a,sx); };
   const boot=(a,sx,w,len,m,sole,toe)=>{ bx(a,w,.16,len*.62,m,0,.03,-len*.16); bx(a,w*.92,.2,w*.9,m,0,.13,.04); bx(a,w*1.02,.09,len,sole,0,-.03,-len*.24); if(toe) bx(a,w*.96,.13,len*.24,toe,0,.02,-len*.62); };
 
+  if(kind==='ben'){
+    const hair=mk(0x4a2c17), dark=mk(0x1b1b1b), eyeG=mk(0x3ddb6a), blk=mk(0x101010), jacket=M.top, skin=M.skin, shoe=mk(0xf0f0f0), shoeC=mk(0x2fb04f);
+    parts.mats.hair=hair;
+    torso({pw:1.0,pd:1.0,aw:.86,ad:.92,cw:1.04,cd:1.0,sw:1.06,cm:jacket});
+    bx(chest,.06,th*.98,td*.03+.02,blk,0,th*.5,F+.002); bx(chest,tw*1.02,.13,td+.03,white,0,.05,0); bx(chest,tw*.5,.12,td+.03,white,0,th-.02,0); bx(chest,tw*.5,.08,.06,white,0,th+.04,-.04);
+    arm(parts.leftArm,parts.elbowL,-1,1,{dw:1.5,dh:1.2,dm:jacket,uw:1.02,ud:1.02,sleeve:jacket,fw:.92,fd:.92,fm:skin,cuff:white,hand:(el,sg,at)=>fist(el,sg,at,skin,skin,1.2)});
+    arm(parts.rightArm,parts.elbowR,1,1,{dw:1.5,dh:1.2,dm:jacket,uw:1.02,ud:1.02,sleeve:jacket,fw:.92,fd:.92,fm:skin,cuff:white,hand:(el,sg,at)=>fist(el,sg,at,skin,skin,1.2)});
+    legsAll.forEach(l=>leg(l,{tw:1,td:1,tm:M.bottom,sm:M.bottom,foot:(a,sx)=>boot(a,sx,LT*1.1,.5,shoe,shoeC,white)}));
+    // head: rounded skull, jaw, ears, hair
+    bx(head,hs*.98,hs*.78,hs*.98,skin,0,hs*.6,0); bx(head,hs*.82,hs*.3,hs*.88,skin,0,hs*.14,-.01); [-1,1].forEach(sx=>bx(head,.05,.15,.1,skin,sx*(hs*.5),hs*.5,0));
+    bx(head,hs*1.1,.17,hs*1.1,hair,0,hs*1.02,.01); bx(head,hs*1.1,.44,.16,hair,0,hs*.78,hs/2-.02);
+    [-1,1].forEach(sx=>{ bx(head,.08,.36,hs*.9,hair,sx*hs*.5,hs*.72,.06); });
+    for(let i=-2;i<=2;i++) bx(head,.13,.15+(i%2?.06:0),.13,hair,i*.13,hs*1.12,-hs*.36,-.35,0,i*.14);
+    [-1,1].forEach(sx=>{ bx(head,.16,.12,.02,white,sx*.135,hs*.6,-hs/2-.005); bx(head,.08,.1,.02,eyeG,sx*.135-sx*.015,hs*.6,-hs/2-.02); bx(head,.18,.035,.02,hair,sx*.135,hs*.74,-hs/2-.012,0,0,-sx*.14); });
+    bx(head,.14,.03,.02,dark,0,hs*.3,-hs/2-.012); bx(head,.06,.09,.05,skin,0,hs*.46,-hs/2-.02);
+    const el=parts.elbowL; bx(el,.26,.16,.26,omniFrame,0,-fa*.72,0); const dial=bx(el,.06,.14,.14,omniGlow,-.14,-fa*.72,0); fxl.push({k:'pulse',m:dial,f:3.2,ph:0}); bx(el,.07,.04,.04,white,-.155,-fa*.72,0,0,0,.8);
+  }
+  if(kind==='four_arms'){
+    const dk=mk(0x121216), rd=mk(0x8e1712), yel=mk(0xfff2c0,0x5a4a00), skin=M.skin, tan=mk(0x3a3a44);
+    torso({pw:.8,pd:.95,aw:.62,ad:.8,cw:1.12,cd:1.0,sw:1.16,sd:.95,am:dk,cm:white,sm:skin});
+    // V-taper: huge pecs, traps, lats and a black waist band
+    [-1,1].forEach(sx=>{ bx(chest,tw*.46,th*.27,.16,white,sx*tw*.25,th*.66,F-.03); bx(chest,.13,th*.7,.03,dk,sx*tw*.3,th*.6,F-.125); bx(chest,tw*.3,th*.17,td*.8,skin,sx*tw*.3,th*.98,0,0,0,-sx*.45); bx(chest,tw*.22,th*.5,.16,skin,sx*tw*.52,th*.5,td/2-.02); });
+    bx(chest,tw*.7,.16,td*.86,dk,0,.1,0); bx(hips,.24,.16,.05,white,0,.04,F); bx(chest,tw*.44,th*.16,.05,dk,0,th*.27,F-.02);
+    omniChest(th*.63,1.05,-.14);
+    { const zf=-.12; [parts.leftArm2,parts.rightArm2].forEach(a=>{ a.position.z=zf; a.position.x*=1.06; }); }
+    armsAll.forEach(([sh,el,sg,sc])=>{ arm(sh,el,sg,sc<1?.9:1,{dw:1.75,dh:1.55,dm:skin,uw:1.42,ud:1.32,sleeve:skin,fw:1.36,fd:1.3,fm:skin,cuff:dk,hand:(e,sgn,at)=>fist(e,sgn,at,skin,rd,1.38)}); });
+    legsAll.forEach(l=>leg(l,{tw:1.05,td:1,tm:M.bottom,sm:M.bottom,knee:dk,foot:(a,sx)=>boot(a,sx,LT*1.2,.7,dk,tan,rd)}));
+    // head: heavy skull sunk between the traps, brow ridge, underbite jaw with tusks
+    bx(head,hs*1.02,hs*.55,hs*.96,skin,0,hs*.66,0); bx(head,hs*1.12,hs*.34,hs*1.06,skin,0,hs*.2,-.03); bx(head,.2,.16,hs*.9,rd,0,hs*1.02,0);
+    bx(head,hs*1.12,.13,.17,rd,0,hs*.82,-hs/2-.03); bx(head,hs*.96,.1,.05,dk,0,hs*.4,-hs/2-.05);
+    [-1,1].forEach(sx=>{ bx(head,.19,.1,.03,yel,sx*.16,hs*.66,-hs/2-.03,0,0,sx*.3); bx(head,.07,.07,.03,dk,sx*.16,hs*.66,-hs/2-.05); bx(head,.07,.2,.07,white,sx*.22,hs*.3,-hs*.56,0,0,sx*.1); bx(head,.07,.13,.07,rd,sx*(hs*.52),hs*.66,0);
+      bx(head,.09,.12,.1,white,sx*.1,hs*.36,-hs*.53); });
+    bx(head,hs*.5,.06,.03,white,0,hs*.34,-hs*.56);
+  }
+  if(kind==='heatblast'){
+    const lava=mk(0xff7a14,0xff5a0a), hot=mk(0xffb020,0xff9a08), wh=mk(0xfff0b0,0xffd860), rock=M.skin, plate=mk(0x5a1c10), crag=mk(0x2a0f0a);
+    torso({pw:.9,pd:.9,aw:.7,ad:.85,cw:1.0,cd:1.0,sw:1.12,cm:plate,am:rock,sm:rock});
+    for(let i=0;i<3;i++){ bx(chest,tw*(.92-i*.1),.09,.08,lava,0,th*(.42+i*.14),F-.01); bx(chest,tw*(.8-i*.08),th*.11,.1,plate,0,th*(.5+i*.14),F-.04); }
+    bx(chest,tw*.42,th*.22,.06,hot,0,th*.66,F-.05); omniChest(th*.66,.72);
+    bx(chest,tw*.2,th*.8,.05,lava,0,th*.5,td/2+.02);
+    [-1,1].forEach(sx=>{ bx(chest,tw*.3,th*.2,td*.7,crag,sx*tw*.44,th*1.0,0,0,0,-sx*.5); flame(chest,sx*tw*.5,th*1.06,0,.16,.32,lava,sx*2); });
+    for(let i=0;i<4;i++) flame(chest,0,th*(.25+i*.2),td/2+.02,.14,.18+(i%2)*.12,i%2?hot:lava,i*1.3);
+    armsAll.forEach(([sh,el,sg])=>{ arm(sh,el,sg,1,{dw:1.4,dh:1.2,dm:crag,uw:1.05,ud:1.05,sleeve:rock,fw:1.25,fd:1.25,fm:plate,cuff:lava,hand:(e,sgn,at)=>{ claw(e,sgn,at,rock,hot,3); flame(e,0,-fa-at*.4,0,.2,.34,lava); flame(e,-.08,-fa-at*.4,0,.13,.26,hot); flame(e,.08,-fa-at*.4,0,.13,.28,hot); } });
+      bx(el,AT*1.35,.07,AT*1.2,lava,0,-fa*.3,-AT*.05); });
+    legsAll.forEach(l=>leg(l,{tw:1,td:1,tm:plate,sm:rock,knee:crag,foot:(a,sx)=>{ boot(a,sx,LT*1.15,.6,crag,plate,rock); flame(a,0,-.02,-.12,.12,.22,lava); flame(a,sx*.05,0,-.05,.09,.16,hot); }}));
+    bx(head,hs*1.0,hs*.74,hs*.96,rock,0,hs*.56,0); bx(head,hs*.9,hs*.3,hs*.86,plate,0,hs*.12,-.02); bx(head,hs*1.08,.12,.15,crag,0,hs*.82,-hs/2-.02);
+    bx(head,hs*.52,.05,.03,lava,0,hs*.24,-hs/2-.02); [-1,1].forEach(sx=>{ bx(head,.17,.07,.03,wh,sx*.14,hs*.62,-hs/2-.02,0,0,sx*-.25); bx(head,.1,.2,.16,crag,sx*hs*.5,hs*.58,.02); });
+    [[0,.5,.2],[-.16,.4,.16],[.16,.42,.16],[-.08,.62,.14],[.09,.6,.14],[-.24,.28,.12],[.24,.3,.12],[0,.34,-.15]].forEach((f,i)=>flame(head,f[0],hs*.92,(i%2?.04:-.04),f[2],f[1],i%3===0?wh:(i%2?hot:lava),i*1.7));
+  }
+  if(kind==='xlr8'){
+    const eyeG=mk(0x66ff88,0x33ff66), vis=mk(0x05070e), acc=M.accent, wht=mk(0xdff0ff), body=M.top, skin=M.skin, navy=mk(0x0b1236);
+    torso({pw:.85,pd:.9,aw:.62,ad:.8,cw:.98,cd:.92,sw:1.02,sd:.8,cm:body,am:navy,sm:skin});
+    [-1,1].forEach(sx=>{ lb(chest,th*.9,F,th*.28,F-.02,.1,.04,acc,sx*tw*.24); bx(chest,.07,th*.9,.05,acc,sx*tw*.5,th*.5,F+.06); }); bx(chest,tw*.42,th*.5,.03,wht,0,th*.4,F-.01);
+    omniChest(th*.78,.72);
+    for(let i=0;i<3;i++) lb(chest,th*(.95-i*.16),td/2,th*(.78-i*.16),td/2+.34,.05,.03,acc,(i-1)*.1);   // back fins
+    armsAll.forEach(([sh,el,sg])=>{ arm(sh,el,sg,1,{dw:1.5,dh:1.2,dm:body,uw:.9,ud:.9,sleeve:skin,fw:.95,fd:.95,fm:skin,cuff:acc,hand:(e,sgn,at)=>claw(e,sgn,at,navy,acc,3)});
+      lb(el,-fa*.1,.06,-fa*1.3,.34,.05,.03,acc,sg*.11); });
+    legsAll.forEach(l=>leg(l,{digi:true,tw:.95,td:.95,tm:M.bottom,sm:body,kneeM:acc,foot:(a,sx)=>{ bx(a,LT*.9,.1,.62,navy,0,-.02,-.22); bx(a,LT*.7,.1,.16,acc,0,-.02,-.56); lb(a,.08,.04,-.1,.32,.07,.07,acc); }}));
+    // head: long swept helm, dark visor with a V of green light, cheek plates and a blade crest
+    bx(head,hs*.86,hs*.72,hs*1.32,skin,0,hs*.58,hs*.16); bx(head,hs*.7,hs*.3,hs*.7,body,0,hs*.12,-hs*.06);
+    const ff=-hs*.5-.02; bx(head,hs*.84,.19,.03,vis,0,hs*.62,ff); [-1,1].forEach(sx=>bx(head,.19,.07,.04,eyeG,sx*.15,hs*.63,ff-.01,0,0,-sx*.32));
+    bx(head,hs*.42,.06,.03,wht,0,hs*.24,ff); [-1,1].forEach(sx=>bx(head,.05,.32,hs*.8,acc,sx*hs*.44,hs*.58,hs*.18));
+    lb(head,hs*.86,0,hs*.6,hs*1.1,.06,.06,acc,0); lb(head,hs*.98,-.02,hs*.7,hs*1.3,.05,.05,body,0);
+    const t1=new THREE.Group(); t1.position.set(0,.0,td/2); t1.rotation.x=-.25; hips.add(t1); bx(t1,.14,.14,.4,body,0,0,.2);
+    const t2=new THREE.Group(); t2.position.set(0,0,.4); t1.add(t2); bx(t2,.1,.1,.34,skin,0,0,.17);
+    const t3=new THREE.Group(); t3.position.set(0,0,.34); t2.add(t3); bx(t3,.07,.07,.28,acc,0,0,.14); bx(t3,.05,.05,.18,wht,0,0,.32);
+    fxl.push({k:'sway',g:t1,f:3.1,a:.3,ph:0,rx:.08,rx0:-.25},{k:'sway',g:t2,f:3.1,a:.35,ph:.9,rx:.1,rx0:0},{k:'sway',g:t3,f:3.1,a:.4,ph:1.8,rx:0,rx0:0});
+  }
+  if(kind==='diamondhead'){
+    const crys=mk(0xb8fff4,0x2a8f86), deep=mk(0x158a80,0x0a4a44), core=mk(0xdfffff,0xbfffee), eye=mk(0x6dff9a,0x33ff77), body=M.skin, dk=M.top;
+    [M.skin,M.top,M.bottom].forEach(m=>glowBase(m,0x0a3733));
+    torso({pw:.9,pd:.9,aw:.66,ad:.84,cw:1.08,cd:1.02,sw:1.12,cm:dk,am:body,sm:body});
+    // faceted chest: angled slabs, glowing core, spine crystals
+    [-1,1].forEach(sx=>{ bx(chest,tw*.36,th*.34,.14,body,sx*tw*.24,th*.64,F-.03,0,sx*.22,sx*.12); bx(chest,.06,th*.4,.04,deep,sx*tw*.36,th*.42,F); });
+    const dia=bx(chest,.3,.3,.08,core,0,th*.6,F-.05,0,0,Math.PI/4); fxl.push({k:'pulse',m:dia,f:2.4,ph:0}); omniChest(th*.9,.6);
+    [[0,.9,.55,0],[-.16,.75,.4,.2],[.16,.75,.4,-.2],[-.3,.55,.3,.42],[.3,.55,.3,-.42]].forEach(c=>lb(chest,th*c[1],td/2,th*c[1]+c[2]*1.1,td/2+.5*c[2],.12,.12,crys,c[0]));
+    armsAll.forEach(([sh,el,sg])=>{ arm(sh,el,sg,1,{dw:1.6,dh:1.4,dm:crys,uw:1.02,ud:1.02,sleeve:body,fw:1.2,fd:1.18,fm:deep,cuff:crys,hand:(e,sgn,at)=>claw(e,sgn,at,body,crys,4)});
+    });
+    armsAll.forEach(([sh,el,sg])=>{ bx(sh,.14,.6,.14,crys,sg*.06,.36,0,0,0,sg*-.35); bx(sh,.1,.42,.1,crys,sg*.2,.26,.03,0,0,sg*-.9); bx(sh,.1,.36,.1,crys,0,.22,-.1,-.7,0,0); lb(el,-fa*.3,.1,-fa*1.0,.5,.08,.06,crys,0); });
+    legsAll.forEach(l=>leg(l,{tw:1.05,td:1.05,tm:body,sm:deep,knee:crys,foot:(a,sx)=>{ boot(a,sx,LT*1.15,.6,body,crys,crys); }}));
+    bx(head,hs*1.0,hs*.62,hs*.96,body,0,hs*.62,0); bx(head,hs*.84,hs*.34,hs*.86,deep,0,hs*.16,-.02); bx(head,hs*1.08,.1,.1,deep,0,hs*.86,-hs/2-.02);
+    [[0,.52,0],[-.16,.4,.22],[.16,.4,-.22],[-.28,.28,.5],[.28,.28,-.5],[0,.3,.0]].forEach((c,i)=>bx(head,.12,c[1],.12,crys,c[0],hs*1.0+c[1]/2-.06,i===5?.16:.0,i===5?-.5:0,0,c[2]));
+    [-1,1].forEach(sx=>{ bx(head,.18,.08,.03,eye,sx*.14,hs*.62,-hs/2-.02,0,0,sx*.22); bx(head,.09,.24,.14,crys,sx*hs*.52,hs*.56,.0,0,0,sx*.3); });
+  }
+  if(kind==='echo_echo'){
+    const blk=M.accent, grey=mk(0x4a5058), cy=mk(0x5ee7ff,0x33d6ff), w1=M.skin, w2=M.top;
+    torso({pw:.9,pd:.9,aw:.7,ad:.85,cw:1.02,cd:1.0,sw:1.06,cm:w2,am:blk});
+    bx(chest,tw*1.06,.1,td+.03,blk,0,th*.34,0); bx(chest,tw*1.06,.09,td+.03,blk,0,th*.88,0);
+    [-1,1].forEach(sx=>spk(chest,.2,sx*tw*.22,th*.6,F+.005,Math.PI/2,0,grey)); omniChest(th*.8,.5);
+    spk(chest,.26,0,th*.55,td/2+.05,Math.PI/2,0,grey); bx(chest,tw*.55,th*.6,.05,blk,0,th*.55,td/2+.015);
+    armsAll.forEach(([sh,el,sg])=>{ arm(sh,el,sg,1,{dw:1.5,dh:1.4,dm:w2,uw:1.0,ud:1.0,sleeve:w1,fw:1.0,fd:1.0,fm:w1,cuff:blk,hand:(e,sgn,at)=>{ bx(e,at*1.9,at*1.9,at*1.5,blk,0,-fa-at*.5,0); spk(e,at*.82,0,-fa-at*.5,-at*.78,Math.PI/2,0,grey); }});
+      bx(sh,AT*1.6,.09,AT*1.6,blk,0,-ua*.02,0); bx(el,AT*1.2,.09,AT*1.2,blk,0,0,0); });
+    legsAll.forEach(l=>leg(l,{tw:1.0,td:1.0,tm:w1,sm:w2,knee:blk,foot:(a,sx)=>boot(a,sx,LT*1.2,.55,w2,blk,blk)}));
+    bx(head,hs*1.02,hs*.86,hs*.96,w1,0,hs*.52,0); [-1,1].forEach(sx=>bx(head,hs*.28,hs*.28,hs*.28,w1,sx*hs*.42,hs*.06,-hs*.4,0,0,0));
+    bx(head,hs*.9,.26,.03,blk,0,hs*.58,-hs/2-.012); [-1,1].forEach(sx=>bx(head,.12,.06,.03,cy,sx*.13,hs*.6,-hs/2-.03)); bx(head,.14,.03,.02,grey,0,hs*.28,-hs/2-.012);
+    [-1,1].forEach(sx=>spk(head,.17,sx*(hs/2+.03),hs*.5,0,0,Math.PI/2,grey)); bx(head,.16,.1,.16,blk,0,hs*1.0,0);
+  }
   if(kind==='cannonbolt'){
     const yel=M.top, blk=M.accent, wh=mk(0xffffff,0xbbbbbb), plate=mk(0xd0901c), skin=M.skin;
     torso({pw:.8,pd:.6,aw:.74,ad:.6,cw:1.02,cd:.7,sw:1.06,sd:.7,cm:yel,am:skin});
@@ -2024,12 +2125,7 @@ function buildCharacter(kind){
   const o=new THREE.Group(); g.position.y=-0.9; o.add(g); o.rotation.order='YXZ';
   if(kind==='heatblast'){
     // soft flame sprite texture (shared)
-    if(!window.__FT){ window.__FT=[]; for(let v=0;v<4;v++){ const cv=document.createElement('canvas'); cv.width=64; cv.height=128; const cx=cv.getContext('2d'); const r=(i)=>{ const x=Math.sin((v+1)*91.7+i*37.3)*43758.5; return x-Math.floor(x); };
-        cx.beginPath(); cx.moveTo(32,126);
-        const L=[[6,100],[12,70+r(1)*14],[8,44+r(2)*10],[20,22+r(3)*8],[28,4+r(4)*10]]; for(const [x,y] of L) cx.lineTo(x+r(x)*5,y);
-        cx.lineTo(32+(r(9)-.5)*6,0); const R=[[36,18+r(5)*8],[48,30+r(6)*10],[44,58+r(7)*14],[58,84+r(8)*8],[56,104]]; for(const [x,y] of R) cx.lineTo(x-r(y)*5,y); cx.closePath();
-        const gr=cx.createLinearGradient(0,128,0,0); gr.addColorStop(0,'rgba(255,255,235,1)'); gr.addColorStop(.35,'rgba(255,215,80,.95)'); gr.addColorStop(.7,'rgba(255,120,24,.75)'); gr.addColorStop(1,'rgba(255,50,0,0)'); cx.fillStyle=gr; cx.fill();
-        const t=new THREE.CanvasTexture(cv); window.__FT.push(t); } }
+    if(!window.__FT){ window.__FT=['flame_01','flame_02','flame_03','flame_04'].map(n=>VFX.ptex(n)); }
     const mkSp=(col,vi)=>new THREE.Sprite(new THREE.SpriteMaterial({map:window.__FT[(vi||0)%4],color:col,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
     // head is always on fire: layered flame puffs above the head
     const hf=new THREE.Group(); parts.headFlame=[];
@@ -2219,7 +2315,7 @@ function setForm(formDef, kind){
   if(TF.active&&!TF._ap){ TF.active=false; if(TF.holo){ scene.remove(TF.holo); TF.holo=null; } }   // any other form change (death, revert) cancels a transformation in progress
   const prevForm=player.form; if(prevForm && prevForm!==formDef && player.alive) HP.store[prevForm.id]=Math.max(1,player.health);
   player.form = formDef; if(player.driving) setTimeout(()=>{ if(player.driving) player.model.visible=false; },0);
-  player.flying = false; player.chgHeld=false; player.eyeHeld=false; if(typeof domeEnd==='function'&&DOME) domeEnd(); chgOff();
+  player.flying = false; player.chgHeld=false; player.eyeHeld=false; if(typeof domeEnd==='function'&&DOME) domeEnd(); if(CHG){ scene.remove(CHG); CHG=null; }
   scene.remove(player.model);
   player.model = buildCharacter(kind);
   scene.add(player.model);
@@ -2247,8 +2343,10 @@ function transformFx(col){
   player.morphT=.55;
   if(!player.alive||typeof debris!=='function') return;
   const base=player.pos.clone(); base.y-=.6;
-  for(let i=0;i<16;i++){ const a=i/16*6.283; debris(base.clone(),i%3?col:0xffffff,.16+Math.random()*.1,new THREE.Vector3(Math.cos(a)*5,1.2+Math.random()*2.2,Math.sin(a)*5),.5,false); }
-  for(let i=0;i<8;i++) debris(base.clone(),col,.22,new THREE.Vector3((Math.random()-.5)*2,4+Math.random()*3,(Math.random()-.5)*2),.6,false);
+  { const c0=base.clone(); c0.y+=1;
+    VFX.sheet('star_explosion',c0,{size:3.4,dur:.55,color:col,roll:Math.random()*6});
+    VFX.sheet('electric_ring',base.clone().add(new THREE.Vector3(0,.3,0)),{size:1.6,grow:3,dur:.5,face:new THREE.Vector3(0,1,0),color:col});
+    VFX.sparks(c0,14,[col,0xffffff],7); }
   shakeCamera(.14);
 }
 
@@ -2537,7 +2635,7 @@ function updateCamera(){
   camDyn.px=player.pos.x; camDyn.pz=player.pos.z; camDyn.init=true;
   // landing: brief downward dip scaled by how hard we hit
   if(!player.onGround) camDyn.lastVy=player.vel.y;
-  else if(!camDyn.wasGround && camDyn.lastVy<-8 && !player.driving) camDyn.kick=Math.min(.5,(-camDyn.lastVy-6)*.022);
+  else if(!camDyn.wasGround && camDyn.lastVy<-8 && !player.driving){ camDyn.kick=Math.min(.5,(-camDyn.lastVy-6)*.022); VFX.landing(new THREE.Vector3(player.pos.x,groundTopAt(player.pos.x,player.pos.z,player.pos.y-1)+.1,player.pos.z),-camDyn.lastVy,player.form.id==='four_arms'||player.form.id==='cannonbolt'); }
   camDyn.wasGround=player.onGround; camDyn.kick*=Math.max(0,1-cdt*7);
   const _cs=camMode.free?camMode:player;
   const lookDir = new THREE.Vector3(
@@ -2549,17 +2647,18 @@ function updateCamera(){
   const sp = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
   camDyn.pull += (sp-camDyn.pull)*Math.min(1,cdt*2.2); // eases in/out with the speed ramp
   const xlr8Cam = player.form.id==='xlr8';
-  { const hv=Math.hypot(camDyn.vx,camDyn.vz), tgt=xlr8Cam?Math.min(1,Math.max(0,(hv-4)/6)):0, tg2=(player.flying&&(player.form.id==='heatblast'||player.form.id==='jetray'||player.form.id==='chromastone'))?1:0;
+  { const hv=Math.hypot(camDyn.vx,camDyn.vz), tgt=xlr8Cam?Math.min(1,Math.max(0,(hv-4)/6)):0, tg2=(player.form.id==='heatblast'&&player.flying)?1:0;
     camDyn.run=(camDyn.run||0)+(tgt-(camDyn.run||0))*Math.min(1,cdt*3); camDyn.hf=(camDyn.hf||0)+(tg2-(camDyn.hf||0))*Math.min(1,cdt*2.5); }
+  { const fzT=(player.flying&&(player.form.id==='jetray'||player.form.id==='chromastone'))?1:0; camDyn.fz=(camDyn.fz||0)+(fzT-(camDyn.fz||0))*Math.min(1,cdt*1.8); }   // eases the camera out while they fly, back in on landing
   const la=Math.min(.34, .028+ (drv?.02:0) + (xlr8Cam ? camDyn.pull*.02 : camDyn.pull*.16)); // modest look-ahead at speed
   const pivot = player.pos.clone().add(new THREE.Vector3(
     camDyn.vx*la,
-    camState.height*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_HEIGHT+camDyn.run*.12 : camDyn.pull*.5)+camDyn.hf*.3) + drv*1.3 - camDyn.kick,
+    camState.height*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_HEIGHT+camDyn.run*.12 : camDyn.pull*.5)+camDyn.hf*.3+(camDyn.fz||0)*.3) + drv*1.3 - camDyn.kick,
     camDyn.vz*la
   ));
   // XLR8 must remain visually anchored on-screen. The old multiplier (pull*1.15)
   // pushed the camera to more than twice its normal distance at top speed.
-  const back = camState.dist*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_PULL+camDyn.run*.22 : camDyn.pull*1.15)+camDyn.hf*(player.form.id==='heatblast'?.75:.55)) + drv*5.8;
+  const back = camState.dist*(1+(xlr8Cam ? camDyn.pull*XLR8_CAM_PULL+camDyn.run*.22 : camDyn.pull*1.15)+camDyn.hf*.75+(camDyn.fz||0)*.7) + drv*5.8;
   let safeBack=back;
   { const fx=-lookDir.x, fy=-lookDir.y, fz=-lookDir.z;
     for(let k=1;k<=10;k++){ const d=back*k/10; if(camSolid(pivot.x+fx*d,pivot.y+fy*d,pivot.z+fz*d)){ safeBack=Math.max(1.6,d-1.2); break; } }
@@ -2593,15 +2692,12 @@ function handWorld(side){ // world position of a hand of the player's rig (0=lef
 }
 function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
   if(style==='fire' && pl===player && !(opts&&(opts._now||opts.explicitDir))){ // wind-up first, the ball leaves the hand when the arm whips forward
-    pl._hs=!pl._hs; pl.castT=1; pl.castSide=pl._hs?1:0; { const sd=pl._hs?1:0; VFX.attach('charge',i=>{ const h=handWorld(sd); if(h) i.pos.copy(h); },{size:1.7,dur:.16,loop:false,add:true,tint:0xffa050,fadeIn:.04,fadeOut:.04}); }
+    pl._hs=!pl._hs; pl.castT=1; pl.castSide=pl._hs?1:0;
     setTimeout(()=>{ if(!PAUSED) spawnProjectile(pl,color,damage,speed,pierce,style,Object.assign({},opts,{_now:1})); },130); return; }
   const _sz=(opts&&opts.size)||1;
-  const geo=style==='crystal'?new THREE.OctahedronGeometry(0.3):style==='energy'?new THREE.SphereGeometry(.34*_sz,12,10):style==='laser'?new THREE.CylinderGeometry(.06,.06,1.7,6):new THREE.SphereGeometry(style==='fire'?0.5:0.22,8,8);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color}));
-  if(style==='crystal') mesh.scale.set(.7,1.7,.7);
-  if(style==='energy'){ mesh.add(new THREE.Mesh(new THREE.SphereGeometry(.2*_sz,10,8),new THREE.MeshBasicMaterial({color:0xffffff})));
-    mesh.add(new THREE.Mesh(new THREE.SphereGeometry(.6*_sz,12,10),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.26,depthWrite:false}))); }
-  if(style==='fire') mesh.add(new THREE.Mesh(new THREE.SphereGeometry(.28,8,8),new THREE.MeshBasicMaterial({color:0xffe27a})));
+  const mesh=new THREE.Group();               // visual is built from VFX-pack sprites after the projectile is in the scene (below)
+  if(style==='crystal'){ const cr=new THREE.Mesh(new THREE.OctahedronGeometry(0.3),new THREE.MeshBasicMaterial({color})); cr.scale.set(.7,1.7,.7); mesh.add(cr); }
+  else if(style!=='fire'&&style!=='energy'&&style!=='laser') mesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.22,8,8),new THREE.MeshBasicMaterial({color})));
   let dir, startPos;
   if(opts && opts.explicitDir){
     // Enemy-fired: aim directly at a world-space target point rather than deriving direction from
@@ -2617,21 +2713,17 @@ function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
   mesh.position.copy(startPos);
   if(style==='crystal'||style==='laser') mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.clone().normalize()); // shard tip points where it's flying
   scene.add(mesh);
+  { const d0=dir.clone(), mp=mesh.position;
+    if(style==='fire'){ VFX.sheet('fire',mp.clone(),{follow:mesh,loop:true,dur:.45,size:1.7,color:0xffd9a0,force:true});
+      VFX.streak('trace_05',{follow:mesh,dir:d0,len:3.2+speed*.04,width:.85,color:0xff8a2a,behind:1}); VFX.muzzle(mp.clone(),d0,0xffb040,.7); }
+    else if(style==='energy'){ VFX.sheet('charge',mp.clone(),{follow:mesh,loop:true,from:1,to:5,dur:.35,size:1.5*_sz,color,force:true});
+      VFX.streak('trace_06',{follow:mesh,dir:d0,len:2.4*_sz+1,width:.7*_sz,color,behind:1,opacity:.8}); VFX.muzzle(mp.clone(),d0,color,.6*_sz); }
+    else if(style==='laser'){ VFX.streak('trace_04',{follow:mesh,dir:d0,len:3.6,width:.6,color:0xff4a1c,behind:.7}); VFX.streak('trace_01',{follow:mesh,dir:d0,len:3.2,width:.22,color:0xffe0c0,behind:.7}); }
+    else if(style==='crystal'){ VFX.streak('trace_03',{follow:mesh,dir:d0,len:2.4,width:.38,color:0xbffcff,behind:1}); VFX.muzzle(mp.clone(),d0,0xbffcff,.5); } }
   if(pl===player && pl._fv && !(opts&&opts.explicitDir)) speed+=Math.max(0,pl._fv.dot(dir));
-  const pj={mesh, dir, speed, damage, pierce, style, life:style==='laser'?1.1:2.2, aoe:(opts&&opts.aoe)||0, col:color, hitSet:new Set(), hostile: !!(opts && opts.hostile)};
-  projectiles.push(pj); if(!pj.hostile) attachProjVfx(pj,opts);
+  projectiles.push({mesh, dir, speed, damage, pierce, style, life:style==='laser'?1.1:2.2, aoe:(opts&&opts.aoe)||0, col:color, hitSet:new Set(), hostile: !!(opts && opts.hostile)});
   Audio_.special();
 }
-
-/* Projectile visuals (VFX pack). The old mesh stays as the invisible position holder; the visible body is a flipbook / stretched sprite that follows it. */
-function attachProjVfx(pj,opts){
-  const st=pj.style, m=pj.mesh, sz=(opts&&opts.size)||1, at=(n,o)=>VFX.attach(n,i=>i.pos.copy(m.position),o);
-  if(st==='fire'){ m.visible=false; pj.vfx=[at('fire_01',{size:2.1,dur:.6,add:true})]; pj.tr=VFX.trailGet('trace_01',{width:.4,life:.35,step:.35,tint:0xffa040,n:14}); }
-  else if(st==='energy'){ m.visible=false; pj.vfx=[at('wavy_blue',{size:2.2*sz,dur:.5,add:true,alpha:.9}),at('light_02',{size:1.5*sz,dur:1,add:true,tint:0xcfeaff})]; pj.tr=VFX.trailGet('trace_06',{width:.35*sz,life:.4,step:.4,tint:0x7fd0ff,n:14}); }
-  else if(st==='laser'){ m.visible=false; pj.vfx=[VFX.beam('trace_04',f=>f.copy(m.position).addScaledVector(pj.dir,-2.4),t=>t.copy(m.position).addScaledVector(pj.dir,.5),.55,{tint:0xff6a3a,dur:1,add:true})]; }
-  else if(st==='crystal'){ pj.vfx=[at('star_02',{size:1.2,dur:1,add:true,tint:0xbff8ff})]; pj.tr=VFX.trailGet('trace_03',{width:.3,life:.3,step:.35,tint:0x9ffcff,n:12}); }
-}
-function killProjVfx(p){ if(p.vfx){ p.vfx.forEach(v=>VFX.stop(v)); p.vfx=null; } if(p.tr){ VFX.trailRelease(p.tr); p.tr=null; } }
 function updateProjectiles(dt){
   for(let i=projectiles.length-1;i>=0;i--){
     const p = projectiles[i];
@@ -2640,9 +2732,9 @@ function updateProjectiles(dt){
     let dead = p.life<=0;
     const pp=p.mesh.position;
     if(pp.y<groundTopAt(pp.x,pp.z)||blockedAt(pp.x,pp.z,pp.y-0.5,true)) dead=true;
-    if(p.tr) VFX.trailPush(p.tr,pp,1);
-    if(p.style==='fire'){ if(Math.random()<dt*14) VFX.sparks(pp,1,3,0xffb050,.22,.35); }
+    if(p.style==='fire'){ if(Math.random()<.3) VFX.sparks(pp,1,VFX.WARM,2.5); p.mesh.scale.setScalar(1+Math.sin(p.life*30)*.12); }
     else if(p.style==='crystal') p.mesh.rotateY(dt*10);
+    else if(p.style==='energy'&&Math.random()<.2) VFX.sparks(pp,1,p.col,1.5);
     if(!p.hostile){ for(const pr of props){ if(!pr.veh||pr.driver||pr.wreck||p.hitSet.has(pr)) continue;
       const q=pr.mesh.position; if(Math.abs(pp.y-q.y)<1.6 && Math.hypot(pp.x-q.x,pp.z-q.z)<2.0){ p.hitSet.add(pr); vehicleHit(pr,p.dir,p.damage*.8,p.style==='fire'?5:3,p.style==='fire'?'fire':'punch'); dead=true; } } }
     if(p.hostile){
@@ -2662,13 +2754,9 @@ function updateProjectiles(dt){
         }
       }
     }
-    if(dead){ const _p=p.mesh.position.clone();
-      if(p.style==='fire') VFX.explosion(_p,.55);
-      else if(p.style==='energy') VFX.starBurst(_p,.9+(p.aoe||0)*.25,0x9fdcff);
-      else if(p.style==='laser') VFX.starBurst(_p,.28,0xff9a60);
-      else if(p.style==='crystal') VFX.starBurst(_p,.7,0xbff8ff);
-      if(p.aoe){ shockwaveAt(_p.clone(),p.aoe,p.damage*.5,true,'none'); shakeCamera(.25); }
-      killProjVfx(p); scene.remove(p.mesh); projectiles.splice(i,1); }
+    if(dead){ if(p.aoe){ shockwaveAt(p.mesh.position.clone(),p.aoe,p.damage*.5,true); shakeCamera(.25); VFX.explosion(p.mesh.position.clone(),Math.min(2.2,.5+p.aoe*.22),p.style==='energy'?p.col:0xffffff); }
+      if(p.life>0&&!p.aoe){ if(p.style==='fire') VFX.explosion(p.mesh.position.clone(),.8,0xffffff); else VFX.impact(p.mesh.position.clone(),{tint:p.col,star:p.style==='crystal'?0xbffcff:null}); }
+      scene.remove(p.mesh); projectiles.splice(i,1); }
   }
 }
 
@@ -2677,8 +2765,8 @@ function updateProjectiles(dt){
 ========================================================================= */
 let camShake = 0;
 function shakeCamera(amt){ camShake = amt; }
-function shockwaveAt(center, radius, damage, knock, vis){
-  if(vis!=='none'){ const g=center.clone(); g.y=groundTopAt(g.x,g.z,g.y); VFX.slam(g,Math.max(.45,Math.min(1.8,radius/4.5))); }
+function shockwaveAt(center, radius, damage, knock){
+  VFX.slam(center.clone(),radius,{hit:false});
   enemies.forEach(en=>{
     if(!en.alive) return;
     const d = en.mesh.position.distanceTo(center);
@@ -2843,7 +2931,6 @@ function updateEnemySpawning(dt){
 
 function damageEnemy(en, dmg, dirAway, opts){
   if(!en.alive) return;
-  { const _n=performance.now(); if(!en._vt||_n-en._vt>140){ en._vt=_n; const _hp=en.mesh.position.clone(); _hp.y+=1.0; VFX.hit(_hp,{heavy:!!(opts&&opts.heavy)||dmg>=22}); } }
   if(en.npc){ npcHurt(en,dmg,dirAway,opts); return; }
   en.hp -= dmg;
   const heavy = opts && opts.heavy;
@@ -3139,8 +3226,12 @@ function updateLockOn(dt){
 }
 function lookDir(){ return new THREE.Vector3(Math.cos(player.pitch)*-Math.sin(player.yaw),Math.sin(player.pitch),Math.cos(player.pitch)*-Math.cos(player.yaw)); }
 function debris(pos,color,size,vel,life,grav){
-  const mesh=new THREE.Mesh(DEB,new THREE.MeshBasicMaterial({color,transparent:true}));
-  mesh.scale.setScalar(size); mesh.position.copy(pos); scene.add(mesh); const f={mesh,vel,life,max:life,grav}; fx.push(f); return f;
+  // every old cube spark/ember/chunk is now a sprite from the VFX pack: flames for warm colours, stars for cool/white, dirt for everything else
+  const c=new THREE.Color(color), warm=c.r>.7&&c.b<.55&&c.g<.9, cool=c.b>.7||(c.r>.8&&c.g>.8&&c.b>.8), add=warm||cool;
+  const nm=warm?'flame_0'+(1+((Math.random()*4)|0)):cool?'star_01':'dirt_0'+(1+((Math.random()*2)|0));
+  const mat=new THREE.SpriteMaterial({map:VFX.ptex(nm),color,transparent:true,depthWrite:false,fog:false,blending:add?THREE.AdditiveBlending:THREE.NormalBlending,rotation:Math.random()*6.28});
+  const mesh=new THREE.Sprite(mat); mesh.scale.setScalar(size*(warm?3.4:cool?2.8:2.2)); mesh.position.copy(pos); scene.add(mesh);
+  const f={mesh,vel,life,max:life,grav}; fx.push(f); return f;
 }
 function updateFx(dt){
   for(let i=fx.length-1;i>=0;i--){
@@ -3161,56 +3252,83 @@ const MAX_FOV_BOOST = 30;
 const XLR8_MAX_FOV_BOOST = 4; // XLR8 gets restrained FOV widening so the character stays readable.
 const XLR8_CAM_PULL = 0.4; // At max super-speed, the camera moves back only 10%, not >2x.
 const XLR8_CAM_HEIGHT = 0.25; // Small extra height at speed; preserves a close third-person read.
-let lastFov = BASE_FOV, speedShakeT = 0, xtPrevS = 0, xtDust = 0, XT = null;
-
-// XLR8 (VFX pack): three thin ribbon trails sampled from his hands + back (path-following), light streaks at top speed, brake dust at the feet.
-function xlrFx(dt,k){
-  const on=player.form.id==='xlr8'&&!player.driving&&player.alive;
-  if(!XT){ XT=[VFX.trail('trace_01',{width:.3,life:.42,step:.4,n:16,tint:0x9fe8ff}),VFX.trail('trace_02',{width:.3,life:.42,step:.4,n:16,tint:0x9fe8ff}),VFX.trail('trace_03',{width:.4,life:.5,step:.5,n:18,tint:0xcfeeff})]; }
-  const fw=new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw)), rt=new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
-  const feet=new THREE.Vector3(player.pos.x,player.pos.y-.9,player.pos.z);
-  if(on&&k>.12&&!player.flying){
-    const it=Math.min(1,k*1.3), c=player.pos;
-    VFX.trailPush(XT[0],new THREE.Vector3(c.x-rt.x*.5,c.y+.15,c.z-rt.z*.5),it);
-    VFX.trailPush(XT[1],new THREE.Vector3(c.x+rt.x*.5,c.y+.15,c.z+rt.z*.5),it);
-    VFX.trailPush(XT[2],new THREE.Vector3(c.x-fw.x*.35,c.y-.1,c.z-fw.z*.35),it*.8);
-    if(k>.55&&Math.random()<dt*5) VFX.flip('lightstreaks',new THREE.Vector3(c.x-fw.x*1.2,c.y,c.z-fw.z*1.2),{size:2.6,dur:.3,tint:0x9fe8ff,alpha:.45,mask:1,rot:Math.atan2(rt.x,rt.z)});
-    if(player.onGround){ xtDust+=dt; if(xtDust>.1){ xtDust=0; VFX.slide(feet,fw.clone().multiplyScalar(-1),.5+k); } }
-  }
-  if(on&&xtPrevS>.45&&k<.25&&player.onGround) VFX.slide(feet,fw.clone().multiplyScalar(-1),2.2);   // hard stop: dirt + smoke starting exactly at contact, drifting back
-  xtPrevS=on?k:0;
+const STREAK_COUNT = 14, DUST_COUNT = 12;
+const streakGeo = new THREE.BoxGeometry(0.04, 0.04, 1);
+const streakMat = new THREE.MeshBasicMaterial({color:0xbfe8ff, transparent:true, opacity:0, depthWrite:false});
+const streaks = [];
+for(let i=0;i<STREAK_COUNT;i++){
+  const m = new THREE.Mesh(streakGeo, streakMat.clone());
+  m.visible = false; m.frustumCulled = false; scene.add(m);
+  streaks.push({mesh:m, seed:Math.random(), idx:i});
 }
-// Per-form VFX: flight exhaust/trails (Heatblast, Jetray, Chromastone), Cannonbolt roll dust, landing/takeoff puffs.
-let FT=null, ffWasGround=true, ffWasFly=false, ffVy=0, ffT=0;
-function formFx(dt){
-  if(!VFX.ok||!player.alive||player.driving){ return; }
-  const id=player.form.id, c=player.pos, feet=new THREE.Vector3(c.x,c.y-.9,c.z);
-  const fw=new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
-  if(!FT) FT=[VFX.trail('trace_04',{width:.35,life:.5,step:.45,n:18,tint:0xffffff}),VFX.trail('trace_05',{width:.35,life:.5,step:.45,n:18,tint:0xffffff})];
-  const rt=new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
-  const fl=player.flying&&(id==='heatblast'||id==='jetray'||id==='chromastone');
-  if(fl){
-    const col=id==='heatblast'?0xff8a30:id==='jetray'?0xff5a5a:0x6fd0ff, w=id==='jetray'?.5:.3;
-    FT.forEach((t,i)=>{ t.tint&&t.tint.setHex&&t.tint.setHex(col); VFX.trailPush(t,new THREE.Vector3(c.x+rt.x*(i?.5:-.5)-fw.x*.4,c.y+(id==='chromastone'?.1:-.2),c.z+rt.z*(i?.5:-.5)-fw.z*.4),1); });
-    ffT+=dt; if(ffT>.08){ ffT=0; if(id==='heatblast') VFX.particle('fire_01',feet.clone().add(new THREE.Vector3(-fw.x*.3,.3,-fw.z*.3)),{size:.9,sizeEnd:.2,life:.35,add:true,tint:0xff8a30}); else VFX.particle('star_01',new THREE.Vector3(c.x-fw.x*.6,c.y,c.z-fw.z*.6),{size:.35,sizeEnd:.05,life:.4,add:true,tint:col}); }
-  } else FT.forEach(t=>VFX.trailClear(t));
-  if(id==='cannonbolt'&&player.rolling&&player.onGround){ ffT+=dt; if(ffT>.1){ ffT=0; VFX.slide(feet,fw.clone().multiplyScalar(-1),.9); } }
-  const gnd=!!player.onGround;
-  if(gnd&&!ffWasGround&&ffVy<-6){ VFX.land(feet,Math.min(2.2,-ffVy/12)); }
-  if(!gnd&&ffWasGround&&player.vel.y>3&&!player.flying) VFX.takeoff(feet,.8);
-  if(player.flying&&!ffWasFly&&gnd) VFX.takeoff(feet,1.2);
-  ffWasGround=gnd; ffWasFly=!!player.flying; ffVy=player.vel.y;
+const dustGeo = new THREE.BoxGeometry(1,1,1);
+const dustPuffs = [];
+for(let i=0;i<DUST_COUNT;i++){
+  const m = new THREE.Mesh(dustGeo, new THREE.MeshBasicMaterial({color:0xd8cdb0, transparent:true, opacity:0, depthWrite:false}));
+  m.visible = false; m.frustumCulled = false; scene.add(m);
+  dustPuffs.push({mesh:m, life:0, max:0.5});
+}
+let dustIdx = 0, dustEmitAcc = 0, lastFov = BASE_FOV, speedShakeT = 0;
+
+// Light trails: three additive ribbons sampled from the shoulders/hips/feet. Distance-sampled ring buffers so the trail length scales with speed
+// (~75 u at full speed), tapering to nothing, rebuilt in-place each frame (no allocation). Invisible and cleared when not speeding.
+const TRAIL_SRC=[[.62,.45],[-.62,.45]], XT=[null,null];
+function updateSpeedTrails(dt,k){
+  // thin continuous trail from each shoulder (trace_01 / trace_05), opacity follows speed; collapses ~0.15 s after the run stops
+  if(!XT[0]){ XT[0]=VFX.ribbon({tex:'trace_01',n:36}); XT[1]=VFX.ribbon({tex:'trace_05',n:36}); }
+  const right={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)}, C=[.3,.9,1];
+  for(let r=0;r<2;r++){ const t=XT[r], src=TRAIL_SRC[r];
+    if(k>.12){ t.push(player.pos.x+right.x*src[0],player.pos.y+src[1]-.2,player.pos.z+right.z*src[0],.5); t.update(.14+.1*Math.min(1,k),Math.min(1,k*1.2)*.9,C); }
+    else t.fade(dt,.14,.9,C); }
 }
 function updateSpeedEffects(dt){
+
   const s = player.form.id==='xlr8' ? (player.superSpeed||0) : 0;
-  const sx = player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0;
-  xlrFx(dt,sx); formFx(dt);
+  updateSpeedTrails(dt, player.form.id==='xlr8' ? Math.max(s, player.dashT>0?0.7:0) : 0);
+
   // XLR8 widens the FOV only a little; vehicles keep their existing wider speed FOV.
   const targetFov = BASE_FOV
     + (player.form.id==='xlr8' ? XLR8_MAX_FOV_BOOST*s : 0)
     + (player.driving ? MAX_FOV_BOOST*0.45*Math.min(1,Math.abs(player.driving.v)/VTof(player.driving).top) : 0);
   const newFov = lastFov + (targetFov-lastFov)*Math.min(1, dt*6);
   if(Math.abs(newFov-lastFov) > 0.02){ lastFov = newFov; camera.fov = newFov; camera.updateProjectionMatrix(); }
+
+  // Speed streaks: thin lines around the camera, stretched along the travel direction and sliding past.
+  const showStreaks = false;   // old box speed-lines removed (the trail ribbons carry the speed read)
+  const fwd = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+  for(const st of streaks){
+    if(!showStreaks){ if(st.mesh.visible){ st.mesh.visible=false; st.mesh.material.opacity=0; } continue; }
+    st.mesh.visible = true;
+    // Each streak drifts backward past the player and wraps to the front when it passes behind.
+    st.seed = (st.seed + dt*(1.2 + s*3.5)) % 1;
+    const ang = (st.seed*7.3 + st.idx*0.9) % (Math.PI*2);
+    const radius = 1.6 + ((st.idx*0.37)%1)*2.2;
+    const along = 10 - st.seed*20; // +10 ahead ... -10 behind
+    const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    st.mesh.position.copy(player.pos)
+      .addScaledVector(fwd, along)
+      .addScaledVector(side, Math.cos(ang)*radius)
+      .add(new THREE.Vector3(0, 1 + Math.sin(ang)*radius*0.7, 0));
+    st.mesh.rotation.y = player.yaw;
+    st.mesh.scale.z = 1.5 + s*6; // longer streaks at higher speed
+    st.mesh.material.opacity = Math.min(0.55, (s-0.25)*0.9);
+  }
+
+  // Ground dust trail: emit puffs at the feet at a rate scaled by speed, only while grounded.
+  if(s > 0.15 && player.onGround && !player.flying && !player.swimming){
+    dustEmitAcc += dt*(1.2 + s*4);
+    while(dustEmitAcc >= 1){ dustEmitAcc -= 1;
+      VFX.dust(new THREE.Vector3(player.pos.x,groundTopAt(player.pos.x,player.pos.z,player.pos.y-1)+.12,player.pos.z),.45+s*.4,fwd);
+    }
+  }
+  for(const d of dustPuffs){
+    if(d.life <= 0){ if(d.mesh.visible) d.mesh.visible=false; continue; }
+    d.life -= dt;
+    const k = Math.max(0, d.life/d.max);
+    d.mesh.material.opacity = k*0.55;
+    d.mesh.scale.multiplyScalar(1 + dt*2.2);
+    d.mesh.position.y += dt*0.4;
+  }
 
   // Continuous camera shake at extreme speed (separate from the one-shot shakeCamera used by impacts).
   if(s > 0.75){
@@ -3285,7 +3403,8 @@ function startDash(){
   let mx=moveInput.x,my=moveInput.y; if(Math.hypot(mx,my)<.1){ mx=0; my=1; }
   const dx=f.x*my+r.x*mx, dz=f.z*my+r.z*mx, l=Math.hypot(dx,dz)||1;
   player.dashDir={x:dx/l,z:dz/l}; player.dashT=.32; Audio_.special();
-  { const b=player.pos.clone(); b.y-=.9; VFX.dashBurst(b); }
+  // afterimage streaks + a small camera kick so each burst reads as a burst
+  if(typeof debris==='function'){ const b=player.pos.clone(); b.y-=.7; for(let i=0;i<7;i++){ const p=b.clone(); p.x-=player.dashDir.x*(.3+i*.35); p.z-=player.dashDir.z*(.3+i*.35); debris(p,i%2?0x8fd6ff:0x3aa8ff,.22,new THREE.Vector3(-player.dashDir.x*2,.3,-player.dashDir.z*2),.28,false); } }
   shakeCamera(.08);
 }
 function spawnTornado(){
@@ -3336,10 +3455,14 @@ function updateCrystals(dt){
 /* ECHO ECHO SQUAD */
 const squad=[]; let squadMode='bot', panelOpen=false, panelEls={};
 function flatFwd(yaw){ return new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)); }
-function ringFx(pos,dir,delay){ if(delay>.001) return; VFX.sonicRing(pos.clone().add(new THREE.Vector3(0,1.2,0)).addScaledVector(dir,1.1),.8,0xdff0ff); }
+function ringFx(pos,dir,delay){
+  const p=pos.clone().add(new THREE.Vector3(0,1,0)).addScaledVector(dir,.8+delay*10);
+  VFX.ring(p,dir,{size:1.5,grow:2.8,dur:.5,color:0xcfefff});
+  if(delay===0) VFX.sheet('wavy_blue',p,{size:2.6,dur:.6,color:0xffffff,fadeOut:.4});
+}
 function sonicBlast(from,dir,dmg,range,rings){
   dir=dir.clone(); dir.y=0; if(dir.lengthSq()<.001) return; dir.normalize();
-  { const m=from.clone().add(new THREE.Vector3(0,1.3,0)).addScaledVector(dir,1.2); VFX.sonicRing(m,1,0xcfe6ff); VFX.flip('wavy_purple',m.clone().addScaledVector(dir,1.6),{size:2.4,sizeEnd:6,dur:.55,alpha:.75}); }
+  for(let i=0;i<(rings||3);i++) ringFx(from,dir,i*.03);
   enemies.forEach(en=>{ if(!en.alive) return; const v=en.mesh.position.clone().sub(from); v.y=0; if(v.length()<range&&dir.angleTo(v.normalize())<.75) damageEnemy(en,dmg,dir); });
   // Alert nearby enemies to the scream even if they weren't directly hit by it - a Sonic Scream is loud,
   // so enemies in a wider radius around the source notice and start heading that way.
@@ -3356,7 +3479,7 @@ function splitEcho(){
   const model=buildCharacter('echo_echo'); model.scale.setScalar(PS*ECHO_S()); scene.add(model);
   const u={model,pos:player.pos.clone().addScaledVector(r,(squad.length%2?1:-1)*1.6),vel:new THREE.Vector3(),yaw:player.yaw,health:player.form.maxHealth,energy:player.form.maxEnergy,active:false,n,walkT:0,cd:0,atkT:0};
   model.rotation.y=u.yaw; squad.push(u);
-  VFX.sonicRing(u.pos.clone().add(new THREE.Vector3(0,1,0)),.6,0xcfe6ff); VFX.sparks(u.pos.clone().add(new THREE.Vector3(0,1,0)),6,4,0xcfefff,.25,.45);
+  for(let i=0;i<6;i++) debris(u.pos.clone().add(new THREE.Vector3(0,1,0)),0xcfefff,.25,new THREE.Vector3((Math.random()-.5)*4,Math.random()*3,(Math.random()-.5)*4),.5,false);
   panelOpen=true; renderSquad(); statusText('ECHO R'+n+' SPLIT'); Audio_.transform();
 }
 function loadUnit(u){
@@ -3420,7 +3543,7 @@ function updateSquad(dt){
   squad.forEach(tagUnit);
   squad.filter(u=>!u.active).forEach((u,idx)=>{
     if(u.health<=0){
-      VFX.sonicRing(u.pos.clone().add(new THREE.Vector3(0,1,0)),.6,0xcfe6ff);
+      for(let i=0;i<8;i++) debris(u.pos.clone().add(new THREE.Vector3(0,1,0)),0xcfefff,.3,new THREE.Vector3((Math.random()-.5)*6,Math.random()*5,(Math.random()-.5)*6),.7,true);
       scene.remove(u.model); squad.splice(squad.indexOf(u),1); renderSquad(); statusText('R'+u.n+' DOWN'); return;
     }
     u.cd=Math.max(0,u.cd-dt); u.atkT=Math.max(0,u.atkT-dt); u.energy=Math.min(player.form.maxEnergy,u.energy+dt*8);
@@ -3468,23 +3591,15 @@ function updateIces(dt){
     if(ic.life<=0){ scene.remove(ic.m); ic.m.material.dispose(); if(ic.ref) ic.ref.ice=null; ices.splice(i,1); }
   }
 }
-
-/* Concentrated heat / ice spray: one looping beam body (flame flipbook stretched along the aim axis, never restarted per frame) + a muzzle flash */
-const STR={b:null,cap:null,kind:null,from:new THREE.Vector3(),dir:new THREE.Vector3(0,0,-1),len:9};
-function streamBeam(kind,from,dir){
-  STR.from.copy(from); STR.dir.copy(dir);
-  if(STR.kind===kind&&STR.b) return;
-  streamBeamOff(); STR.kind=kind;
-  if(kind==='fire') STR.b=VFX.beam('flame_01',f=>f.copy(STR.from),t=>t.copy(STR.from).addScaledVector(STR.dir,STR.len),1.6,{up:true,dur:.55,add:true,alpha:.95});
-  else STR.b=VFX.beam('lightstreaks',f=>f.copy(STR.from),t=>t.copy(STR.from).addScaledVector(STR.dir,STR.len),.8,{dur:.5,mask:1,tint:0xbfeaff,alpha:.7});
-  STR.cap=VFX.attach(kind==='fire'?'fire_point':'electric_ring',f=>f.pos.copy(STR.from),{size:kind==='fire'?1.4:.9,dur:.45,add:true,tint:kind==='fire'?undefined:0xbfeaff});
-}
-function streamBeamOff(){ if(STR.b){ VFX.stop(STR.b); VFX.stop(STR.cap); if(STR.kind==='fire') VFX.smokePuffs(STR.from.clone().addScaledVector(STR.dir,1.4),2,.5,0x555048); } STR.b=null; STR.cap=null; STR.kind=null; }
 function streamTick(kind,dt){
   let dir=lookDir(); let from=player.pos.clone().add(new THREE.Vector3(0,.8,0)).addScaledVector(flatFwd(player.yaw),.7);
   if(kind==='fire'){ player._hs=!player._hs; const hp=handWorld(player._hs?1:0); if(hp){ from=hp.addScaledVector(dir,.5); dir=aimDirFrom(from); } player.castHold=.15; }
   const fire=kind==='fire', cols=fire?[0xff4a1a,0xff8a1e,0xffd84a]:[0xd8f8ff,0x8fe0ff,0xffffff];
-  streamBeam(kind,from,dir);
+  for(let i=0;i<2;i++){
+    const v=dir.clone().multiplyScalar(fire?15:17).add(player._fv||new THREE.Vector3()).add(new THREE.Vector3((Math.random()-.5)*2.4,(Math.random()-.5)*2.4,(Math.random()-.5)*2.4));
+    const f=debris(from.clone(),cols[rnd(3)],fire?.35+Math.random()*.25:.22+Math.random()*.2,v,fire?.5:.55,false);
+    if(fire) f.grow=1.8;
+  }
   streamT-=dt; if(streamT>0) return; streamT=.1;
   enemies.forEach(en=>{ if(!en.alive) return; const v=en.mesh.position.clone().sub(from);
     if(v.length()<9&&dir.angleTo(v.normalize())<.32){ damageEnemy(en,fire?5:2,null); if(!fire) addIce(en.mesh.position.clone(),1.3,1.9,1.3,en,0); } });
@@ -3494,37 +3609,32 @@ function streamTick(kind,dt){
     if(q.y<groundTopAt(q.x,q.z)||blockedAt(q.x,q.z,q.y,true)){ hit={pos:q,type:'world'}; break; }
     const pr=props.find(p=>p!==carried&&p!==player.driving&&p.mesh.position.distanceTo(q)<p.s*.9); if(pr){ hit={pos:pr.mesh.position.clone(),type:'prop',pr}; if(fire&&pr.veh) vehicleHit(pr,dir,4,0,'fire'); break; }
   }
-  if(!hit){ STR.len=9; return; }
-  STR.len=Math.max(1,from.distanceTo(hit.pos)); if(Math.random()<.6) VFX.sparks(hit.pos,2,4,fire?0xff9a40:0xcfeeff,.25,.3);
+  if(!hit) return;
   if(fire){ ices.forEach(ic=>{ if(ic.m.position.distanceTo(hit.pos)<3.5) ic.life-=4; }); }
   else if(hit.type==='prop'){ const p=hit.pr, s=p.s; p.car?addIce(hit.pos,s*1.15,s*.95,s*2.4,p,p.mesh.rotation.y):addIce(hit.pos,s*1.2,s*1.2,s*1.2,p,0); }
   else if(!ices.some(i=>!i.ref&&i.m.position.distanceTo(hit.pos)<1)) addIce(hit.pos,1.4,1.4,1.4,null,0);
 }
 
 /* ---- Chromastone: tap = quick energy bolt, HOLD = charge a concentrated blast (drains energy, release to fire), ENERGY DOME = translucent shield ---- */
-var CHG=null, DOME=null; const CS_COL=0x6fd0ff;
+var CHG=null, DOME=null; const CS_COL=0xff2f9a;
 function chestDir(){ const cp=Math.cos(player.pitch||0); return new THREE.Vector3(-Math.sin(player.yaw)*cp,Math.sin(player.pitch||0),-Math.cos(player.yaw)*cp); }
-const CHGP=new THREE.Vector3();
-function chgOff(){ if(CHG){ CHG.forEach(v=>VFX.stop(v)); CHG=null; } }
 function releaseBlast(){
-  chgOff();
+  if(CHG){ scene.remove(CHG); CHG=null; }
   const t=player.chgT||0, st=player.pos.clone().add(new THREE.Vector3(0,.35,0)).addScaledVector(chestDir(),1.3);
   if(player.form.id!=='chromastone') return;
-  VFX.flip('star_explosion',st,{size:1.6,dur:.25,tint:0x9fdcff});                 // release flash at the hands, then the projectile
   if(t<.28){ if(player.energy<8) return; player.energy-=8; const d=aimDirFrom(st);
     spawnProjectile(player,CS_COL,16,44,false,'energy',{explicitDir:d,explicitFrom:st,size:1}); player.atkAnim=.2; return; }
   const lv=Math.min(1,(t-.28)/1.3), d=aimDirFrom(st);
   spawnProjectile(player,CS_COL,32+70*lv,38+10*lv,lv>.55,'energy',{explicitDir:d,explicitFrom:st,size:1.7+2.4*lv,aoe:3+5*lv});
   shakeCamera(.12+.2*lv); statusText(lv>.85?'FULL CHARGE':'CHARGED BLAST');
 }
-function domeEnd(){ if(DOME){ VFX.starBurst(DOME.g.position.clone(),1.4,0x9fdcff); scene.remove(DOME.g); DOME=null; } player.domeT=0; }
+function domeEnd(){ if(DOME){ scene.remove(DOME.g); DOME=null; } player.domeT=0; }
 function domeStart(){
   domeEnd();
   const g=new THREE.Group();
   const a=new THREE.Mesh(new THREE.SphereGeometry(2.5,28,18),new THREE.MeshBasicMaterial({color:CS_COL,transparent:true,opacity:.16,depthWrite:false,side:THREE.DoubleSide}));
-  const b=new THREE.Mesh(new THREE.IcosahedronGeometry(2.53,2),new THREE.MeshBasicMaterial({color:0xbfe8ff,wireframe:true,transparent:true,opacity:.42,depthWrite:false}));
+  const b=new THREE.Mesh(new THREE.IcosahedronGeometry(2.53,2),new THREE.MeshBasicMaterial({color:0xff86cc,wireframe:true,transparent:true,opacity:.42,depthWrite:false}));
   g.add(a,b); g.position.copy(player.pos); scene.add(g); DOME={g,a,b,t:0}; player.domeT=7; statusText('ENERGY DOME');
-  VFX.flip('electric_ring',player.pos.clone().add(new THREE.Vector3(0,-.6,0)),{size:1.5,sizeEnd:7,dur:.5,tint:0x9fdcff}); VFX.sparks(player.pos.clone(),8,5,0x9fdcff,.3,.5);
 }
 function updateDome(dt){
   if(!DOME) return;
@@ -3537,15 +3647,14 @@ function updateDome(dt){
 }
 function updateChromaCharge(dt){
   if(!player.chgHeld) return;
-  if(player.form.id!=='chromastone'||!player.alive){ player.chgHeld=false; chgOff(); return; }
+  if(player.form.id!=='chromastone'||!player.alive){ player.chgHeld=false; if(CHG){ scene.remove(CHG); CHG=null; } return; }
   player.chgT=(player.chgT||0)+dt;
   if(player.chgT>.28){
     player.energy=Math.max(0,player.energy-16*dt);
-    CHGP.copy(player.pos).add(new THREE.Vector3(0,.35,0)).addScaledVector(chestDir(),1.2);
-    const lv=Math.min(1,(player.chgT-.28)/1.3);
-    if(!CHG){ CHG=[VFX.attach('charge',f=>f.pos.copy(CHGP),{size:1,dur:.8,add:true,fadeIn:.45}),VFX.attach('electric_ring',f=>f.pos.copy(CHGP),{size:1.1,dur:1.1,add:true,tint:0x9fdcff,alpha:.7,fadeIn:.5})]; }
-    CHG[0].size=CHG[0].sizeEnd=.7+lv*2.4; CHG[1].size=CHG[1].sizeEnd=.9+lv*2.8;               // brightens + grows gradually, never starts at full
-    if(Math.random()<dt*20){ const a=Math.random()*6.283; VFX.particle('star_01',CHGP.clone().add(new THREE.Vector3(Math.cos(a)*2.2,Math.sin(a*2)*1.3,Math.sin(a)*2.2)),{size:.3,sizeEnd:.05,life:.3,add:true,tint:0x9fdcff,vel:new THREE.Vector3(-Math.cos(a)*6,0,-Math.sin(a)*6)}); }
+    if(!CHG){ CHG=new THREE.Group(); scene.add(CHG); CHG.userData.sh=VFX.sheet('charge',CHG.position.clone(),{follow:CHG,loop:true,from:1,to:5,dur:.4,size:1.2,color:CS_COL,force:true}); }
+    const lv=Math.min(1,(player.chgT-.28)/1.3), sc=.35+lv*1.6+Math.sin(player.chgT*30)*.05;
+    CHG.scale.setScalar(sc); if(CHG.userData.sh) CHG.userData.sh.size=.9+lv*3.4; CHG.position.copy(player.pos).add(new THREE.Vector3(0,.35,0)).addScaledVector(chestDir(),1.2);
+    if(Math.random()<.6){ const a=Math.random()*6.283; debris(CHG.position.clone().add(new THREE.Vector3(Math.cos(a)*2,Math.sin(a*2)*1.4,Math.sin(a)*2)),CS_COL,.25,new THREE.Vector3(-Math.cos(a)*5,0,-Math.sin(a)*5),.3,false); }
     if(player.energy<=0){ player.chgHeld=false; releaseBlast(); }
   }
 }
@@ -3560,15 +3669,24 @@ function updateEyes(dt){
   const hd=player.model.userData.parts&&player.model.userData.parts.head; if(!hd) return;
   hd.getWorldPosition(_eyeV); const base=_eyeV.clone(), yawR=player.model.rotation.y;
   const fw=new THREE.Vector3(-Math.sin(yawR),0,-Math.cos(yawR)), rt=new THREE.Vector3(Math.cos(yawR),0,-Math.sin(yawR));
-  VFX.flip('light_01',base.clone().addScaledVector(fw,.4),{size:.9,dur:.1,tint:0xff8a50});
   for(const sd of [-1,1]){ const st=base.clone().addScaledVector(fw,.32).addScaledVector(rt,sd*.1); st.y+=.04; const d=aimDirFrom(st);
     spawnProjectile(player,0xff4a1c,7,78,false,'laser',{explicitDir:d,explicitFrom:st}); }
+}
+const FLT=[null,null]; let rollAcc=0;
+function updateAlienVfx(dt){
+  const id=player.form.id, fl=player.alive&&player.flying&&(id==='jetray'||id==='chromastone');
+  if(!FLT[0]){ FLT[0]=VFX.ribbon({tex:'trace_05',n:30}); FLT[1]=VFX.ribbon({tex:'trace_01',n:30}); }
+  const col=id==='jetray'?[1,.5,.22]:[1,.28,.68];
+  if(fl){ const k=Math.min(1,Math.hypot(camDyn.vx,camDyn.vz)/16), rt={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)}, w=id==='jetray'?.7:.3;
+    for(let i=0;i<2;i++){ const s=i?1:-1; FLT[i].push(player.pos.x+rt.x*w*s,player.pos.y+.4,player.pos.z+rt.z*w*s,.6); FLT[i].update(.22+.16*k,.2+.7*k,col); } }
+  else for(const r of FLT) if(r) r.fade(dt,.25,.6,col);
+  if(id==='cannonbolt'&&player._ball>.6&&player.onGround){ const hv=Math.hypot(camDyn.vx,camDyn.vz);
+    if(hv>7){ rollAcc+=dt*(1+hv*.12); while(rollAcc>=1){ rollAcc-=1; VFX.dust(new THREE.Vector3(player.pos.x,groundTopAt(player.pos.x,player.pos.z,player.pos.y-1)+.12,player.pos.z),.5,new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw))); } } }
 }
 function updateStreams(dt){
   updateDome(dt); updateChromaCharge(dt); updateEyes(dt);
   const dn=player.form.id, fireOn=player.flameHeld&&dn==='heatblast', iceOn=player.sprayHeld&&dn==='diamondhead';
   if(fireOn) flameTime+=dt;
-  if(!fireOn&&!iceOn&&STR.b) streamBeamOff();
   if(fireOn||iceOn){
     if(player.energy<=0){ player.flameHeld=false; player.sprayHeld=false; }
     else if(iceOn||flameTime>.18){ player.energy=Math.max(0,player.energy-(fireOn?14:12)*dt); streamTick(fireOn?'fire':'ice',dt); }
@@ -3756,7 +3874,7 @@ function poseExtras(parts,moving,dt){
     lean=lv?(moving?-.35:0):(moving?THREE.MathUtils.clamp(-(Math.PI/2-player.pitch),-1.0,0.2):-.12);
     if(player.form.id==='heatblast') lean=THREE.MathUtils.clamp(-.12+(player.pitch||0)*.5,-.5,.6);
     const up=lv?1.0:(moving?2.9+S*.08:.5);
-    if(lv&&(player._cl=(player._cl||0)+dt)>.09){ player._cl=0; VFX.smokePuffs(player.pos.clone().add(new THREE.Vector3(0,-.95,0)),1,.45,0x9ffcff); }
+    if(lv&&(player._cl=(player._cl||0)+dt)>.09){ player._cl=0; debris(player.pos.clone().add(new THREE.Vector3(0,-.95,0)),0x9ffcff,.8,new THREE.Vector3(),1.4,false); }
   } else if(player.swimming){
     lean=moving?-(Math.PI/2-player.pitch*.7):-.1;
   }
@@ -3779,8 +3897,8 @@ function poseExtras(parts,moving,dt){
     if(moving&&(player._sc=(player._sc||0)+dt)>.04){ player._sc=0;
       const fw=flatFwd(player.yaw);
       if(tip<gt+.5&&player.pos.y-1-gt<3){ const cp=new THREE.Vector3(player.pos.x,gt+.1,player.pos.z);
-        VFX.sparks(cp.clone(),3,6,0xffc84a,.25,.4); }
-      else { const wp=player.pos.clone().addScaledVector(fw,1.1); if(blockedAt(wp.x,wp.z,player.pos.y-1)){ VFX.sparks(wp.clone(),4,5,0xffc84a,.22,.35); } }
+        for(let i=0;i<3;i++) debris(cp.clone(),i?0xffc84a:0xff6a1a,.1+Math.random()*.08,new THREE.Vector3(-fw.x*6+(Math.random()-.5)*4,2+Math.random()*4,-fw.z*6+(Math.random()-.5)*4),.45,true); }
+      else { const wp=player.pos.clone().addScaledVector(fw,1.1); if(blockedAt(wp.x,wp.z,player.pos.y-1)){ for(let i=0;i<4;i++) debris(wp.clone(),i%2?0xffc84a:0xff6a1a,.1,new THREE.Vector3((Math.random()-.5)*5,(Math.random()-.5)*5,(Math.random()-.5)*5),.4,false); } }
     } } }
 }
 const raycaster = new THREE.Raycaster();
@@ -3791,17 +3909,14 @@ let selectedBlockType = 'grass';
 // alien's punch can carry a distinct extra effect on top of the shared combo/damage/knockback system.
 // Nothing here replaces the combo logic itself — these are additive flourishes per form.
 function alienMeleeFx(formId, hitPos, heavy){
-  const p=hitPos.clone();
-  switch(formId){
-    case 'four_arms': if(heavy){ const g=p.clone(); g.y=groundTopAt(g.x,g.z,g.y); VFX.slam(g,.55); shakeCamera(.1); } break;
-    case 'heatblast': VFX.sparks(p,4,6,0xff8a2a,.3,.45); VFX.flip('fire_point',p,{size:1.5,dur:.35}); break;
-    case 'diamondhead': VFX.starBurst(p,.55,0xbff8ff); break;
-    case 'cannonbolt': if(heavy){ shakeCamera(.15); const g=p.clone(); g.y=groundTopAt(g.x,g.z,g.y); VFX.slam(g,.5); } break;
-    case 'echo_echo': VFX.sonicRing(p,.45,0xcfe9ff); break;
-    case 'chromastone': VFX.starBurst(p,.6,0x9fdcff); break;
-    case 'jetray': VFX.sparks(p,4,7,0xffd0a0,.28,.35); break;
-    case 'wildvine': VFX.dirtBurst(p,3,.5); VFX.smokePuffs(p,2,.5,0x7fb060); break;
-  }
+  const T={four_arms:[0xffffff,null],heatblast:[0xffb050,null],diamondhead:[0xbffcff,0xbffcff],cannonbolt:[0xffe9a0,null],xlr8:[0xbfe8ff,null],
+           echo_echo:[0xbfe6ff,null],chromastone:[0xff8fcf,0xff3fa4],jetray:[0xffd0b0,null],wildvine:[0xc8ffb0,null]}[formId]||[0xffffff,null];
+  const p=hitPos.clone().add(new THREE.Vector3(0,.4,0));
+  VFX.impact(p,{heavy:!!heavy,tint:T[0],star:T[1],sparkCol:formId==='heatblast'?VFX.WARM:T[0]});
+  if(formId==='four_arms'&&heavy) shockwaveAt(hitPos, 2.2, 0, false);
+  else if(formId==='cannonbolt'&&heavy){ shakeCamera(0.15); VFX.dust(hitPos,1); }
+  else if(formId==='heatblast') VFX.sheet('fire_point',p,{size:1.4,dur:.3});
+  else if(formId==='wildvine') VFX.dust(hitPos,.6);
 }
 
 // Per-alien combo tuning layered on top of the base form stats already in ALIENS/BEN. Every alien still
@@ -4131,7 +4246,7 @@ function leapNow(c){
   let mx=moveInput.x,my=moveInput.y; if(Math.hypot(mx,my)<.15){ mx=0; my=1; }
   const dx=f.x*my+r.x*mx, dz=f.z*my+r.z*mx, l=Math.hypot(dx,dz)||1, hs=4+c*15;
   player.vel.y=13+c*21.5; player.onGround=false; player.leap={x:dx/l*hs,z:dz/l*hs}; player.leapActive=true; player.leapPow=c; player._airVy=player.vel.y;
-  Audio_.heavyHit(); { const b=player.pos.clone(); b.y-=.8; VFX.takeoff(b,1.4+c*1.2); VFX.dirtBurst(b,6,.9); }
+  Audio_.heavyHit(); if(typeof debris==='function'){ const b=player.pos.clone(); b.y-=.8; for(let i=0;i<14;i++){ const a=i/14*6.283; debris(b.clone(),i%2?0xb8a890:0x8a8070,.22,new THREE.Vector3(Math.cos(a)*(3+c*3),1+Math.random()*2,Math.sin(a)*(3+c*3)),.6,true); } }
   shakeCamera(.12+.28*c);
 }
 function updateLeap(dt){
@@ -4140,7 +4255,7 @@ function updateLeap(dt){
     if(!player.onGround || player.flying){ player.leapCharging=false; player.leapC=0; }
     else { player.leapT=(player.leapT||0)+dt; const prev=player.leapC||0; player.leapC=Math.max(0,Math.min(1,(player.leapT-.14)/1.0));
       if(prev<1 && player.leapC>=1){ statusText('FULL POWER - RELEASE'); Audio_.click(); }
-      if(player.leapC>0 && Math.random()<dt*10*player.leapC){ const b=player.pos.clone(); b.y-=.85; VFX.dirtBurst(b,1,.35); } }
+      if(player.leapC>0 && typeof debris==='function' && Math.random()<dt*10*player.leapC){ const b=player.pos.clone(); b.y-=.85; const a=Math.random()*6.283; debris(b,0x9a8f7c,.16,new THREE.Vector3(Math.cos(a)*2,.8,Math.sin(a)*2),.4,true); } }
   }
   const jb=document.getElementById('btn-jump'); if(jb){ const v=player.form.id==='four_arms'?(player.leapC||0):0; if(jb._ch!==v){ jb._ch=v; jb.style.setProperty('--ch',(v*360)+'deg'); jb.classList.toggle('charging',v>0); jb.classList.toggle('full',v>=1); } }
   if(player.leapActive){
@@ -4153,7 +4268,7 @@ function updateLeap(dt){
     else {                                                                                          // landing: ground pound scaled by how hard we came down
       player.leapActive=false; const c=player.leapPow||0, impact=Math.min(1,Math.max(0,(-(player._airVy||0)-8)/26));
       if(impact>.08){ const rad=3.5+impact*5.5; shockwaveAt(player.pos,rad,15+impact*55,true); shatterNear(player.pos,rad,'slam'); shakeCamera(.15+impact*.45); Audio_.explosion();
-        { const b=player.pos.clone(); b.y-=.9; VFX.slam(b,.8+impact*.8); } }
+        if(typeof debris==='function'){ const b=player.pos.clone(); b.y-=.9; for(let i=0;i<22;i++){ const a=i/22*6.283; debris(b.clone(),i%3?0xb8a890:0x7a7060,.26,new THREE.Vector3(Math.cos(a)*(4+impact*6),1.5+Math.random()*3,Math.sin(a)*(4+impact*6)),.7,true); } } }
       player.leap={x:0,z:0}; player.leapPow=0;
     }
   }
@@ -4179,7 +4294,7 @@ function doJump(){
     const dn=new THREE.Vector3(0,-1,0), hd=player.model.userData.parts&&player.model.userData.parts.head;
     setTimeout(()=>{ const fp=new THREE.Vector3(); if(hd) hd.getWorldPosition(fp); else fp.copy(player.pos); fp.y-=.55; // the scream comes out of his mouth (face is pointing at the ground by now)
       for(let i=0;i<4;i++) ringFx(fp,dn,i*.03);
-      VFX.sparks(fp.clone(),8,5,0xcfefff,.25,.45); },110);
+      for(let i=0;i<14;i++){ const a=i/14*6.283; debris(fp.clone(),i%2?0xcfefff:0x8fe0ff,.18,new THREE.Vector3(Math.cos(a)*1.6,-6-Math.random()*4,Math.sin(a)*1.6),.45,false); } },110);
     shakeCamera(.08);
   } else if(player.onGround && player.form.id==='xlr8' && Math.hypot(camDyn.vx,camDyn.vz)>6){ // running leap: long and low, length follows speed
     const hv=Math.hypot(camDyn.vx,camDyn.vz), f={x:-Math.sin(player.yaw),z:-Math.cos(player.yaw)}, r={x:Math.cos(player.yaw),z:-Math.sin(player.yaw)};
@@ -4900,7 +5015,7 @@ function loop(){
   updateTransform(dt);
   updatePlayer(dt);
   if(dt>0){ const fv=player.pos.clone().sub(_p0).divideScalar(dt); if(fv.length()>60) fv.set(0,0,0); player._fv=(player._fv||new THREE.Vector3()).lerp(fv,.5); }
-  updateEnemySpawning(wdt); updateEnemies(wdt); animateEnemies(wdt); updateDyingRigs(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); VFX.update(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
+  updateEnemySpawning(wdt); updateEnemies(wdt); animateEnemies(wdt); updateDyingRigs(wdt); updateProjectiles(wdt); updateProps(wdt); updateFx(wdt); VFX.update(wdt); updateAlienVfx(wdt); updateTornado(wdt); updateCrystals(dt); updateSquad(wdt); updateStreams(dt); updateIces(wdt); updateNpcs(wdt);
   updateLockOn(dt);
   updateVehicles(wdt);
   updateOmnitrix(dt);
