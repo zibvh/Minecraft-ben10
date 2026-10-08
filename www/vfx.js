@@ -183,11 +183,15 @@ VFX.prismAttach=function(name,follow,o){ o=o||{}; const base=o.size||1;
       f.pos.addScaledVector(camRight(_pa),Math.cos(t)*m).y+=Math.sin(t)*m; },oo); }); };
 VFX.prismFlip=function(name,pos,o){ o=o||{}; const m=.05*(o.size||1);
   return [0xff0000,0x00ff00,0x0000ff].map((c,i)=>flip(name,pos.clone().addScaledVector(camRight(_pa),(i-1)*m),Object.assign({},o,{tint:c}))); };
-VFX.prismBlots=function(pos,n,spread,speed,size,life){ for(let i=0;i<n;i++){ const a=Math.random()*6.283, e=Math.random()*2-1, r=Math.sqrt(1-e*e);
-  particle(i%3?'light_01':'circle_01',pos.clone().add(new THREE.Vector3(Math.cos(a)*r*spread,e*spread,Math.sin(a)*r*spread)),{size:(size||.4)*(.6+Math.random()*.8),sizeEnd:.05,life:(life||.5)*(.6+Math.random()*.8),add:true,tint:PAL[(Math.random()*PAL.length)|0],drag:1.2,
-    vel:new THREE.Vector3(Math.cos(a)*r*speed,e*speed,Math.sin(a)*r*speed),spin:R(-3,3)}); } };
-VFX.prismBurst=function(pos,s){ s=s||1; VFX.prismFlip('star_explosion',pos,{size:3.8*s,dur:.5,rot:R(0,6.28)}); VFX.prismFlip('impact_white',pos,{size:2.8*s,dur:.3});
-  VFX.prismBlots(pos,Math.round(14+14*s),.5*s,7*s,.55*s,.6); sparks(pos,6,8*s,0xffffff,.3*s,.5); };
+VFX.prismBlots=function(pos,n,spread,speed,size,life){ for(let i=0;i<n;i++){ const a=Math.random()*6.283, e=Math.random()*2-1, r=Math.sqrt(1-e*e);   // twinkling star/spark shards in the video's palette
+  particle(['star_01','star_02','spark_01'][i%3],pos.clone().add(new THREE.Vector3(Math.cos(a)*r*spread,e*spread,Math.sin(a)*r*spread)),{size:(size||.4)*(.5+Math.random()*.7),sizeEnd:.04,life:(life||.5)*(.6+Math.random()*.8),add:true,tint:PAL[(Math.random()*PAL.length)|0],drag:1.4,
+    vel:new THREE.Vector3(Math.cos(a)*r*speed,e*speed,Math.sin(a)*r*speed),spin:R(-6,6)}); } };
+VFX.prismBurst=function(pos,s){ s=s||1; VFX.prismFlip('star_explosion',pos,{size:2.2*s,dur:.4,rot:R(0,6.28)}); VFX.prismFlip('impact_white',pos,{size:1.1*s,dur:.2});
+  VFX.prismBlots(pos,Math.round(10+16*s),.3*s,8*s,.5*s,.55); sparks(pos,8,9*s,0xffffff,.25*s,.45); };
+// lean arm-width beam: three pure R/G/B copies of one streak, offset sideways so the edges split into rainbow fringes while the core overlaps to white
+VFX.prismBeam=function(fromFn,toFn,width,o){ o=o||{};
+  return [0xff0000,0x00ff00,0x0000ff].map((c,i)=>{ const off=(i-1)*width*.5, side=(p)=>p.addScaledVector(camRight(_pa),off);
+    return VFX.beam('trace_06',f=>side(fromFn(f)||f),t=>side(toFn(t)||t),width*2.2,Object.assign({up:true,vr:[.25,.75],dur:1,tint:c,add:true},o)); }); };
 VFX.prismTrail=function(o){ o=o||{}; return [0xff2020,0x20ff20,0x2020ff].map(c=>VFX.trailGet('trace_06',Object.assign({},o,{tint:c}))); };
 VFX.prismTrailPush=function(arr,p,k){ if(!arr) return; const r=camRight(_pb), w=(arr[0]&&arr[0].width||.3)*.35; arr.forEach((t,i)=>{ VFX.trailPush(t,p.clone().addScaledVector(r,(i-1)*w),k); }); };
 VFX.prismTrailRelease=function(arr){ if(arr) arr.forEach(t=>VFX.trailRelease(t)); };
