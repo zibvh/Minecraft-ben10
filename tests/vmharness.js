@@ -36,8 +36,6 @@ function boot(opts={}){
   const ctx=vm.createContext(win);
   vm.runInContext(THREE_SRC,ctx,{filename:'three.min.js'});
   vm.runInContext(`THREE.WebGLRenderer=function(){return{domElement:document.createElement('canvas'),setSize(){},setPixelRatio(){},setClearColor(){},render(){},dispose(){},shadowMap:{enabled:false,type:0},setAnimationLoop(){},getContext(){return null},capabilities:{},info:{render:{calls:0}}};};`,ctx);
-  try{ vm.runInContext(fs.readFileSync(__dirname+'/../www/world.js','utf8'),ctx,{filename:'world.js'}); }catch(e){ errors.push('WORLDLOAD: '+(e.stack||e)); }
-  try{ vm.runInContext(fs.readFileSync(__dirname+'/../www/vfx.js','utf8')+';this.VFX=VFX;',ctx,{filename:'vfx.js'}); }catch(e){ errors.push('VFXLOAD: '+(e.stack||e)); }
   try{ vm.runInContext(main,ctx,{filename:'game.js'}); }catch(e){ errors.push('LOAD: '+(e.stack||e)); }
   const step=(n=1,ms=16.67)=>{ for(let i=0;i<n;i++){ T+=ms; frameStart=Number(process.hrtime.bigint())/1e6; const cbs=raf.splice(0); for(const cb of cbs){ try{ cb(T); }catch(e){ errors.push('FRAME: '+(e.stack||e)); } } } };
   return {win,ctx,els,errors,step,get d(){return win.__d;},start(){ els['btn-start'].fire('click'); },time:()=>T};

@@ -238,9 +238,3 @@ instead of the box anatomy. Ben, Diamondhead, civilians and enemies still use th
 - Not verified on a real device: performance of Heatblast (77k verts) on low-end phones.
 
 - HUD portraits now share ONE offscreen WebGL renderer (previously one new context per portrait, which made phones drop the main game view - white screen + sad-face icon - when the Omnitrix dial opened).
-
-## VFX pass (v31)
-- New `www/vfx.js` engine + `www/vfx/` textures (Omniverse ZERO VFX pack, resized for phones). Sheets, particles, streaks and ribbons are pooled.
-- Old effects removed: cube debris (now sprites), box/ring shockwaves, torus sonic rings, sphere projectiles, XLR8 ghost clones / box speed-lines / full-screen speed overlay, canvas flame textures.
-- Brick anatomy is deleted once a GLB skin attaches (Chromastone, Jetray and Wildvine have no skin yet, so they still use bricks).
-- Jetray modelScale 1.4 -> 1.0. Camera eases out (~70% further back) while Jetray / Chromastone fly.
