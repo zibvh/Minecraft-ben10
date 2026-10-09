@@ -1862,7 +1862,7 @@ function animateRig(parts,dt,inp){
     P.chX += -.2*mv - .14*q*mv; P.hdX += .14*mv;
     P.chY += -sL*.28*mv; P.hdY += sL*.4*mv; P.hipsRZ += sL*.07*mv;                 // shoulders + flytrap head sway opposite the leading legs
     // video ref: arms held OUT to the sides, elbows bent, fingers spread, only a small counter-sway; no slamming
-    P.sL.x = .55 - sL*.22*mv; P.sR.x = .55 - sR*.22*mv; P.sL.z -= (.95+.15*r)*mv; P.sR.z += (.95+.15*r)*mv; P.eL += .75*mv; P.eR += .75*mv;
+    P.sL.x = .22 - sL*.22*mv; P.sR.x = .22 - sR*.22*mv; P.sL.z -= (.62+.1*r)*mv; P.sR.z += (.62+.1*r)*mv; P.eL += .3*mv; P.eR += .3*mv;   // ref: arms hang out-and-down ~40deg, slightly forward, claws drooping, small counter-swing
     P.hipsZ += -.06*q*lung0(ph);
     if(inp.wvWind>0){ const w=_sm(inp.wvWind);                                   // wind-up: all four roots pulled tight under the core, body sinks, shoulder pods flare, head tucks back
       P.hipsY += -.34*w; P.chX += -.3*w; P.hdX += -.35*w; P.tLx=_lerp(P.tLx,.75,w); P.tRx=_lerp(P.tRx,.75,w); P.kL=_lerp(P.kL,1.7,w); P.kR=_lerp(P.kR,1.7,w); P.sL.z += -.55*w; P.sR.z += .55*w; P.sL.x=_lerp(P.sL.x,.3,w); P.sR.x=_lerp(P.sR.x,.3,w); }
@@ -1896,9 +1896,9 @@ function animateRig(parts,dt,inp){
     P.hipsY-=.34; P.hipsRY=.35+sw*.04; P.hipsZ-=.05;
     P.tLx=.95+sw*.05; P.tRx=.35-sw*.05; P.kL=1.5+sw2*.07; P.kR=1.25-sw2*.07; P.fL=-.55; P.fR=-.3; P.tLz=-.16; P.tRz=.16;
     P.chX+=-.5-.12*sp; P.chY+=-.3+sw2*.06; P.chZ+=sw*.05; P.hdX+=.38+.05*sp; P.hdY+=.25-sw*.05;
-    P.sL.z=-(.95+.2*sw+.12*fl*sp); P.sR.z=(.8-.2*sw2+.12*fl*sp);
-    P.sL.x=.35+.3*sw2-.55*sp; P.sR.x=-.25-.3*sw-.7*sp;
-    P.eL=.35+.2*(1+sw2)*.5; P.eR=.3+.2*(1-sw)*.5+.15*sp;
+    P.sL.z=-(.9+.12*sw2+.1*fl*sp); P.sR.z=(.9+.12*sw2+.1*fl*sp);
+    P.sL.x=.3+.1*sw2-.5*sp; P.sR.x=.3+.1*sw2-.5*sp;
+    P.eL=.4+.1*sw2; P.eR=.4+.1*sw2;
     if(parts.leftArm2){ P.s2L.x=0; P.s2R.x=0; }
   }
   if(inp.xlLeap && !inp.flying){ // XLR8 running leap: stretched out, arms swept back, one leg reaching, one trailing
@@ -1933,7 +1933,7 @@ function animateRig(parts,dt,inp){
     if(inp.castHold){
       const sh=0;
       P.sL.x=AX+sh; P.sR.x=AX-sh; P.sL.y=.16; P.sR.y=-.16; P.sL.z=-.04; P.sR.z=.04; P.eL=.04; P.eR=.04;
-      P.chX+=-.28; P.hdX+=.22; P.hdY+=0;
+      if(inp.flying){ P.chX+=.3; P.hdX+=-.15; P.chY=0; P.hdY=0; } else { P.chX+=-.28; P.hdX+=.22; }
       if(!armsOnly){ P.tLx=_lerp(P.tLx,.4,.8); P.tRx=_lerp(P.tRx,-.35,.8); P.kL=_lerp(P.kL,.55,.8); P.kR=_lerp(P.kR,.4,.8); P.hipsY-=.07; P.tLz=-.12; P.tRz=.12; }
     } else {
       const tt2=1-inp.cast, wind=_sm(Math.min(1,tt2/.3)), th=_sm(Math.max(0,Math.min(1,(tt2-.3)/.22))), fol=_sm(Math.max(0,Math.min(1,(tt2-.6)/.4)));
@@ -3543,9 +3543,9 @@ function streamTick(kind,dt){
   if(fire){ STR.from.copy(from); STR.dir.copy(dir); STR.kind='fire';
     const n=Math.max(1,Math.round(dt*90)), side=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
     const hs=[handWorld(0),handWorld(1)].filter(Boolean).map(h=>h.addScaledVector(dir,.4));
-    for(let i=0;i<n*2;i++){ const org=hs.length?hs[i%hs.length]:from, sp=7+Math.random()*5, j=()=>(Math.random()-.5)*1.3, tex=Math.random()<.6?'fire_01_8x8':(Math.random()<.5?'fire_01':'smoke_05');
-      const vel=dir.clone().multiplyScalar(sp).addScaledVector(side,j()).add(new THREE.Vector3(0,j()+.5,0));
-      VFX.particle(tex,org.clone(),{size:.35,sizeEnd:1.5+Math.random(),life:.45+Math.random()*.25,add:tex!=='smoke_05',tint:tex==='smoke_05'?0x403830:(Math.random()<.5?0xff8a1e:0xffc040),alpha:.85,vel,drag:1.2}); }
+    for(let i=0;i<n*3;i++){ const org=hs.length?hs[i%hs.length]:from, sp=13+Math.random()*7, j=()=>(Math.random()-.5)*.5, core=Math.random()<.45;
+      const vel=dir.clone().multiplyScalar(sp).addScaledVector(side,j()).add(new THREE.Vector3(0,j()*.8,0));
+      VFX.particle(core?'fire_01_8x8':'fire_01',org.clone().addScaledVector(dir,Math.random()*.4),{size:core?.3:.45,sizeEnd:core?1.1:1.9,life:.32+Math.random()*.18,add:true,tint:core?0xffe070:0xff6a1a,alpha:core?.9:.7,vel,drag:.4}); }
     if(Math.random()<dt*20) VFX.sparks(from.clone().addScaledVector(dir,3+Math.random()*4),1,3,0xffb040,.2,.3);
   } else streamBeam(kind,from,dir);
   streamT-=dt; if(streamT>0) return; streamT=.1;

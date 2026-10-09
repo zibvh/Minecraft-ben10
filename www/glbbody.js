@@ -303,7 +303,7 @@ const GLBBODY=(function(){
       const th=Lg.rotation.x, fl=Math.max(0,-Kn.rotation.x), ft=Ft.rotation.x, hl=Math.hypot(w.sx,w.sz);
       _ax.set(w.sz/hl,0,-w.sx/hl);                                         // lift axis: horizontal, perpendicular to the strut
       _a1.setFromAxisAngle(_ay,w.sx*th*1.15);                                // sweep forward / back
-      _a2.setFromAxisAngle(_ax,-(fl*.55+Math.max(0,th)*.18+.5*sp));                // raise the strut as the knee folds
+      _a2.setFromAxisAngle(_ax,-(fl*.55+Math.max(0,th)*.18+.5+.25*sp));                // raise the strut as the knee folds
       t[k+'_t'].copy(t.hips).multiply(_a1).multiply(_a2);
       const rip=Math.sin(sw*7+ph)*.1; ph+=1.6;
       _a3.setFromAxisAngle(_ax,-(fl*.9)+rip); t[k+'_k'].copy(t[k+'_t']).multiply(_a3);
