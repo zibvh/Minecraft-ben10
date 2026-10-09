@@ -1705,6 +1705,26 @@ function chargePose(P,c,parts){   // coiled crouch: knees and hips down, chest f
 // Four Arms: lower pair stays tucked in a guard while the top pair punches
 function lowGuard(P,env,t){ const k=env, br=Math.sin(t*14)*.04; P.s2L.x=_lerp(P.s2L.x,.55+br,k); P.s2R.x=_lerp(P.s2R.x,.55-br,k); P.s2L.y=_lerp(P.s2L.y,-.35,k); P.s2R.y=_lerp(P.s2R.y,.35,k); P.s2L.z=_lerp(P.s2L.z,-.15,k); P.s2R.z=_lerp(P.s2R.z,.15,k); P.e2L=_lerp(P.e2L,1.7,k); P.e2R=_lerp(P.e2R,1.7,k); }
 let _aimP=0;
+// Wildvine's own melee (no boxing stance): he stays low on his four roots, braced wide, and attacks with stretching vine-arms.
+//  left  = STAB  - left vine coils back, torso winds away, then the arm shoots out long and straight at the crosshair
+//  right = WHIP  - right vine rears back and out wide, then lashes across in a long arc
+//  heavy = SLAM  - both vines rise overhead (body stretches up) and crack down together
+function wvAttack(P,parts,kind,coil,ext,env,t){
+  const vs=parts.vStretch||(parts.vStretch=[0,0]), X=1.71+(_aimP||0);
+  P.hipsY += -.22*env; P.tLx=_lerp(P.tLx,.4,env); P.tRx=_lerp(P.tRx,-.3,env); P.kL=_lerp(P.kL,.85,env); P.kR=_lerp(P.kR,.85,env); P.tLz=-.18*env; P.tRz=.18*env;   // roots planted wide
+  if(kind==='left'){
+    P.sL.x=_lerp(.5,-.15,coil)*env*(1-ext)+(X+.38)*ext; P.sL.y=-.02*ext; P.sL.z=-.35*coil*(1-ext)-.04*ext; P.eL=_lerp(_lerp(1.2,2.4,coil),.02,ext); vs[0]=.95*ext;
+    P.sR.x=_lerp(P.sR.x,-.55,env); P.sR.z=_lerp(P.sR.z,.55,env); P.eR=_lerp(P.eR,.5,env);
+    P.chY += -.4*coil+.28*ext; P.hipsRY += .2*coil-.25*ext; P.chX += .12*coil-.3*ext; P.hipsZ += .12*coil-.26*ext; P.hdX += .12*ext;
+  } else if(kind==='right'){
+    P.sR.x=_lerp(.15,.5,coil)*env*(1-ext)+(X+.3)*ext; P.sR.z=1.55*coil*(1-ext)+.12*(1-ext)*env-.25*ext; P.sR.y=-.3*ext; P.eR=_lerp(_lerp(.9,.6,coil),.04,ext); vs[1]=1.55*ext;
+    P.sL.x=_lerp(P.sL.x,-.5,env); P.sL.z=_lerp(P.sL.z,-.55,env); P.eL=_lerp(P.eL,.5,env);
+    P.chY += .5*coil-.45*ext; P.hipsRY += -.2*coil+.25*ext; P.chX += .1*coil-.2*ext; P.hipsZ += .1*coil-.18*ext;
+  } else {
+    P.sL.x=P.sR.x=_lerp(.6,2.75,coil)*(1-ext)+(X+.1)*ext; P.sL.z=-.28*coil*(1-ext)-.12*ext; P.sR.z=-P.sL.z; P.eL=P.eR=_lerp(_lerp(1.4,.5,coil),.04,ext); vs[0]=vs[1]=1.15*ext+.3*coil;
+    P.hipsY += .18*coil-.2*ext; P.chX += -.35*coil+.6*ext; P.hdX += -.2*coil+.25*ext; P.hipsZ += -.3*ext;
+  }
+}
 function attackPose(P,parts,at,dt){
   const kind=at.kind, t=_ez(at.t), amp=at.amp||1, tc=at.tc||(kind==='heavy'||kind==='slam'?.45:.4), a=tc*.55;
   let coil, ext;
@@ -1713,6 +1733,7 @@ function attackPose(P,parts,at,dt){
   else { coil=0; const hold=(1-tc)*.28; ext=1-_sm((t-tc-hold)/Math.max(.01,1-tc-hold)); }
   const env=_sm(Math.min(t/.12,1))*(1-_sm((t-.88)/.12)); // how much of the fighting stance is applied
   const four=!!parts.leftArm2, id=at.id, cb=id==='cannonbolt', xl=id==='xlr8';
+  if(id==='wildvine'){ wvAttack(P,parts,kind,coil,ext,env,t); return; }
   const guard=(S,side,e,k)=>{ S.x=_lerp(S.x,.62,k); S.y=_lerp(S.y,side*.42,k); S.z=_lerp(S.z,side*.1,k); return _lerp(e,1.85,k); }; // inward = +y for the right arm
   if(kind==='left'||kind==='right'){
     const sd=kind==='right'?1:-1, arms=[[sd>0?P.sR:P.sL,sd>0?'eR':'eL',sd]];
@@ -1754,12 +1775,7 @@ function attackPose(P,parts,at,dt){
   else if(id==='diamondhead'){ P.chY+=.18*ex*(kind==='right'?1:-1); P.hipsY-=.04*ex; P.chX-=.06*ex; }
   else if(id==='echo_echo'){ P.hdX-=.15*ex; P.sL.z-=.2*ex; P.sR.z+=.2*ex; }
   else if(id==='four_arms'){ P.chY*=1.15; P.hipsY-=.05*env; }
-  else if(id==='wildvine'){ // not punches: 1) STAB - the left vine-arm lengthens and spears straight at the aim point; 2) WHIP - the right vine swings out wide and lashes across, much longer; finisher = both vines whip down
-    const vs=parts.vStretch||(parts.vStretch=[0,0]), ap=_aimP||0, X=1.71+ap;
-    if(kind==='left'){ P.sL.x=_lerp(.5,.1,coil)*env*(1-ext)+X*ext; P.sL.y=-.12*ext; P.sL.z=-.04*ext; P.eL=_lerp(_lerp(1.4,2.3,coil),.02,ext); vs[0]=.9*ext; P.chX+=-.22*ext; P.hipsZ+=-.16*ext; P.chY+=-.3*ext+.2*coil; }
-    else if(kind==='right'){ P.sR.x=_lerp(.2,.45,coil)*env*(1-ext)+X*ext; P.sR.z=1.5*(coil*(1-ext)+.15*(1-ext)*env)+.1*ext; P.sR.y=-.3*ext; P.eR=_lerp(_lerp(.9,.6,coil),.04,ext); vs[1]=1.5*ext; P.chY+=.6*coil-.7*ext; P.hipsRY+=.2*coil-.3*ext; P.chX+=-.1*ext; }
-    else { P.sL.x=(_lerp(.5,2.5,coil))*(1-ext)+(X-.1)*ext; P.sR.x=P.sL.x; P.sL.z=-.15*ext; P.sR.z=.15*ext; P.eL=P.eR=_lerp(_lerp(1.5,.9,coil),.04,ext); vs[0]=vs[1]=1.1*ext; P.chX+=.35*coil-.6*ext; }
-  }
+
 }
 /* Main animator. inp: {pos, fwd:{x,z}, grounded, vy, flying, hover, swimming, carrying, superT, atk:{kind,t,side,id,amp,tc},
    aim, flee, hurt(0..1), dead(0..1), hp, id, powerScale} */
@@ -1780,7 +1796,8 @@ function animateRig(parts,dt,inp){
   A.vyS=_damp(A.vyS,inp.vy||0,12,dt);
   // landing detection
   if(!A.wasGround && grounded){ A.land=Math.min(1,.35+Math.max(0,-(A.lastVy||0))/22); }
-  A.wasGround=grounded; A.lastVy=inp.vy||0; A.land=Math.max(0,A.land-dt*3.4);
+  if(inp.wv&&A.land>0&&A.land<.9&&!A._wl){ A.land=.9; A._wl=1; } if(A.land<=0) A._wl=0;
+  A.wasGround=grounded; A.lastVy=inp.vy||0; A.land=Math.max(0,A.land-dt*(inp.wv?2.1:3.4));
   const dir=(fwdV<-.15&&inp.fwd)?-1:1; // backpedal
   A.ph += dt*(5.2+2.5*Math.min(s,3.4)+1.2*q)*dir*mv; 
   const ph=A.ph, sL=Math.sin(ph), sR=-sL, cL=Math.cos(ph), cR=-cL;
@@ -1838,8 +1855,26 @@ function animateRig(parts,dt,inp){
     const sw=A.t*6; P.sL.x=1.4+Math.sin(sw)*1.4; P.sR.x=1.4-Math.sin(sw)*1.4; P.eL=.5+Math.max(0,Math.sin(sw))*.6; P.eR=.5+Math.max(0,-Math.sin(sw))*.6;
     P.tLx=Math.sin(sw*2)*.45; P.tRx=-Math.sin(sw*2)*.45; P.kL=.3+Math.max(0,Math.sin(sw*2))*.4; P.kR=.3+Math.max(0,-Math.sin(sw*2))*.4; P.chY=Math.sin(sw)*.25; P.hdX=.5; 
   }
-  if(inp.wv && grounded && !inp.flying && !inp.swimming){ // Wildvine: low predatory scuttle - torso pitched over four driving tentacle-legs, arms trailing and lashing
-    P.chX += -.2*mv; P.hdX += .12*mv; P.sL.x = -sL*1.5*mv-.1; P.sR.x = -sR*1.5*mv-.1; P.sL.z -= .25*mv; P.sR.z += .25*mv; P.eL += .3*mv; P.eR += .3*mv; P.chY += -sL*.25*mv;
+  if(inp.wv && grounded && !inp.flying && !inp.swimming){ // Wildvine: four-root crawl - low beast-like stance, torso/head swaying against the leading legs, elastic squash on every plant, lunging sprint
+    const vs=parts.vStretch||(parts.vStretch=[0,0]), lowS=.14+.1*r+.1*q, lung=Math.max(0,Math.sin(ph*2));
+    P.hipsY += -lowS*mv - .045*Math.abs(Math.cos(ph))*mv;                       // body sinks as each root plants (squash), springs back as it pushes off
+    P.chX += -.2*mv - .14*q*mv; P.hdX += .14*mv;
+    P.chY += -sL*.28*mv; P.hdY += sL*.4*mv; P.hipsRZ += sL*.07*mv;                 // shoulders + flytrap head sway opposite the leading legs
+    P.sL.x = -sL*(.55+.35*r)*mv-.1; P.sR.x = -sR*(.55+.35*r)*mv-.1; P.sL.z -= .25*mv; P.sR.z += .25*mv; P.eL += .3*mv; P.eR += .3*mv;   // long arms hang loose and swing
+    if(q>.05){ const pl=Math.max(0,sL), pr=Math.max(0,sR);                      // sprint: hands slam ahead and the vines haul the body forward in lunges
+      P.sL.x=_lerp(P.sL.x,1.95,pl*q); P.sR.x=_lerp(P.sR.x,1.95,pr*q); P.eL=_lerp(P.eL,.12,pl*q); P.eR=_lerp(P.eR,.12,pr*q); P.sL.z=_lerp(P.sL.z,-.2,pl*q); P.sR.z=_lerp(P.sR.z,.2,pr*q);
+      vs[0]=Math.max(vs[0],.4*q*pl); vs[1]=Math.max(vs[1],.4*q*pr); P.hipsZ += -.14*q*lung; P.chX += -.1*q*lung; P.hipsY += -.05*q*lung; }
+    if(inp.wvWind>0){ const w=_sm(inp.wvWind);                                   // wind-up: all four roots pulled tight under the core, body sinks, shoulder pods flare, head tucks back
+      P.hipsY += -.34*w; P.chX += -.3*w; P.hdX += -.35*w; P.tLx=_lerp(P.tLx,.75,w); P.tRx=_lerp(P.tRx,.75,w); P.kL=_lerp(P.kL,1.7,w); P.kR=_lerp(P.kR,1.7,w); P.sL.z += -.55*w; P.sR.z += .55*w; P.sL.x=_lerp(P.sL.x,.3,w); P.sR.x=_lerp(P.sR.x,.3,w); }
+    if(A.land>0){ const k=_sm(A.land);                                          // heavy landing: roots bend deep, chest nearly on the floor, hands slap wide
+      P.hipsY += -.34*k; P.chX += -.5*k; P.hdX += -.1*k; P.sL.z += -.9*k; P.sR.z += .9*k; P.sL.x += .7*k; P.sR.x += .7*k; P.eL += .5*k; P.eR += .5*k; P.kL += .5*k; P.kR += .5*k; }
+  }
+  if(inp.wv && !grounded && !inp.flying && !inp.swimming){ // Wildvine jump: launch = roots snap straight, body stretches, arms trail down; apex = legs tuck, collar flares, arms fan; fall = roots reach down
+    const vs=parts.vStretch||(parts.vStretch=[0,0]), rise=_sm(A.vyS/6), fall=_sm(-A.vyS/8), apex=Math.max(0,1-rise-fall), fwdM=inp.moving?1:0;
+    P.tLx=.05*rise+.9*apex+.25*fall; P.tRx=-.05*rise+.8*apex+.2*fall; P.kL=.08*rise+1.35*apex+.12*fall; P.kR=.08*rise+1.35*apex+.12*fall; P.fL=.2; P.fR=.2;
+    P.hipsY=.1*rise-.03*apex; P.chX=-.28*rise+.32*fwdM*(apex+fall)*.8; P.hdX=-.3*apex+.05;
+    P.sL.x=-.35*rise+.25*apex+.1*fall; P.sR.x=P.sL.x; P.sL.z=-.12*rise-1.15*apex-.8*fall; P.sR.z=-P.sL.z; P.eL=P.eR=.15+.3*apex;
+    vs[0]=Math.max(vs[0],.4*rise); vs[1]=Math.max(vs[1],.4*rise);
   }
   if(inp.xl && grounded && !inp.flying && !inp.swimming){ // XLR8 (from the reference clip): wide splayed crouch, torso hunched slightly, arms held OUT and down to the sides, barely swinging
     const sp=_ez(inp.superT||0), mm=Math.max(mv,.0);
@@ -3618,6 +3653,7 @@ function updateEyes(dt){
     else if(hit){ const pr=props.find(p=>p.veh&&p.mesh.position.distanceTo(hit)<p.s*1.1); if(pr) vehicleHit(pr,dir,3,0,'fire'); } }
 }
 function updateStreams(dt){
+  if(player.wvJumpT>0){ player.wvJumpT-=dt; if(player.wvJumpT<=0){ player.wvJumpT=0; if(player.form.id==='wildvine'&&player.alive) doJump(); } }
   updateDome(dt); updateChromaCharge(dt); updateEyes(dt);
   const dn=player.form.id, fireOn=player.flameHeld&&dn==='heatblast', iceOn=player.sprayHeld&&dn==='diamondhead';
   if(fireOn) flameTime+=dt;
@@ -4170,6 +4206,7 @@ document.getElementById('btn-attack').addEventListener('touchend', ()=> clearTim
 // ----- jump input: everyone jumps on press; Four Arms crouches while you HOLD and launches on RELEASE -----
 function jumpPress(){
   if(!player.alive||player.driving) return;
+  if(player.form.id==='wildvine' && player.onGround && !player.flying && !player.swimming && !player.onLadder && !(player.wvJumpT>0)){ player.wvJumpT=.17; return; }   // anticipation: roots pull in, body sinks like a wound spring, THEN the launch
   if(player.form.id==='four_arms' && player.onGround && !player.flying && !player.swimming && !player.onLadder){ player.leapCharging=true; player.leapT=0; player.leapC=0; return; }
   doJump();
 }
@@ -4550,7 +4587,7 @@ function playerAnimate(parts,dt,moving){
     if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(.38*k,.14*k,.01*k); player._burn=true; }
     else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb||(id==='xlr8'&&(player.superT||0)>.2&&!player.flying&&Math.abs(player.vel.y)<9),vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:((id==='chromastone'&&(player.csT>0||player.chgHeld))||(id==='heatblast'&&(player.castT>0||player.castHold>0))||(id==='wildvine'&&atk))?csAimPitch():player.pitch,bodyP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,tf:TF.active?TF.t:0,tfBen:player.form===BEN,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',cs:id==='chromastone'?Math.max(player.csT||0,player.chgHeld?1:0):0,csChg:id==='chromastone'&&player.chgHeld?Math.min(1,Math.max(0,((player.chgT||0)-.2)/.15)):0,id,jr:id==='jetray',wv:id==='wildvine',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:0});
+    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:((id==='chromastone'&&(player.csT>0||player.chgHeld))||(id==='heatblast'&&(player.castT>0||player.castHold>0))||(id==='wildvine'&&atk))?csAimPitch():player.pitch,bodyP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,tf:TF.active?TF.t:0,tfBen:player.form===BEN,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',wvWind:(id==='wildvine'&&player.wvJumpT>0)?1-player.wvJumpT/.17:0,cs:id==='chromastone'?Math.max(player.csT||0,player.chgHeld?1:0):0,csChg:id==='chromastone'&&player.chgHeld?Math.min(1,Math.max(0,((player.chgT||0)-.2)/.15)):0,id,jr:id==='jetray',wv:id==='wildvine',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.
