@@ -1804,7 +1804,7 @@ function animateRig(parts,dt,inp){
   const dead=inp.dead||0, hurt=inp.hurt||0, chg=inp.charge||0;
   // ---- locomotion ----
   if(grounded && !inp.flying && !inp.swimming){
-    const legAmp=_lerp(_lerp(.5,.95,r),1.15,q), kmax=_lerp(.7,1.75,r), lean=-( .04+.16*r+.22*q );
+    const legAmp=_lerp(_lerp(.5,.95,r),1.15,q), kmax=_lerp(1.1,2.2,r), lean=-( .04+.16*r+.22*q );
     P.tLx = sL*legAmp*mv; P.tRx = sR*legAmp*mv;
     const kf=(c,sn)=> Math.max(0,c*.8+.2*sn)*kmax + (1-r)*.12 + r*.18*Math.max(0,-c);      // flex on the forward swing, slight flex at contact
     P.kL = kf(cL,sL)*mv; P.kR = kf(cR,sR)*mv;
@@ -1855,15 +1855,15 @@ function animateRig(parts,dt,inp){
     const sw=A.t*6; P.sL.x=1.4+Math.sin(sw)*1.4; P.sR.x=1.4-Math.sin(sw)*1.4; P.eL=.5+Math.max(0,Math.sin(sw))*.6; P.eR=.5+Math.max(0,-Math.sin(sw))*.6;
     P.tLx=Math.sin(sw*2)*.45; P.tRx=-Math.sin(sw*2)*.45; P.kL=.3+Math.max(0,Math.sin(sw*2))*.4; P.kR=.3+Math.max(0,-Math.sin(sw*2))*.4; P.chY=Math.sin(sw)*.25; P.hdX=.5; 
   }
+  const lung0=p=>Math.max(0,Math.sin(p*2));
   if(inp.wv && grounded && !inp.flying && !inp.swimming){ // Wildvine: four-root crawl - low beast-like stance, torso/head swaying against the leading legs, elastic squash on every plant, lunging sprint
     const vs=parts.vStretch||(parts.vStretch=[0,0]), lowS=.14+.1*r+.1*q, lung=Math.max(0,Math.sin(ph*2));
     P.hipsY += -lowS*mv - .045*Math.abs(Math.cos(ph))*mv;                       // body sinks as each root plants (squash), springs back as it pushes off
     P.chX += -.2*mv - .14*q*mv; P.hdX += .14*mv;
     P.chY += -sL*.28*mv; P.hdY += sL*.4*mv; P.hipsRZ += sL*.07*mv;                 // shoulders + flytrap head sway opposite the leading legs
-    P.sL.x = -sL*(.55+.35*r)*mv-.1; P.sR.x = -sR*(.55+.35*r)*mv-.1; P.sL.z -= .25*mv; P.sR.z += .25*mv; P.eL += .3*mv; P.eR += .3*mv;   // long arms hang loose and swing
-    if(q>.05){ const pl=Math.max(0,sL), pr=Math.max(0,sR);                      // sprint: hands slam ahead and the vines haul the body forward in lunges
-      P.sL.x=_lerp(P.sL.x,1.95,pl*q); P.sR.x=_lerp(P.sR.x,1.95,pr*q); P.eL=_lerp(P.eL,.12,pl*q); P.eR=_lerp(P.eR,.12,pr*q); P.sL.z=_lerp(P.sL.z,-.2,pl*q); P.sR.z=_lerp(P.sR.z,.2,pr*q);
-      vs[0]=Math.max(vs[0],.4*q*pl); vs[1]=Math.max(vs[1],.4*q*pr); P.hipsZ += -.14*q*lung; P.chX += -.1*q*lung; P.hipsY += -.05*q*lung; }
+    // video ref: arms held OUT to the sides, elbows bent, fingers spread, only a small counter-sway; no slamming
+    P.sL.x = .55 - sL*.22*mv; P.sR.x = .55 - sR*.22*mv; P.sL.z -= (.95+.15*r)*mv; P.sR.z += (.95+.15*r)*mv; P.eL += .75*mv; P.eR += .75*mv;
+    P.hipsZ += -.06*q*lung0(ph);
     if(inp.wvWind>0){ const w=_sm(inp.wvWind);                                   // wind-up: all four roots pulled tight under the core, body sinks, shoulder pods flare, head tucks back
       P.hipsY += -.34*w; P.chX += -.3*w; P.hdX += -.35*w; P.tLx=_lerp(P.tLx,.75,w); P.tRx=_lerp(P.tRx,.75,w); P.kL=_lerp(P.kL,1.7,w); P.kR=_lerp(P.kR,1.7,w); P.sL.z += -.55*w; P.sR.z += .55*w; P.sL.x=_lerp(P.sL.x,.3,w); P.sR.x=_lerp(P.sR.x,.3,w); }
     if(A.land>0){ const k=_sm(A.land);                                          // heavy landing: roots bend deep, chest nearly on the floor, hands slap wide
@@ -1931,7 +1931,7 @@ function animateRig(parts,dt,inp){
     const AX=inp.flying?2.39+.8*ap:1.71+ap;   // shoulder angle that points the arm exactly at the crosshair (calibrated on the rig: the flying body is pitched, so arms need more lift)
     const armsOnly=!!inp.flying;
     if(inp.castHold){
-      const sh=Math.sin(tt*38)*.025;
+      const sh=0;
       P.sL.x=AX+sh; P.sR.x=AX-sh; P.sL.y=.16; P.sR.y=-.16; P.sL.z=-.04; P.sR.z=.04; P.eL=.04; P.eR=.04;
       P.chX+=-.28; P.hdX+=.22; P.hdY+=0;
       if(!armsOnly){ P.tLx=_lerp(P.tLx,.4,.8); P.tRx=_lerp(P.tRx,-.35,.8); P.kL=_lerp(P.kL,.55,.8); P.kR=_lerp(P.kR,.4,.8); P.hipsY-=.07; P.tLz=-.12; P.tRz=.12; }
@@ -3538,9 +3538,16 @@ function streamBeam(kind,from,dir){
 function streamBeamOff(){ if(STR.b){ VFX.stop(STR.b); VFX.stop(STR.cap); if(STR.kind==='fire') VFX.smokePuffs(STR.from.clone().addScaledVector(STR.dir,1.4),2,.5,0x555048); } STR.b=null; STR.cap=null; STR.kind=null; }
 function streamTick(kind,dt){
   let dir=lookDir(); let from=player.pos.clone().add(new THREE.Vector3(0,.8,0)).addScaledVector(flatFwd(player.yaw),.7);
-  if(kind==='fire'){ player._hs=!player._hs; const hp=handWorld(player._hs?1:0); if(hp){ from=hp.addScaledVector(dir,.5); dir=aimDirFrom(from); } player.castHold=.15; }
+  if(kind==='fire'){ const hp=handWorld(1); if(hp){ from=hp.addScaledVector(dir,.4); dir=aimDirFrom(from); } player.castHold=.15; }
   const fire=kind==='fire', cols=fire?[0xff4a1a,0xff8a1e,0xffd84a]:[0xd8f8ff,0x8fe0ff,0xffffff];
-  streamBeam(kind,from,dir);
+  if(fire){ STR.from.copy(from); STR.dir.copy(dir); STR.kind='fire';
+    const n=Math.max(1,Math.round(dt*90)), side=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
+    const hs=[handWorld(0),handWorld(1)].filter(Boolean).map(h=>h.addScaledVector(dir,.4));
+    for(let i=0;i<n*2;i++){ const org=hs.length?hs[i%hs.length]:from, sp=7+Math.random()*5, j=()=>(Math.random()-.5)*1.3, tex=Math.random()<.6?'fire_01_8x8':(Math.random()<.5?'fire_01':'smoke_05');
+      const vel=dir.clone().multiplyScalar(sp).addScaledVector(side,j()).add(new THREE.Vector3(0,j()+.5,0));
+      VFX.particle(tex,org.clone(),{size:.35,sizeEnd:1.5+Math.random(),life:.45+Math.random()*.25,add:tex!=='smoke_05',tint:tex==='smoke_05'?0x403830:(Math.random()<.5?0xff8a1e:0xffc040),alpha:.85,vel,drag:1.2}); }
+    if(Math.random()<dt*20) VFX.sparks(from.clone().addScaledVector(dir,3+Math.random()*4),1,3,0xffb040,.2,.3);
+  } else streamBeam(kind,from,dir);
   streamT-=dt; if(streamT>0) return; streamT=.1;
   enemies.forEach(en=>{ if(!en.alive) return; const v=en.mesh.position.clone().sub(from);
     if(v.length()<9&&dir.angleTo(v.normalize())<.32){ damageEnemy(en,fire?5:2,null); if(!fire) addIce(en.mesh.position.clone(),1.3,1.9,1.3,en,0); } });
@@ -3578,20 +3585,27 @@ function releaseBlast(){
   spawnProjectile(player,CS_COL,32+70*lv,38+10*lv,lv>.55,'energy',{explicitDir:d,explicitFrom:st,size:1.7+2.4*lv,aoe:3+5*lv});
   shakeCamera(.12+.2*lv); statusText(lv>.85?'FULL CHARGE':'CHARGED BLAST');
 }
-function domeEnd(){ if(DOME){ VFX.stop(DOME.v); VFX.prismBurst(DOME.g.position.clone(),1.2); DOME=null; } player.domeT=0; }
+function domeEnd(){ if(DOME){ scene.remove(DOME.g); DOME.a.geometry.dispose(); DOME.b.geometry.dispose(); VFX.prismBurst(DOME.g.position.clone(),1.2); DOME=null; } player.domeT=0; }
 function domeStart(){
   domeEnd();
-  const g={position:player.pos.clone()}, f=i=>i.pos.copy(g.position);
-  const v=[].concat(VFX.prismAttach('electric_ring',f,{size:.5,sizeEnd:6.2,dur:.9,add:true,alpha:.9}),VFX.prismAttach('circle_01',f,{size:5.6,dur:1,add:true,alpha:.18}),VFX.prismAttach('vortex',f,{size:5.2,dur:1.4,add:true,alpha:.35}));
-  DOME={g,v,t:0}; player.domeT=7; statusText('ENERGY DOME');
+  const g=new THREE.Group();
+  const a=new THREE.Mesh(new THREE.SphereGeometry(2.5,28,18),new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide}));
+  const b=new THREE.Mesh(new THREE.IcosahedronGeometry(2.53,2),new THREE.MeshBasicMaterial({vertexColors:true,wireframe:true,transparent:true,opacity:.4,depthWrite:false}));
+  [a,b].forEach(m=>{ const p=m.geometry.attributes.position; m.geometry.setAttribute('color',new THREE.BufferAttribute(new Float32Array(p.count*3),3)); });
+  g.add(a,b); g.position.copy(player.pos); g.scale.setScalar(.01); scene.add(g);
+  DOME={g,a,b,t:0}; player.domeT=7; statusText('ENERGY DOME');
   VFX.prismBurst(player.pos.clone().add(new THREE.Vector3(0,-.5,0)),.8);
 }
 function updateDome(dt){
   if(!DOME) return;
   if(player.form.id!=='chromastone'||!player.alive||(player.domeT-=dt)<=0){ domeEnd(); return; }
   DOME.t+=dt; DOME.g.position.set(player.pos.x,player.pos.y+.1,player.pos.z);
-  if(Math.random()<dt*14){ const a=Math.random()*6.283; VFX.prismBlots(DOME.g.position.clone().add(new THREE.Vector3(Math.cos(a)*2.4,Math.random()*2-1,Math.sin(a)*2.4)),1,.1,.6,.5,.7); }
-  player.invuln=Math.max(player.invuln||0,.2);                       // everything bounces off while the dome holds
+  DOME.g.scale.setScalar(Math.min(1,.01+DOME.t/.25)); DOME.b.rotation.y+=dt*.6;
+  const c=new THREE.Color();
+  [DOME.a,DOME.b].forEach(m=>{ const p=m.geometry.attributes.position, col=m.geometry.attributes.color;
+    for(let i=0;i<p.count;i++){ c.setHSL((p.getY(i)*.12+p.getX(i)*.05+DOME.t*.5)%1,1,.55); col.setXYZ(i,c.r,c.g,c.b); } col.needsUpdate=true; });
+  const bl=player.domeT<1.2?(Math.sin(DOME.t*30)>0?1:.3):1; DOME.a.material.opacity=.14*bl; DOME.b.material.opacity=.4*bl;
+  player.invuln=Math.max(player.invuln||0,.2);
 }
 // Chromastone body glow + violet/indigo/rainbow particles pouring off him (charge) -- uses pack sprites only
 const CS_VIO=[0x9a4bff,0x5a3cff,0xc060ff,0x7a5cff,0xff2fd0,0x30e0ff,0xffe030];

@@ -297,13 +297,13 @@ const GLBBODY=(function(){
   // copies one rig leg: the stride becomes a sweep of the strut around the vertical axis, the knee flex lifts and tucks it.
   const WVL={ fl:{sx:-1,sz:-1,L:1}, br:{sx:1,sz:1,L:1}, fr:{sx:1,sz:-1,L:0}, bl:{sx:-1,sz:1,L:0} };
   const _a1=new THREE.Quaternion(), _a2=new THREE.Quaternion(), _a3=new THREE.Quaternion(), _ax=new THREE.Vector3(), _ay=new THREE.Vector3(0,1,0);
-  function wvLegs(p,t,sw){
+  function wvLegs(p,t,sw,sp){
     let ph=0;
     for(const k in WVL){ const w=WVL[k], Lg=w.L?p.leftLeg:p.rightLeg, Kn=w.L?p.kneeL:p.kneeR, Ft=w.L?p.footL:p.footR;
       const th=Lg.rotation.x, fl=Math.max(0,-Kn.rotation.x), ft=Ft.rotation.x, hl=Math.hypot(w.sx,w.sz);
       _ax.set(w.sz/hl,0,-w.sx/hl);                                         // lift axis: horizontal, perpendicular to the strut
       _a1.setFromAxisAngle(_ay,w.sx*th*1.15);                                // sweep forward / back
-      _a2.setFromAxisAngle(_ax,-(fl*.55+Math.max(0,th)*.18));                // raise the strut as the knee folds
+      _a2.setFromAxisAngle(_ax,-(fl*.55+Math.max(0,th)*.18+.5*sp));                // raise the strut as the knee folds
       t[k+'_t'].copy(t.hips).multiply(_a1).multiply(_a2);
       const rip=Math.sin(sw*7+ph)*.1; ph+=1.6;
       _a3.setFromAxisAngle(_ax,-(fl*.9)+rip); t[k+'_k'].copy(t[k+'_t']).multiply(_a3);
@@ -325,7 +325,7 @@ const GLBBODY=(function(){
     t.tR.copy(t.hips).multiply(Q(p.rightLeg,'tR')); t.kR.copy(t.tR).multiply(Q(p.kneeR,'kR')); t.fR.copy(t.kR).multiply(Q(p.footR,'fR'));
     const dy=p.hips.position.y-p.hipY, dz=p.hips.position.z, dx=p.hips.position.x;
     const sw=(dt>0)?(G.clock+=dt):G.clock, spd=Math.min(1.6,(p.anim&&p.anim.spd||0)/4);
-    if(G.kind==='wildvine') wvLegs(p,t,sw);
+    if(G.kind==='wildvine') wvLegs(p,t,sw,Math.min(1,spd*1.5));
     const n=G.bones.length, vs=p.vStretch;
     if(!G.stSide){ G.stSide=new Int8Array(n).fill(-1); for(let i=0;i<n;i++){ const e=G.ent[i], pe=G.par[i]>=0?G.ent[G.par[i]]:null;
         if(e&&(e.key==='eL'||e.key==='eR')) G.stSide[i]=e.key==='eL'?0:1; else if(pe&&(pe.key==='eL'||pe.key==='eR')&&!e) G.stSide[i]=pe.key==='eL'?0:1; } }
