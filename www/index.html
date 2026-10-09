@@ -1704,6 +1704,7 @@ function chargePose(P,c,parts){   // coiled crouch: knees and hips down, chest f
 }
 // Four Arms: lower pair stays tucked in a guard while the top pair punches
 function lowGuard(P,env,t){ const k=env, br=Math.sin(t*14)*.04; P.s2L.x=_lerp(P.s2L.x,.55+br,k); P.s2R.x=_lerp(P.s2R.x,.55-br,k); P.s2L.y=_lerp(P.s2L.y,-.35,k); P.s2R.y=_lerp(P.s2R.y,.35,k); P.s2L.z=_lerp(P.s2L.z,-.15,k); P.s2R.z=_lerp(P.s2R.z,.15,k); P.e2L=_lerp(P.e2L,1.7,k); P.e2R=_lerp(P.e2R,1.7,k); }
+let _aimP=0;
 function attackPose(P,parts,at,dt){
   const kind=at.kind, t=_ez(at.t), amp=at.amp||1, tc=at.tc||(kind==='heavy'||kind==='slam'?.45:.4), a=tc*.55;
   let coil, ext;
@@ -1753,11 +1754,17 @@ function attackPose(P,parts,at,dt){
   else if(id==='diamondhead'){ P.chY+=.18*ex*(kind==='right'?1:-1); P.hipsY-=.04*ex; P.chX-=.06*ex; }
   else if(id==='echo_echo'){ P.hdX-=.15*ex; P.sL.z-=.2*ex; P.sR.z+=.2*ex; }
   else if(id==='four_arms'){ P.chY*=1.15; P.hipsY-=.05*env; }
+  else if(id==='wildvine'){ // not punches: 1) STAB - the left vine-arm lengthens and spears straight at the aim point; 2) WHIP - the right vine swings out wide and lashes across, much longer; finisher = both vines whip down
+    const vs=parts.vStretch||(parts.vStretch=[0,0]), ap=_aimP||0, X=1.71+ap;
+    if(kind==='left'){ P.sL.x=_lerp(.5,.1,coil)*env*(1-ext)+X*ext; P.sL.y=-.12*ext; P.sL.z=-.04*ext; P.eL=_lerp(_lerp(1.4,2.3,coil),.02,ext); vs[0]=.9*ext; P.chX+=-.22*ext; P.hipsZ+=-.16*ext; P.chY+=-.3*ext+.2*coil; }
+    else if(kind==='right'){ P.sR.x=_lerp(.2,.45,coil)*env*(1-ext)+X*ext; P.sR.z=1.5*(coil*(1-ext)+.15*(1-ext)*env)+.1*ext; P.sR.y=-.3*ext; P.eR=_lerp(_lerp(.9,.6,coil),.04,ext); vs[1]=1.5*ext; P.chY+=.6*coil-.7*ext; P.hipsRY+=.2*coil-.3*ext; P.chX+=-.1*ext; }
+    else { P.sL.x=(_lerp(.5,2.5,coil))*(1-ext)+(X-.1)*ext; P.sR.x=P.sL.x; P.sL.z=-.15*ext; P.sR.z=.15*ext; P.eL=P.eR=_lerp(_lerp(1.5,.9,coil),.04,ext); vs[0]=vs[1]=1.1*ext; P.chX+=.35*coil-.6*ext; }
+  }
 }
 /* Main animator. inp: {pos, fwd:{x,z}, grounded, vy, flying, hover, swimming, carrying, superT, atk:{kind,t,side,id,amp,tc},
    aim, flee, hurt(0..1), dead(0..1), hp, id, powerScale} */
 function animateRig(parts,dt,inp){
-  parts.ballK=inp.ball||0;
+  parts.ballK=inp.ball||0; _aimP=inp.aimP||0; if(parts.vStretch){ parts.vStretch[0]=parts.vStretch[1]=0; }
   if(!parts||!parts.hips||dt<=0) return;
   if(parts.fx) tickFx(parts,dt);
   const A=parts.anim, P=_P; resetPose(P);
@@ -1886,19 +1893,21 @@ function animateRig(parts,dt,inp){
   if(inp.atk) attackPose(P,parts,inp.atk,dt);
   if(inp.cast>0){ // Heatblast: fireball = one-arm throw toward the aim point; held flame = both arms thrust straight at the target
     const c=_ez(inp.cast), ap=THREE.MathUtils.clamp(inp.aimP||0,-.9,.9), R=inp.castSide?1:-1, tt=A.t;
+    const AX=inp.flying?2.39+.8*ap:1.71+ap;   // shoulder angle that points the arm exactly at the crosshair (calibrated on the rig: the flying body is pitched, so arms need more lift)
     const armsOnly=!!inp.flying;
     if(inp.castHold){
       const sh=Math.sin(tt*38)*.025;
-      P.sL.x=1.5+ap+sh; P.sR.x=1.5+ap-sh; P.sL.y=.16; P.sR.y=-.16; P.sL.z=-.04; P.sR.z=.04; P.eL=.04; P.eR=.04;
+      P.sL.x=AX+sh; P.sR.x=AX-sh; P.sL.y=.16; P.sR.y=-.16; P.sL.z=-.04; P.sR.z=.04; P.eL=.04; P.eR=.04;
       P.chX+=-.28; P.hdX+=.22; P.hdY+=0;
       if(!armsOnly){ P.tLx=_lerp(P.tLx,.4,.8); P.tRx=_lerp(P.tRx,-.35,.8); P.kL=_lerp(P.kL,.55,.8); P.kR=_lerp(P.kR,.4,.8); P.hipsY-=.07; P.tLz=-.12; P.tRz=.12; }
     } else {
       const tt2=1-inp.cast, wind=_sm(Math.min(1,tt2/.3)), th=_sm(Math.max(0,Math.min(1,(tt2-.3)/.22))), fol=_sm(Math.max(0,Math.min(1,(tt2-.6)/.4)));
       const T=R>0?P.sR:P.sL, TE=R>0?'eR':'eL', O=R>0?P.sL:P.sR, OE=R>0?'eL':'eR';
       // reference: ball forms at the hip, arm cocks back, then whips forward and extends; off-hand stays tucked
-      T.x=-.75*wind*(1-th)+(1.5+ap)*th*(1-.3*fol); T.y=-R*.1*th; T.z=R*(.4*wind*(1-th)+.05*th); P[TE]=.95*wind*(1-th)+.06*th+.25*fol;
+      // side-arm throw: the arm swings out wide to the side, then sweeps across and snaps straight along the line to the crosshair
+      T.x=.25*wind*(1-th)+AX*th*(1-.15*fol); T.y=-R*.1*th; T.z=R*(1.5*wind*(1-th)+.08*th); P[TE]=.7*wind*(1-th)+.05*th+.2*fol;
       O.x=_lerp(O.x,.55,wind); O.z=-R*.35*wind; P[OE]=_lerp(P[OE],1.25,wind);
-      P.chY+=R*(.38*wind*(1-th)-.42*th*(1-.5*fol)); P.chX+=-.22*th-.06*wind*(1-th); P.hdX+=.15*th; P.hdY+=R*.2*th;
+      P.chY+=R*(.5*wind*(1-th)-.45*th*(1-.5*fol)); P.chX+=-.22*th-.06*wind*(1-th); P.hdX+=.15*th; P.hdY+=R*.2*th;
       const w2=Math.max(wind*(1-th),th);
       if(!armsOnly){ P.tLx=_lerp(P.tLx,.4,w2); P.tRx=_lerp(P.tRx,-.3,w2); P.kL=_lerp(P.kL,.45,w2); P.kR=_lerp(P.kR,.3,w2); P.hipsY-=.05*w2; P.hipsRY+=R*(-.2*wind*(1-th)+.25*th); }
     }
@@ -1914,11 +1923,11 @@ function animateRig(parts,dt,inp){
   // ---- melee overlay ----
   if(chg>0.01) chargePose(P,chg,parts);
   if(inp.atk) attackPose(P,parts,inp.atk,dt);
-  if(inp.cast>0 && !inp.flying){ // Heatblast: both palms thrust forward to fire (recoil kick first, then hold the aim)
+  if(inp.cast>0 && !inp.flying && inp.castHold){ // Heatblast: both palms thrust forward to fire (recoil kick first, then hold the aim)
     const c=_ez(inp.cast), kick=_sm((c-.55)/.45)*.35;
-    P.sL.x=_lerp(P.sL.x,1.5+kick,c); P.sR.x=_lerp(P.sR.x,1.5+kick,c); P.sL.y=.18; P.sR.y=-.18; P.eL=_lerp(P.eL,.12,c); P.eR=_lerp(P.eR,.12,c);
+    P.sL.x=_lerp(P.sL.x,1.71+(inp.aimP||0)+kick,c); P.sR.x=_lerp(P.sR.x,1.71+(inp.aimP||0)+kick,c); P.sL.y=.18; P.sR.y=-.18; P.eL=_lerp(P.eL,.12,c); P.eR=_lerp(P.eR,.12,c);
     P.chX+=-.12*c-kick*.4; P.hdX+=.1*c; }
-  else if(inp.cast>0){ P.sL.x=_lerp(P.sL.x,1.3,inp.cast); P.sR.x=_lerp(P.sR.x,1.3,inp.cast); P.eL=.15; P.eR=.15; }
+  else if(false){ }
   if(inp.cs>0){ // Chromastone blast: tap = one arm raised along the aim line; charged = both arms thrust out, body braced and trembling
     const c=_ez(Math.min(1,inp.cs)), ap=THREE.MathUtils.clamp(inp.aimP||0,-.9,.9), tr=Math.sin(A.t*46)*.02*(inp.csChg||0);
     if(inp.csChg>0){ const g=_sm(Math.min(1,inp.csChg));
@@ -3844,7 +3853,7 @@ function alienMeleeFx(formId, hitPos, heavy){
     case 'echo_echo': VFX.sonicRing(p,.45,0xcfe9ff); break;
     case 'chromastone': VFX.starBurst(p,.6,0x9fdcff); break;
     case 'jetray': VFX.sparks(p,4,7,0xffd0a0,.28,.35); break;
-    case 'wildvine': VFX.dirtBurst(p,3,.5); VFX.smokePuffs(p,2,.5,0x7fb060); break;
+    case 'wildvine': VFX.sparks(p,heavy?8:5,6,0x9fe85a,.28,.4); VFX.flip('impact_white',p,{size:heavy?1.6:1.0,dur:.2,tint:0x9fe85a}); VFX.dirtBurst(p,3,.5); break;
   }
 }
 
@@ -4541,7 +4550,7 @@ function playerAnimate(parts,dt,moving){
     if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(.38*k,.14*k,.01*k); player._burn=true; }
     else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb||(id==='xlr8'&&(player.superT||0)>.2&&!player.flying&&Math.abs(player.vel.y)<9),vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:(id==='chromastone'&&(player.csT>0||player.chgHeld))?csAimPitch():player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,tf:TF.active?TF.t:0,tfBen:player.form===BEN,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',cs:id==='chromastone'?Math.max(player.csT||0,player.chgHeld?1:0):0,csChg:id==='chromastone'&&player.chgHeld?Math.min(1,Math.max(0,((player.chgT||0)-.2)/.15)):0,id,jr:id==='jetray',wv:id==='wildvine',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:0});
+    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:((id==='chromastone'&&(player.csT>0||player.chgHeld))||(id==='heatblast'&&(player.castT>0||player.castHold>0))||(id==='wildvine'&&atk))?csAimPitch():player.pitch,bodyP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,tf:TF.active?TF.t:0,tfBen:player.form===BEN,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',cs:id==='chromastone'?Math.max(player.csT||0,player.chgHeld?1:0):0,csChg:id==='chromastone'&&player.chgHeld?Math.min(1,Math.max(0,((player.chgT||0)-.2)/.15)):0,id,jr:id==='jetray',wv:id==='wildvine',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.

@@ -326,7 +326,9 @@ const GLBBODY=(function(){
     const dy=p.hips.position.y-p.hipY, dz=p.hips.position.z, dx=p.hips.position.x;
     const sw=(dt>0)?(G.clock+=dt):G.clock, spd=Math.min(1.6,(p.anim&&p.anim.spd||0)/4);
     if(G.kind==='wildvine') wvLegs(p,t,sw);
-    const n=G.bones.length;
+    const n=G.bones.length, vs=p.vStretch;
+    if(!G.stSide){ G.stSide=new Int8Array(n).fill(-1); for(let i=0;i<n;i++){ const e=G.ent[i], pe=G.par[i]>=0?G.ent[G.par[i]]:null;
+        if(e&&(e.key==='eL'||e.key==='eR')) G.stSide[i]=e.key==='eL'?0:1; else if(pe&&(pe.key==='eL'||pe.key==='eR')&&!e) G.stSide[i]=pe.key==='eL'?0:1; } }
     for(let i=0;i<n;i++){
       const b=G.bones[i], pi=G.par[i], e=G.ent[i];
       const pq = pi>=0 ? G.qw[pi] : G.qParRel[i];
@@ -334,10 +336,10 @@ const GLBBODY=(function(){
         _q.copy(t[e.key]).multiply(e.qb0);                         // desired rotation relative to the rig root
         G.qw[i].copy(_q);
         b.quaternion.copy(_q2.copy(pq).invert().multiply(_q));
-        b.position.copy(G.pBind[i]);
+        b.position.copy(G.pBind[i]); if(vs&&G.stSide[i]>=0&&vs[G.stSide[i]]) b.position.multiplyScalar(1+vs[G.stSide[i]]);
         if(e.hipsT && (dx||dy||dz)){ _v.set(dx,dy,dz).applyQuaternion(_q2.copy(pq).invert()).multiplyScalar(1/G.sPar[i]); b.position.add(_v); }
       } else {
-        b.position.copy(G.pBind[i]);
+        b.position.copy(G.pBind[i]); if(vs&&G.stSide[i]>=0&&vs[G.stSide[i]]) b.position.multiplyScalar(1+vs[G.stSide[i]]);
         const cv=G.curl&&p.ballK>0?G.curl[b.name]:null;
         if(cv){ b.quaternion.copy(G.qBind[i]).multiply(_q2.setFromAxisAngle(_v.set(1,0,0),cv*p.ballK)); G.qw[i].copy(pq).multiply(b.quaternion); }
         else { b.quaternion.copy(G.qBind[i]); G.qw[i].copy(pq).multiply(G.qBind[i]); }
