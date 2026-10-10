@@ -268,7 +268,7 @@
   #hud .hpline{width:132px;height:9px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;}
   #hud .enline{width:84px;height:5px;margin-top:3px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;}
   #hud #health-fill{background:linear-gradient(90deg,#d41818,#ff4a3a);}
-  #hud #energy-fill{background:var(--theme);}
+  #hud #energy-fill{background:linear-gradient(90deg,#39ff8a 0%,var(--theme) 100%);}
   #omni-dial{left:250px;}
 
   #minimap{position:absolute;right:max(12px,env(safe-area-inset-right,12px));top:max(8px,env(safe-area-inset-top,8px));width:80px;height:80px;border-radius:50%;border:2px solid var(--theme);background:#04120c;box-shadow:0 0 10px rgba(0,0,0,.6);pointer-events:none;}
@@ -1611,8 +1611,8 @@ function groundTopAt(x,z,fy){
 /* =========================================================================
    DAY / NIGHT CYCLE
 ========================================================================= */
-const DAY_LENGTH = 240; // seconds per full cycle
-let dayT = 0.25; // start mid-morning
+const DAY_LENGTH = 99999999; // effectively frozen
+let dayT = 0.5; // locked at noon = full daylight
 const skyDay = new THREE.Color(0x8fc7f2), skyNight = new THREE.Color(0x0a1020);
 const fogDay = new THREE.Color(0x8fc7f2), fogNight = new THREE.Color(0x0a1020);
 function updateDayNight(dt){
@@ -1728,15 +1728,15 @@ let _aimP=0;
 //  left  = STAB  - left vine coils back, torso winds away, then the arm shoots out long and straight at the crosshair
 //  right = WHIP  - right vine rears back and out wide, then lashes across in a long arc
 //  heavy = SLAM  - both vines rise overhead (body stretches up) and crack down together
-function wvAttack(P,parts,kind,coil,ext,env,t){
+function wvAttack(P,parts,kind,coil,ext,env,t,fx){
   const vs=parts.vStretch||(parts.vStretch=[0,0]), X=1.71+(_aimP||0);
   P.hipsY += -.22*env; P.tLx=_lerp(P.tLx,.4,env); P.tRx=_lerp(P.tRx,-.3,env); P.kL=_lerp(P.kL,.85,env); P.kR=_lerp(P.kR,.85,env); P.tLz=-.18*env; P.tRz=.18*env;   // roots planted wide
   if(kind==='left'){
-    P.sL.x=_lerp(.5,-.15,coil)*env*(1-ext)+(X+.38)*ext; P.sL.y=-.02*ext; P.sL.z=-.35*coil*(1-ext)-.04*ext; P.eL=_lerp(_lerp(1.2,2.4,coil),.02,ext); vs[0]=.95*ext;
+    P.sL.x=_lerp(.5,-.15,coil)*env*(1-ext)+(X+.38)*ext; P.sL.y=-.02*ext; P.sL.z=-.35*coil*(1-ext)+.5*ext; P.eL=_lerp(_lerp(1.2,2.4,coil),.02,ext); vs[0]=(fx!=null?fx:.95*ext);
     P.sR.x=_lerp(P.sR.x,-.55,env); P.sR.z=_lerp(P.sR.z,.55,env); P.eR=_lerp(P.eR,.5,env);
     P.chY += -.4*coil+.28*ext; P.hipsRY += .2*coil-.25*ext; P.chX += .12*coil-.3*ext; P.hipsZ += .12*coil-.26*ext; P.hdX += .12*ext;
   } else if(kind==='right'){
-    P.sR.x=_lerp(.15,.5,coil)*env*(1-ext)+(X+.3)*ext; P.sR.z=1.55*coil*(1-ext)+.12*(1-ext)*env-.25*ext; P.sR.y=-.3*ext; P.eR=_lerp(_lerp(.9,.6,coil),.04,ext); vs[1]=1.55*ext;
+    P.sR.x=_lerp(.15,.5,coil)*env*(1-ext)+(X+.3)*ext; P.sR.z=1.55*coil*(1-ext)+.12*(1-ext)*env-.8*ext; P.sR.y=-.3*ext; P.eR=_lerp(_lerp(.9,.6,coil),.04,ext); vs[1]=(fx!=null?fx:1.55*ext);
     P.sL.x=_lerp(P.sL.x,-.5,env); P.sL.z=_lerp(P.sL.z,-.55,env); P.eL=_lerp(P.eL,.5,env);
     P.chY += .5*coil-.45*ext; P.hipsRY += -.2*coil+.25*ext; P.chX += .1*coil-.2*ext; P.hipsZ += .1*coil-.18*ext;
   } else {
@@ -1948,6 +1948,7 @@ function animateRig(parts,dt,inp){
     P.tLx=_lerp(P.tLx,.25,.6); P.tRx=_lerp(P.tRx,-.25,.6); P.kL+=.15; P.kR+=.15; }
   // ---- melee overlay ----
   if(chg>0.01) chargePose(P,chg,parts);
+  if(inp.wvS) wvAttack(P,parts,inp.wvS.kind,inp.wvS.coil,inp.wvS.ext,inp.wvS.env,0,inp.wvS.fx); if(inp.wvSw) wvSwingPoseApply(P,parts,inp.wvSw);
   if(inp.atk) attackPose(P,parts,inp.atk,dt);
   if(inp.cast>0){ // Heatblast: fireball = one-arm throw toward the aim point; held flame = both arms thrust straight at the target
     const c=_ez(inp.cast), ap=THREE.MathUtils.clamp(inp.aimP||0,-.9,.9), R=inp.castSide?1:-1, tt=A.t;
@@ -2177,6 +2178,8 @@ const ICON=(function(){
     'SLOW TIME':S('<path d="M7 3h10M7 21h10M8 3v4l4 5-4 5v4M16 3v4l-4 5 4 5v4"/>'),
     FIREBALL:S('<path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-6 1-9z"/>'),
     FLY:S('<path d="M3 14c4 0 7-2 9-8 2 6 5 8 9 8-4 1-7 3-9 6-2-3-5-5-9-6z"/>'),
+    'SEED BOMB':S('<ellipse cx="12" cy="13" rx="5" ry="6.5"/><path d="M12 6.5C12 4 13.5 3 16 3M3 6l3 2M3 12h3M3 18l3-2"/>'),
+    'VINE WEB':S('<path d="M4 20c4-2 5-6 8-8s5-5 8-8M4 12c3 0 4 2 8 0M12 20c0-4 2-5 0-8"/><circle cx="12" cy="12" r="2.5"/>'),
     LAND:S('<path d="M12 4v11M7 11l5 6 5-6M5 21h14"/>'),
     BURN:S('<circle cx="12" cy="12" r="9"/><path d="M12 6.5c.6 2.2 3.2 3.2 3.2 6a3.2 3.2 0 0 1-6.4 0c0-1.1.7-2 1.5-2.5 0 1.1.5 1.7 1.1 1.7 0-1.6-.6-3.2.6-5.2z"/>'),
     SPRAY:S('<path d="M3 12h7M3 7l7 2.5M3 17l7-2.5M14 7l7-3M14 12h8M14 17l7 3"/>'),
@@ -2211,6 +2214,8 @@ const ACT={
  tornado:{label:'TORNADO',cost:35,cd:8,run:()=>spawnTornado()},
  slow:{label:'SLOW TIME',cost:30,cd:9,run:()=>{player.slowT=6;statusText('TIME SLOWED');}},
  fire:{label:'FIREBALL',hold:v=>{ if(v){ player.flameHeld=true; flameTime=0; } else if(player.flameHeld){ player.flameHeld=false; if(flameTime<.22&&player.energy>=15){ player.energy-=15; spawnProjectile(player,0xff5a1e,28,22,false,'fire'); } } },cost:0,cd:0},
+ seed:{label:'SEED BOMB',cost:20,cd:1.2,run:()=>wvSeeds()},
+ web:{label:'VINE WEB',cost:30,cd:7,run:()=>wvWeb()},
  fly:{label:()=>player.flying?'LAND':'FLY',cost:0,cd:0.3,run:()=>doJump()},
  burn:{label:'BURN',cost:25,cd:6,run:()=>{player.boostT=2.5;statusText('AFTERBURNER');}},
  cblast:{label:'ENERGY BLAST',hold:v=>{ if(v){ if(player.energy>=8&&!player.chgHeld){ player.chgHeld=true; player.chgT=0; } } else if(player.chgHeld){ player.chgHeld=false; releaseBlast(); } },cost:0,cd:0},
@@ -2244,7 +2249,7 @@ const ALIENS = [
     atkDamage:15, atkRange:1.8, atkCooldown:0.45, modelScale:1.5, special:null },
   { id:'jetray', name:'JETRAY', actions:[ACT.eyes,ACT.fly,ACT.burn], maxHealth:90, maxEnergy:110, speed:4.4, jump:7.2, flies:true, flySpeed:70,
     atkDamage:12, atkRange:1.8, atkCooldown:0.4, modelScale:1.0, special:null },
-  { id:'wildvine', name:'WILDVINE', actions:[], maxHealth:110, maxEnergy:100, speed:5.0, jump:9.5,
+  { id:'wildvine', name:'WILDVINE', actions:[ACT.seed,ACT.web], maxHealth:110, maxEnergy:100, speed:5.0, jump:9.5,
     atkDamage:15, atkRange:2.2, atkCooldown:0.42, modelScale:1.05, special:null },
 ];
 const camMode={free:false,yaw:0,pitch:.2}; // free = orbit camera that never steers the character
@@ -2294,6 +2299,7 @@ function setForm(formDef, kind){
   if(TF.active&&!TF._ap){ TF.active=false; if(TF.holo){ scene.remove(TF.holo); TF.holo=null; } }   // any other form change (death, revert) cancels a transformation in progress
   const prevForm=player.form; if(prevForm && prevForm!==formDef && player.alive) HP.store[prevForm.id]=Math.max(1,player.health);
   player.form = formDef; if(player.driving) setTimeout(()=>{ if(player.driving) player.model.visible=false; },0);
+  if(typeof wvCleanup==='function') wvCleanup();
   player.flying = false; player.chgHeld=false; player.eyeHeld=false; if(typeof eyeOff==='function') eyeOff(); if(typeof domeEnd==='function'&&DOME) domeEnd(); chgOff();
   scene.remove(player.model);
   player.model = buildCharacter(kind);
@@ -2677,6 +2683,7 @@ function spawnProjectile(pl, color, damage, speed, pierce, style, opts){
   if(style==='energy'){ mesh.add(new THREE.Mesh(new THREE.SphereGeometry(.2*_sz,10,8),new THREE.MeshBasicMaterial({color:0xffffff})));
     mesh.add(new THREE.Mesh(new THREE.SphereGeometry(.6*_sz,12,10),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.26,depthWrite:false}))); }
   if(style==='fire') mesh.add(new THREE.Mesh(new THREE.SphereGeometry(.28,8,8),new THREE.MeshBasicMaterial({color:0xffe27a})));
+  if(style==='seed'){ mesh.scale.set(.85,1.2,.85); const cap=new THREE.Mesh(new THREE.SphereGeometry(.11,8,6),new THREE.MeshBasicMaterial({color:0x5a3a1a})); cap.position.y=.17; mesh.add(cap); }
   let dir, startPos;
   if(opts && opts.explicitDir){
     // Enemy-fired: aim directly at a world-space target point rather than deriving direction from
@@ -2704,6 +2711,7 @@ function attachProjVfx(pj,opts){
   if(st==='fire'){ m.visible=false; pj.vfx=[at('fire_01',{size:2.1,dur:.6,add:true})]; pj.tr=VFX.trailGet('trace_01',{width:.4,life:.35,step:.35,tint:0xffa040,n:14}); }
   else if(st==='energy'){ m.visible=false; const w=Math.min(.55,.3+.08*(sz-1)), L=3.4+.5*sz; pj.vfx=VFX.prismBeam(f=>f.copy(m.position).addScaledVector(pj.dir,-L),t=>t.copy(m.position),w).concat(VFX.attach('star_01',i=>i.pos.copy(m.position),{size:.7+.2*sz,dur:.6,add:true,spin:5,tint:0xffffff})); pj.sz=sz; }
   else if(st==='laser'){ m.visible=false; pj.vfx=[VFX.beam('trace_04',f=>f.copy(m.position).addScaledVector(pj.dir,-2.4),t=>t.copy(m.position).addScaledVector(pj.dir,.5),.55,{up:true,tint:0xff6a3a,dur:1,add:true})]; }
+  else if(st==='seed'){ pj.tr=VFX.trailGet('trace_03',{width:.22,life:.35,step:.3,tint:0x9be060,n:14}); }
   else if(st==='crystal'){ pj.vfx=[at('star_02',{size:1.2,dur:1,add:true,tint:0xbff8ff})]; pj.tr=VFX.trailGet('trace_03',{width:.3,life:.3,step:.35,tint:0x9ffcff,n:12}); }
 }
 function killProjVfx(p){ if(p.vfx){ p.vfx.forEach(v=>VFX.stop(v)); p.vfx=null; } if(p.ptr){ VFX.prismTrailRelease(p.ptr); p.ptr=null; } if(p.tr){ VFX.trailRelease(p.tr); p.tr=null; } }
@@ -2711,6 +2719,7 @@ function updateProjectiles(dt){
   for(let i=projectiles.length-1;i>=0;i--){
     const p = projectiles[i];
     p.mesh.position.addScaledVector(p.dir, p.speed*dt);
+    if(p.style==='seed'){ p.vy=(p.vy||0)-10*dt; p.mesh.position.y+=p.vy*dt; p.mesh.rotation.y+=dt*9; }
     p.life -= dt;
     let dead = p.life<=0;
     const pp=p.mesh.position;
@@ -2729,7 +2738,9 @@ function updateProjectiles(dt){
         dead = true;
       }
     } else {
-      for(const en of enemies){
+      if(p.style==='seed'){ for(const en of enemies){ if(en.alive&&p.mesh.position.distanceTo(en.mesh.position)<1.1){ dead=true; break; } }
+        if(!dead) for(const pr of props){ if(pr===carried||pr===player.driving) continue; if(p.mesh.position.distanceTo(pr.mesh.position)<pr.s*.8+.25){ dead=true; break; } } }
+      else for(const en of enemies){
         if(!en.alive || p.hitSet.has(en)) continue;
         if(p.mesh.position.distanceTo(en.mesh.position) < 1.0){
           damageEnemy(en, p.damage, p.dir);
@@ -2739,11 +2750,12 @@ function updateProjectiles(dt){
       }
     }
     if(dead){ const _p=p.mesh.position.clone();
-      if(p.style==='fire') VFX.explosion(_p,.55);
+      if(p.style==='seed') seedExplode(_p,p.damage);
+      else if(p.style==='fire') VFX.explosion(_p,.55);
       else if(p.style==='energy') VFX.prismBurst(_p,.35+(p.aoe||0)*.08+(p.sz||1)*.1);
       else if(p.style==='laser') VFX.starBurst(_p,.28,0xff9a60);
       else if(p.style==='crystal') VFX.starBurst(_p,.7,0xbff8ff);
-      if(p.aoe){ shockwaveAt(_p.clone(),p.aoe,p.damage*.5,true,'none'); shakeCamera(.25); }
+      if(p.aoe&&p.style!=='seed'){ shockwaveAt(_p.clone(),p.aoe,p.damage*.5,true,'none'); shakeCamera(.25); }
       killProjVfx(p); scene.remove(p.mesh); projectiles.splice(i,1); }
   }
 }
@@ -2948,7 +2960,7 @@ function damageEnemy(en, dmg, dirAway, opts){
 function updateEnemies(dt){
   enemies.forEach(en=>{
     if(!en.alive||en.npc) return;
-    if(en.ice) return;
+    if(en.ice||en.webbed) return;
     const p = en.mesh.position;
     if(en.slotT>0) en.slotT-=dt; if(en.slotCd>0) en.slotCd-=dt; if(en.windT>0) en.windT-=dt;
 
@@ -3416,10 +3428,15 @@ function updateCrystals(dt){
 /* ECHO ECHO SQUAD */
 const squad=[]; let squadMode='bot', panelOpen=false, panelEls={};
 function flatFwd(yaw){ return new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)); }
-function ringFx(pos,dir,delay){ if(delay>.001) return; VFX.sonicRing(pos.clone().add(new THREE.Vector3(0,1.2,0)).addScaledVector(dir,1.1),.8,0xdff0ff); }
+const RING=new THREE.TorusGeometry(.5,.07,6,20);
+function ringFx(pos,dir,delay){
+  const m=new THREE.Mesh(RING,new THREE.MeshBasicMaterial({color:0xcfefff,transparent:true,opacity:.9}));
+  m.position.copy(pos).add(new THREE.Vector3(0,1,0)).addScaledVector(dir,.8+delay*10); m.lookAt(m.position.clone().add(dir)); scene.add(m);
+  fx.push({mesh:m,vel:dir.clone().multiplyScalar(16),life:.55,max:.55,grow:3.2});
+}
 function sonicBlast(from,dir,dmg,range,rings){
   dir=dir.clone(); dir.y=0; if(dir.lengthSq()<.001) return; dir.normalize();
-  { const m=from.clone().add(new THREE.Vector3(0,1.3,0)).addScaledVector(dir,1.2); VFX.sonicRing(m,1,0xcfe6ff); VFX.flip('wavy_purple',m.clone().addScaledVector(dir,1.6),{size:2.4,sizeEnd:6,dur:.55,alpha:.75}); }
+  for(let i=0;i<(rings||3);i++) ringFx(from,dir,i*.03);
   enemies.forEach(en=>{ if(!en.alive) return; const v=en.mesh.position.clone().sub(from); v.y=0; if(v.length()<range&&dir.angleTo(v.normalize())<.75) damageEnemy(en,dmg,dir); });
   // Alert nearby enemies to the scream even if they weren't directly hit by it - a Sonic Scream is loud,
   // so enemies in a wider radius around the source notice and start heading that way.
@@ -3436,7 +3453,7 @@ function splitEcho(){
   const model=buildCharacter('echo_echo'); model.scale.setScalar(PS*ECHO_S()); scene.add(model);
   const u={model,pos:player.pos.clone().addScaledVector(r,(squad.length%2?1:-1)*1.6),vel:new THREE.Vector3(),yaw:player.yaw,health:player.form.maxHealth,energy:player.form.maxEnergy,active:false,n,walkT:0,cd:0,atkT:0};
   model.rotation.y=u.yaw; squad.push(u);
-  VFX.sonicRing(u.pos.clone().add(new THREE.Vector3(0,1,0)),.6,0xcfe6ff); VFX.sparks(u.pos.clone().add(new THREE.Vector3(0,1,0)),6,4,0xcfefff,.25,.45);
+  for(let i=0;i<6;i++) debris(u.pos.clone().add(new THREE.Vector3(0,1,0)),0xcfefff,.25,new THREE.Vector3((Math.random()-.5)*4,Math.random()*3,(Math.random()-.5)*4),.5,false);
   panelOpen=true; renderSquad(); statusText('ECHO R'+n+' SPLIT'); Audio_.transform();
 }
 function loadUnit(u){
@@ -3500,7 +3517,7 @@ function updateSquad(dt){
   squad.forEach(tagUnit);
   squad.filter(u=>!u.active).forEach((u,idx)=>{
     if(u.health<=0){
-      VFX.sonicRing(u.pos.clone().add(new THREE.Vector3(0,1,0)),.6,0xcfe6ff);
+      for(let i=0;i<8;i++) debris(u.pos.clone().add(new THREE.Vector3(0,1,0)),0xcfefff,.3,new THREE.Vector3((Math.random()-.5)*6,Math.random()*5,(Math.random()-.5)*6),.7,true);
       scene.remove(u.model); squad.splice(squad.indexOf(u),1); renderSquad(); statusText('R'+u.n+' DOWN'); return;
     }
     u.cd=Math.max(0,u.cd-dt); u.atkT=Math.max(0,u.atkT-dt); u.energy=Math.min(player.form.maxEnergy,u.energy+dt*8);
@@ -3693,7 +3710,208 @@ function updateEyes(dt){
     if(hitEn) damageEnemy(hitEn,12*.1*6,null);
     else if(hit){ const pr=props.find(p=>p.veh&&p.mesh.position.distanceTo(hit)<p.s*1.1); if(pr) vehicleHit(pr,dir,3,0,'fire'); } }
 }
+/* =========================================================================
+   WILDVINE: elongating tentacle stab, Seed Bomb, Vine Web, arm-tentacle swing
+========================================================================= */
+const WV_MAXEXT=2.5;                                   // a stabbing arm may stretch to 250% of its resting length
+const VINE_MAT=new THREE.MeshLambertMaterial({color:0x2f9d3a});
+const VINE_MAT2=new THREE.MeshLambertMaterial({color:0x58c23c});
+const _wv1=new THREE.Vector3(), _wv2=new THREE.Vector3(), _wv3=new THREE.Vector3(), _wvUp=new THREE.Vector3(0,1,0);
+function wvBone(side,which){                           // the real GLB arm bones (so lengths/hits use the visible tentacle)
+  const m=player.model; if(!m) return null;
+  const c=m.userData._wvb||(m.userData._wvb={}), key=side+which; let b=c[key];
+  if(b===undefined){ b=null; const re=new RegExp((which==='up'?'upper':'fore')+'.?arm'+(side?'R':'L')+'$','i'); m.traverse(o=>{ if(!b&&o.isBone&&re.test(o.name)) b=o; }); c[key]=b; }
+  return b;
+}
+function wvHandPos(side,out){ const fa=wvBone(side,'fore'); let h=fa&&fa.children.find(c=>c.isBone); if(!h) h=fa;
+  if(!h){ const hp=handWorld(side); if(hp) out.copy(hp); else out.copy(player.pos); return out; } h.getWorldPosition(out); return out; }
+function wvShoulderPos(side,out){ const up=wvBone(side,'up'); if(!up){ out.copy(player.pos); return out; } up.getWorldPosition(out); return out; }
+function tubeMesh(mat){ const m=new THREE.Mesh(new THREE.BufferGeometry(),mat); m.frustumCulled=false; scene.add(m); return m; }
+function setTube(m,pts,r,seg){ if(pts.length<2) return; const g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),seg||14,r,5,false); m.geometry.dispose(); m.geometry=g; }
+function killMesh(m){ if(!m) return; scene.remove(m); m.geometry.dispose(); }
+
+/* ---- 1. TENTACLE STAB: the arm bones themselves lengthen 100% -> 250%, retract on hit or at full reach ---- */
+const WS={on:false,arm:0,f:1,ph:0,t:0,hitDone:false,dmg:15,freeze:null,hits:new Set(),lastHit:0};
+function wvStabStart(arm,dmg){ WS.on=true; WS.arm=arm; WS.f=1; WS.ph=0; WS.t=0; WS.hitDone=false; WS.hits=new Set(); WS.dmg=dmg||15; }
+function ptSegDist(p,a,b){ _wv3.copy(b).sub(a); const l2=_wv3.lengthSq()||1e-6; let t=_wv2.copy(p).sub(a).dot(_wv3)/l2; t=Math.max(0,Math.min(1,t)); return _wv2.copy(a).addScaledVector(_wv3,t).distanceTo(p); }
+function updateStab(dt){
+  if(!WS.on) return;
+  if(!player.alive||player.form.id!=='wildvine'){ WS.on=false; WS.f=1; return; }
+  WS.t+=dt;
+  if(WS.freeze!=null){ WS.f=WS.freeze; return; }       // (test hook: pin the length for screenshots)
+  if(WS.ph===0){ if(WS.t>=.06) WS.ph=1; }
+  else if(WS.ph===1){ WS.f=Math.min(WV_MAXEXT,WS.f+1.5/.17*dt); if(WS.f>=WV_MAXEXT) WS.ph=2; }
+  else { WS.f-=1.5/.14*dt; if(WS.f<=1){ WS.f=1; WS.on=false; } }
+  if((WS.ph===1||(WS.ph===2&&WS.f>=WV_MAXEXT-.02))&&!WS.hitDone){                           // hit test (also on the frame it reaches full length) along the visible tentacle: shoulder -> hand
+    player.model.updateMatrixWorld(true);
+    const a=wvShoulderPos(WS.arm,new THREE.Vector3()), b=wvHandPos(WS.arm,new THREE.Vector3());
+    const dir=b.clone().sub(a).normalize(); b.addScaledVector(dir,.35);
+    for(const en of enemies){ if(!en.alive||WS.hits.has(en)) continue;
+      const st=ENEMY_STATS[en.type]||ENEMY_STATS.normal, r=(st.size?st.size[0]*.5:.45)+.5;
+      const ep=en.mesh.position, dmin=Math.min(ptSegDist(ep,a,b),ptSegDist(_wv1.set(ep.x,ep.y+.5,ep.z),a,b),ptSegDist(_wv1.set(ep.x,ep.y+1,ep.z),a,b));
+      if(dmin<r){ WS.hits.add(en); WS.hitDone=true; damageEnemy(en,WS.dmg,dir.clone().setY(0).normalize(),{knock:2.5}); alienMeleeFx('wildvine',en.mesh.position.clone(),false); WS.lastHit=WS.f; } }
+    for(const pr of props){ if(!pr.veh||pr.driver||pr.wreck||WS.hits.has(pr)) continue;
+      if(ptSegDist(pr.mesh.position,a,b)<pr.s*.9+.3){ WS.hits.add(pr); WS.hitDone=true; vehicleHit(pr,dir.clone().setY(0).normalize(),WS.dmg*.8,3,'punch'); WS.lastHit=WS.f; } }
+    if(WS.hitDone) WS.ph=2;                             // confirmed hit: start retracting immediately
+  }
+}
+function wvStabPose(){ if(!WS.on) return null; const ext=Math.min(1,(WS.f-1)/1.5);
+  return {kind:WS.arm?'right':'left',coil:WS.ph===0?_sm(Math.min(1,WS.t/.06)):Math.max(0,1-ext*2.2),ext,env:WS.ph===0?_sm(Math.min(1,WS.t/.06)):(WS.ph===2?Math.min(1,(WS.f-1)*2.5+ext):1),fx:WS.f-1}; }
+
+/* ---- 2. SEED BOMB ---- */
+function wvSeeds(){
+  const hd=player.model&&player.model.userData.parts&&player.model.userData.parts.head; if(!hd) return false;
+  for(let i=0;i<3;i++) setTimeout(()=>{ if(!player.alive||player.form.id!=='wildvine'||PAUSED) return;
+    player.model.updateMatrixWorld(true); const st=hd.getWorldPosition(new THREE.Vector3()); st.y+=.25; st.addScaledVector(flatFwd(player.model.rotation.y),.45);
+    const d=aimDirFrom(st); d.x+=(i-1)*.07; d.y+=.1+(Math.random()-.5)*.03; d.z+=(i-1)*.0; d.normalize();
+    spawnProjectile(player,0x8bd24a,24,24,false,'seed',{explicitDir:d,explicitFrom:st,aoe:4}); },i*90);
+  player.attacking=Math.max(player.attacking,.25); return true;
+}
+function seedExplode(pos,dmg){
+  const R=4.2; VFX.starBurst(pos,.8,0x8bd24a); VFX.flip('explosion',pos,{size:3.2,sizeEnd:5,dur:.45,tint:0x6bd44a,add:true,alpha:.7});
+  for(let i=0;i<7;i++) debris(pos.clone(),0x58c23c,.18,new THREE.Vector3((Math.random()-.5)*7,Math.random()*5+1,(Math.random()-.5)*7),.7,true);
+  shakeCamera(.12);
+  enemies.forEach(en=>{ if(!en.alive) return; const d=en.mesh.position.distanceTo(pos); if(d<R) damageEnemy(en,dmg*(1-.45*d/R),en.mesh.position.clone().sub(pos).setY(0).normalize(),{knock:3}); });
+  for(const pr of props){ if(!pr.veh||pr.driver||pr.wreck) continue; if(pr.mesh.position.distanceTo(pos)<R) vehicleHit(pr,pr.mesh.position.clone().sub(pos).setY(0).normalize(),dmg*.6,4,'fire'); }
+}
+
+/* ---- 3. VINE WEB: vines grow out of the feet, wrap the target, hold it for exactly 5 s ---- */
+const WEB={on:false,en:null,t:0,hold:0,tubes:[],helix:[],pose:0,wrapT:0};
+const WEB_HOLD=5;
+function webClear(){ if(WEB.en){ WEB.en.webbed=false; } WEB.tubes.forEach(killMesh); WEB.helix.forEach(h=>{ scene.remove(h); h.geometry.dispose(); }); WEB.tubes=[]; WEB.helix=[]; WEB.on=false; WEB.en=null; WEB.pose=0; }
+function wvCleanup(){ webClear(); swingEnd(true); WS.on=false; WS.f=1; }
+function webPickTarget(){
+  const lt=lockedTarget(); if(lt&&lt.alive&&!lt.npc&&!lt.webbed&&lt.mesh.position.distanceTo(player.pos)<30) return lt;
+  const o=player.pos.clone(), d=lookDir(); let best=null,bs=1e9;
+  for(const en of enemies){ if(!en.alive||en.npc||en.webbed) continue; const v=en.mesh.position.clone().sub(o), dist=v.length(); if(dist>30||dist<1.2) continue;
+    const ang=d.angleTo(v.normalize()); if(ang>.75) continue; const sc=ang*18+dist*.3; if(sc<bs){ bs=sc; best=en; } }
+  return best;
+}
+function wvWeb(){
+  if(WEB.on){ statusText('ALREADY WEBBING'); return false; }
+  const tgt=webPickTarget(); if(!tgt){ statusText('NO TARGET'); return false; }
+  WEB.on=true; WEB.en=tgt; WEB.t=0; WEB.hold=0; WEB.pose=.95; WEB.wrapT=0;
+  for(let i=0;i<4;i++) WEB.tubes.push(tubeMesh(i%2?VINE_MAT2:VINE_MAT));
+  statusText('VINE WEB'); return true;
+}
+const _WF=[[-.6,-.55],[.6,-.55],[-.6,.55],[.6,.55]];       // the four root-feet, in body space (x right, z back)
+function webFoot(i,out){ const y=player.model.rotation.y, c=Math.cos(y), s=Math.sin(y), fx=_WF[i][0]*1.05, fz=_WF[i][1]*1.05;
+  out.set(player.pos.x+fx*c+fz*s,0,player.pos.z-fx*s+fz*c); out.y=groundTopAt(out.x,out.z,player.pos.y)+.12; return out; }
+function webMakeHelix(en){
+  const mk=(ph)=>{ const pts=[]; for(let k=0;k<=40;k++){ const s=k/40, a=ph+s*Math.PI*5; pts.push(new THREE.Vector3(Math.cos(a)*(.6-.1*s),-.55+s*1.55,Math.sin(a)*(.6-.1*s))); }
+    const g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),60,.07,5,false), m=new THREE.Mesh(g,ph?VINE_MAT2:VINE_MAT); m.frustumCulled=false; scene.add(m); m._n=g.index.count; return m; };
+  WEB.helix=[mk(0),mk(Math.PI)];
+}
+function updateWeb(dt){
+  if(WEB.pose>0) WEB.pose-=dt;
+  if(!WEB.on) return;
+  const en=WEB.en;
+  if(!player.alive||player.form.id!=='wildvine'||!en||!en.alive||enemies.indexOf(en)<0){ webClear(); return; }   // target destroyed/removed or we transformed: release cleanly
+  WEB.t+=dt; const tp=en.mesh.position;
+  const GROW=.7;
+  if(WEB.t<GROW){                                       // vines race along the ground from the feet to the target
+    const g=_sm(WEB.t/GROW);
+    for(let i=0;i<4;i++){ const f=webFoot(i,new THREE.Vector3()), pts=[], tg=new THREE.Vector3(tp.x+(i%2?.25:-.25),groundTopAt(tp.x,tp.z,tp.y)+.15,tp.z+(i<2?.25:-.25));
+      const dir=tg.clone().sub(f), perp=new THREE.Vector3(-dir.z,0,dir.x).normalize();
+      for(let k=0;k<=12;k++){ const t=k/12*g, p=f.clone().lerp(tg,t); p.addScaledVector(perp,Math.sin(t*9+i*1.7+WEB.t*12)*.35*(1-t)); p.y=Math.max(p.y,groundTopAt(p.x,p.z,p.y)+.12)+Math.sin(t*6+i)*.1; pts.push(p); }
+      if(g<.02){ pts.push(pts[0].clone().add(new THREE.Vector3(0,.05,0))); } setTube(WEB.tubes[i],pts,.1,16); }
+  } else {
+    if(!en.webbed){ en.webbed=true; WEB.hold=WEB_HOLD; webMakeHelix(en); VFX.sparks(tp.clone(),6,4,0x8bd24a,.25,.4); }
+    WEB.hold-=dt;                                        // exactly 5 s of restraint
+    WEB.wrapT=Math.min(1,WEB.wrapT+dt/.45);
+    const fs=_sm(WEB.wrapT);
+    WEB.helix.forEach(h=>{ h.position.set(tp.x,tp.y+.1,tp.z); h.geometry.setDrawRange(0,Math.floor(h._n*fs/3)*3); });
+    for(let i=0;i<4;i++){ const f=webFoot(i,new THREE.Vector3()), pts=[], tg=new THREE.Vector3(tp.x+(i%2?.25:-.25),groundTopAt(tp.x,tp.z,tp.y)+.15,tp.z+(i<2?.25:-.25));
+      const dir=tg.clone().sub(f), perp=new THREE.Vector3(-dir.z,0,dir.x).normalize();
+      for(let k=0;k<=12;k++){ const t=k/12, p=f.clone().lerp(tg,t); p.addScaledVector(perp,Math.sin(t*9+i*1.7)*.2*(1-t)); p.y=Math.max(p.y,groundTopAt(p.x,p.z,p.y)+.12)+Math.sin(t*6+i)*.08; pts.push(p); }
+      setTube(WEB.tubes[i],pts,.1,16); }
+    if(WEB.hold<=0){ VFX.sparks(tp.clone(),5,3,0x8bd24a,.2,.35); webClear(); }
+  }
+}
+
+/* ---- 4. ARM-TENTACLE SWING: hold JUMP -> an arm tentacle grabs an anchor and he swings on a rope-length constraint ---- */
+const SW={on:false,arm:0,next:0,ph:0,grow:0,anchor:new THREE.Vector3(),L:6,t:0,cd:0,held:0,airT:0,tube:null,cap:null,bulb:null,vx:0,vz:0,relT:0,rx:0,rz:0,retr:0,pp:new THREE.Vector3(),pv:new THREE.Vector3(),k:0};
+function swingHeld(){ return !!(player.jumpHeld||keys['Space']); }
+function swingFindAnchor(){
+  const o=player.pos.clone(); o.y+=.6; let best=null,bs=1e9;
+  for(const dy of [0,-.45,.45,-.9,.9]) for(const pa of [.55,.75,.95,1.15]){
+    const yaw=player.yaw+dy, ch=Math.cos(pa), dir=new THREE.Vector3(-Math.sin(yaw)*ch,Math.sin(pa),-Math.cos(yaw)*ch);
+    for(let t=5;t<=26;t+=.8){ const q=o.clone().addScaledVector(dir,t);
+      if(blockedAt(q.x,q.z,q.y-.5,true)){ const h=q.y-o.y, hz=Math.hypot(q.x-o.x,q.z-o.z);
+        if(h>=3.5&&hz>=2.5){ const sc=Math.abs(t-15)+Math.abs(pa-.85)*6+Math.abs(dy)*3; if(sc<bs){ bs=sc; best=q.clone(); } } break; } } }
+  return best;
+}
+function swingTry(){
+  const a=swingFindAnchor(); if(!a){ SW.cd=.6; statusText('NO ANCHOR IN REACH'); return false; }
+  SW.on=true; SW.arm=SW.next; SW.next=1-SW.next; SW.anchor.copy(a); SW.ph=0; SW.grow=0; SW.t=0; SW.relT=0; SW.retr=0;
+  if(!SW.tube){ SW.tube=tubeMesh(VINE_MAT); SW.cap=new THREE.Mesh(new THREE.SphereGeometry(.22,8,6),VINE_MAT2); SW.bulb=new THREE.Mesh(new THREE.SphereGeometry(.14,8,6),VINE_MAT2); scene.add(SW.cap,SW.bulb); }
+  SW.tube.visible=SW.cap.visible=SW.bulb.visible=true; return true;
+}
+function swingEnd(hard){
+  if(SW.on&&!hard){ SW.rx=SW.vx; SW.rz=SW.vz; SW.relT=1.1; SW.ph=2; SW.retr=0; }   // keep momentum on release, tentacle snaps back
+  SW.on=false;
+  if(hard||!SW.tube){ if(SW.tube){ SW.tube.visible=SW.cap.visible=SW.bulb.visible=false; } SW.ph=0; SW.relT=0; }
+}
+function swingPre(dt){                                   // runs before movement: feed the swing velocity in through the "leap" channel
+  if(player.form.id!=='wildvine'){ if(SW.on||SW.ph) swingEnd(true); return; }
+  const air=!player.onGround&&!player.flying&&!player.swimming&&!player.onLadder;
+  const held=swingHeld(); SW.held=held?SW.held+dt:0; SW.airT=air?SW.airT+dt:0; SW.cd=Math.max(0,SW.cd-dt);
+  if(!SW.on&&air&&held&&SW.held>.14&&SW.airT>.05&&SW.cd<=0&&player.alive&&!(player.wvJumpT>0)){ swingTry(); SW.cd=.35; }
+  if(SW.on&&SW.ph===1){
+    player.leap=player.leap||{x:0,z:0}; player.leapActive=true; player.leap.x=SW.vx; player.leap.z=SW.vz;
+  } else if(SW.relT>0&&air){
+    player.leap=player.leap||{x:0,z:0}; player.leapActive=true; const k=Math.max(0,1-.35*dt); SW.rx*=k; SW.rz*=k; player.leap.x=SW.rx; player.leap.z=SW.rz; SW.relT-=dt;
+  } else SW.relT=0;
+}
+function swingPost(dt){                                  // runs after movement: the rope-length constraint (pendulum)
+  if(player.form.id!=='wildvine'){ SW.pp.copy(player.pos); return; }
+  if(SW.on&&SW.ph===1){
+    SW.t+=dt;
+    const a=SW.anchor, p=player.pos, L=SW.L;
+    const vx=player.leap?player.leap.x:SW.vx, vz=player.leap?player.leap.z:SW.vz; let vy=player.vel.y; let v=_wv1.set(vx,vy,vz);
+    const d3=_wv2.copy(p).sub(a), d=d3.length();
+    if(d>L){ const n=d3.multiplyScalar(1/d), np=_wv3.copy(a).addScaledVector(n,L);
+      if(!blockedAt(np.x,p.z,p.y-1,true)) p.x=np.x; if(!blockedAt(p.x,np.z,p.y-1,true)) p.z=np.z; p.y=np.y;
+      const vn=v.dot(n); if(vn>0) v.addScaledVector(n,-vn); }
+    v.multiplyScalar(Math.max(0,1-.04*dt));
+    SW.vx=v.x; SW.vz=v.z; player.vel.y=v.y;
+    if((SW.t>.3&&player.onGround)||!swingHeld()||SW.t>6||player.swimming) swingEnd(false);
+  } else if(SW.on&&SW.ph===0){                          // tentacle is still travelling: normal movement; remember how fast we were going
+    SW.t+=dt; SW.vx=player.leap&&player.leapActive?player.leap.x:(player.pos.x-SW.pp.x)/Math.max(dt,.001); SW.vz=(player.pos.z-SW.pp.z)/Math.max(dt,.001);
+  }
+  SW.pp.copy(player.pos);
+}
+function updateSwing(dt){
+  if(!SW.tube) return;
+  if(SW.on&&SW.ph===0){                                  // grow toward the anchor
+    SW.grow=Math.min(1,SW.grow+dt/.18);
+    if(SW.grow>=1){ SW.ph=1; SW.t=0; const hp=wvHandPos(SW.arm,_wv1); SW.L=Math.max(3,hp.distanceTo(SW.anchor));
+      const dx=player.pos.x-SW.pp.x, dz=player.pos.z-SW.pp.z; if(!(SW.vx||SW.vz)){ SW.vx=dx/Math.max(dt,.001); SW.vz=dz/Math.max(dt,.001); }
+      SW.vx=Math.max(-14,Math.min(14,SW.vx)); SW.vz=Math.max(-14,Math.min(14,SW.vz)); statusText(SW.arm?'RIGHT TENTACLE':'LEFT TENTACLE'); }
+  }
+  if(SW.ph===2){ SW.retr+=dt/.16; if(SW.retr>=1){ SW.ph=0; SW.tube.visible=SW.cap.visible=SW.bulb.visible=false; return; } }
+  if(!SW.on&&SW.ph!==2){ SW.tube.visible=SW.cap.visible=SW.bulb.visible=false; return; }
+  // draw: hand -> tip
+  player.model.updateMatrixWorld(true);
+  const hp=wvHandPos(SW.arm,new THREE.Vector3()), g=SW.ph===2?1-_sm(SW.retr):_sm(SW.grow), tip=hp.clone().lerp(SW.anchor,g), dir=tip.clone().sub(hp), len=dir.length();
+  const perp=new THREE.Vector3(-dir.z,0,dir.x).normalize(), amp=SW.ph===1?.06:(1-g*.6)*.7, pts=[];
+  for(let k=0;k<=10;k++){ const t=k/10, p=hp.clone().lerp(tip,t); p.addScaledVector(perp,Math.sin(t*8+performance.now()*.012)*amp*Math.sin(t*Math.PI)); pts.push(p); }
+  if(len>.05) setTube(SW.tube,pts,.09,14);
+  SW.cap.position.copy(tip); SW.bulb.position.copy(hp);
+}
+function wvSwingPose(){ if(!SW.on&&SW.ph!==2) return null;
+  const sh=wvShoulderPos(SW.arm,_wv1), dy=SW.anchor.y-sh.y, hz=Math.hypot(SW.anchor.x-sh.x,SW.anchor.z-sh.z);
+  return {arm:SW.arm,pitch:Math.max(0,Math.min(1.25,Math.atan2(dy,hz))),k:SW.ph===2?Math.max(0,1-SW.retr):_sm(SW.grow)}; }
+function wvSwingPoseApply(P,parts,w){
+  const vs=parts.vStretch||(parts.vStretch=[0,0]), sg=w.arm?1:-1, S=w.arm?P.sR:P.sL, O=w.arm?P.sL:P.sR, k=w.k;
+  S.x=_lerp(S.x,1.71+w.pitch,k); S.y=_lerp(S.y,0,k); S.z=_lerp(S.z,sg*.14,k); P[w.arm?'eR':'eL']=_lerp(P[w.arm?'eR':'eL'],.05,k); vs[w.arm]=Math.max(vs[w.arm],.35*k);
+  O.x=_lerp(O.x,-.45,k); O.z=_lerp(O.z,-sg*.9,k); P[w.arm?'eL':'eR']=_lerp(P[w.arm?'eL':'eR'],.8,k);
+  P.chX+=-.14*k; P.hipsY+=.04*k; P.tLx=_lerp(P.tLx,.55,k); P.tRx=_lerp(P.tRx,.25,k); P.kL=_lerp(P.kL,1.2,k); P.kR=_lerp(P.kR,.9,k);
+}
+function updateWildvine(dt){ updateStab(dt); updateWeb(dt); updateSwing(dt); }
+window.__wv={swingFindAnchor,update:updateWildvine,WS,SW,WEB,wvStabStart,swingTry,wvWeb,wvSeeds,wvBone,wvHandPos,wvShoulderPos};
 function updateStreams(dt){
+  updateWildvine(dt);
   if(player.wvJumpT>0){ player.wvJumpT-=dt; if(player.wvJumpT<=0){ player.wvJumpT=0; if(player.form.id==='wildvine'&&player.alive) doJump(); } }
   updateDome(dt); updateChromaCharge(dt); updateEyes(dt);
   const dn=player.form.id, fireOn=player.flameHeld&&dn==='heatblast', iceOn=player.sprayHeld&&dn==='diamondhead';
@@ -3865,7 +4083,7 @@ function useAction(a,k){
   if(a.hold){ if(player.alive&&player.energy>4){ if(lockedTarget()) aimAtLock(); a.hold(true); } return; }
   if(!player.alive||(actCd[k]||0)>0||player.energy<a.cost) return;
   if(lockedTarget()) aimAtLock(); // abilities fire toward the locked target
-  player.energy-=a.cost; actCd[k]=a.cd; a.run();
+  player.energy-=a.cost; actCd[k]=a.cd; if(a.run()===false){ player.energy+=a.cost; actCd[k]=0; }
 }
 function buildActions(){
   const box=document.getElementById('actions'); box.innerHTML=''; actEls=[];
@@ -3927,7 +4145,6 @@ function alienMeleeFx(formId, hitPos, heavy){
     case 'heatblast': VFX.sparks(p,4,6,0xff8a2a,.3,.45); VFX.flip('fire_point',p,{size:1.5,dur:.35}); break;
     case 'diamondhead': VFX.starBurst(p,.55,0xbff8ff); break;
     case 'cannonbolt': if(heavy){ shakeCamera(.15); const g=p.clone(); g.y=groundTopAt(g.x,g.z,g.y); VFX.slam(g,.5); } break;
-    case 'echo_echo': VFX.sonicRing(p,.45,0xcfe9ff); break;
     case 'chromastone': VFX.starBurst(p,.6,0x9fdcff); break;
     case 'jetray': VFX.sparks(p,4,7,0xffd0a0,.28,.35); break;
     case 'wildvine': VFX.sparks(p,heavy?8:5,6,0x9fe85a,.28,.4); VFX.flip('impact_white',p,{size:heavy?1.6:1.0,dur:.2,tint:0x9fe85a}); VFX.dirtBurst(p,3,.5); break;
@@ -3965,6 +4182,9 @@ function meleeAttack(){
   const isHeavy = step === 2;
   const punchKind = step===0 ? 'left' : step===1 ? 'right' : 'heavy';
   const animDur = (isHeavy ? 0.34 : 0.22) / tuning.speed;
+  if(player.form.id==='wildvine'){ if(SW.on) return; if(!isHeavy){   // Wildvine: the first two strikes are tentacle STABS (arm bones lengthen up to 250%)
+    player.atkTimer=player.form.atkCooldown/tuning.speed*.9; player.comboResetTimer=.9; player.comboStep=(step+1)%3; Audio_.attack();
+    player.model.rotation.y=player.yaw; wvStabStart(step===1?1:0,player.form.atkDamage*tuning.comboMul[step]); return; } }
 
   player.atkTimer = player.form.atkCooldown * (isHeavy ? 1.4 : 1) / tuning.speed;
   player.attacking = animDur;
@@ -4628,7 +4848,7 @@ function playerAnimate(parts,dt,moving){
     if(burn){ const tt=performance.now()/1000, k=.55+.25*Math.sin(tt*9)+.12*Math.sin(tt*23); for(const m of parts.all) m.emissive.setRGB(.38*k,.14*k,.01*k); player._burn=true; }
     else if(player._burn&&parts.all){ for(const m of parts.all) m.emissive.setHex(m.userData.baseEmis||0); player._burn=false; } }
   animateRig(parts,dt,{pos:player.pos,fwd,grounded:player.onGround||climb||(id==='xlr8'&&(player.superT||0)>.2&&!player.flying&&Math.abs(player.vel.y)<9),vy:player.vel.y,flying:player.flying,hover:id==='diamondhead',moving,
-    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:((id==='chromastone'&&(player.csT>0||player.chgHeld))||(id==='heatblast'&&(player.castT>0||player.castHold>0))||(id==='wildvine'&&atk))?csAimPitch():player.pitch,bodyP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,tf:TF.active?TF.t:0,tfBen:player.form===BEN,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',wvWind:(id==='wildvine'&&player.wvJumpT>0)?1-player.wvJumpT/.17:0,cs:id==='chromastone'?Math.max(player.csT||0,player.chgHeld?1:0):0,csChg:id==='chromastone'&&player.chgHeld?Math.min(1,Math.max(0,((player.chgT||0)-.2)/.15)):0,id,jr:id==='jetray',wv:id==='wildvine',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:0});
+    swimming:player.swimming,ball:player._ball||0,carrying:!!carried,cast:id==='heatblast'?Math.max(player.castT||0,player.castHold>0?1:0):0,castHold:id==='heatblast'&&player.castHold>0,castSide:player.castSide||0,aimP:((id==='chromastone'&&(player.csT>0||player.chgHeld))||(id==='heatblast'&&(player.castT>0||player.castHold>0))||(id==='wildvine'&&atk))?csAimPitch():player.pitch,bodyP:player.pitch,xl:id==='xlr8',xlLeap:!!player.xlAir,tf:TF.active?TF.t:0,tfBen:player.form===BEN,ejB:Math.max(0,player.ejT||0)/.5,hb:id==='heatblast',wvS:id==='wildvine'?(wvStabPose()||(WEB.pose>0?{kind:'right',coil:0,ext:1,env:_sm(Math.min(1,(.95-WEB.pose)/.15)),fx:0}:null)):null,wvSw:id==='wildvine'?wvSwingPose():null,wvWind:(id==='wildvine'&&player.wvJumpT>0)?1-player.wvJumpT/.17:0,cs:id==='chromastone'?Math.max(player.csT||0,player.chgHeld?1:0):0,csChg:id==='chromastone'&&player.chgHeld?Math.min(1,Math.max(0,((player.chgT||0)-.2)/.15)):0,id,jr:id==='jetray',wv:id==='wildvine',superT:id==='xlr8'?(player.superT||0):0,atk,hurt:(player.hurtT||0)/.35,climb,climbSpd:Math.abs(player.vel.y),charge:0});
 }
 // Presentation-layer inertia: gameplay velocity stays instant, the body does not. Any change of speed along the facing
 // direction (starting, braking, sudden stops) pitches the whole body forward through a damped spring and then settles.
@@ -4650,7 +4870,7 @@ function updateBodyLean(dt){
   if(!(cb&&(player.rollT||0)>.05)) m.rotation.x = free||Math.abs(L.lean)>.002 ? L.lean : m.rotation.x;
 }
 function updatePlayerOnFoot(dt){
-  updateLeap(dt);
+  updateLeap(dt); swingPre(dt);
   updateKeyboardMove();
   player.atkTimer = Math.max(0, player.atkTimer - dt);
   player.comboResetTimer = Math.max(0, (player.comboResetTimer||0) - dt);
@@ -4701,7 +4921,7 @@ function updatePlayerOnFoot(dt){
 
   const forward = { x:-Math.sin(player.yaw), z:-Math.cos(player.yaw) };
   const right = { x:Math.cos(player.yaw), z:-Math.sin(player.yaw) };
-  let mx = moveInput.x, my = moveInput.y;
+  let mx = moveInput.x, my = moveInput.y; if(SW.on&&SW.ph===1){ mx*=.15; my*=.15; }
   const mag = Math.hypot(mx,my); if(mag>1){ mx/=mag; my/=mag; }
   const speedMult = player.speedBurstT>0 ? (player.form.special.speedMult||1) : 1;
   const speed = (TF.active?0:1) * player.form.speed * SPEED_SCALE * speedMult * (player.dashT>0 ? ((player.superSpeed||0)>.2 ? 1.3 : 1+3.6*Math.pow(player.dashT/.32,.7)) : 1) * (carried?0.75:1) * (player.swimming?0.6:1) * (1+(player.superSpeed||0)*12) * (1+(player.rollT||0)*3.2) * ((player.rollT||0)>.5&&(player.runLatch||keys['ShiftLeft']||keys['ShiftRight'])?1.5:1) * ((player.runLatch||keys['ShiftLeft']||keys['ShiftRight']) && !player.flying && !player.swimming && !carried && player.form.id!=='xlr8' ? 1.5 : 1) * (player.leapCharging ? 0.35 : 1);
@@ -4862,9 +5082,10 @@ function updatePlayerOnFoot(dt){
     }
   }
 
+  swingPost(dt);
   if(window.ENVP&&ENVP.clamp&&player.alive) ENVP.clamp(_prevY);   // head-bump on Ben's roof
   // face movement direction (model rotates toward camera-relative move dir, else camera yaw)
-  const facing = player.onLadder ? Math.atan2(player.onLadder.ladder.nx, player.onLadder.ladder.nz) : (moving ? Math.atan2(-moveX,-moveZ) : player.yaw);
+  const facing = (SW.on&&SW.ph===1) ? Math.atan2(-(SW.anchor.x-player.pos.x),-(SW.anchor.z-player.pos.z)) : player.onLadder ? Math.atan2(player.onLadder.ladder.nx, player.onLadder.ladder.nz) : (moving ? Math.atan2(-moveX,-moveZ) : player.yaw);
   { let df=facing-player.model.rotation.y; df=Math.atan2(Math.sin(df),Math.cos(df)); player.model.rotation.y += df*(1-Math.exp(-dt*17)); }   // shortest-arc turn: the old plain lerp across the +-PI seam spun the body a full 360
   updateBodyLean(dt);
   const formScale = PS * (player.form.modelScale||1);
