@@ -1869,6 +1869,10 @@ function animateRig(parts,dt,inp){
     if(A.land>0){ const k=_sm(A.land);                                          // heavy landing: roots bend deep, chest nearly on the floor, hands slap wide
       P.hipsY += -.34*k; P.chX += -.5*k; P.hdX += -.1*k; P.sL.z += -.9*k; P.sR.z += .9*k; P.sL.x += .7*k; P.sR.x += .7*k; P.eL += .5*k; P.eR += .5*k; P.kL += .5*k; P.kR += .5*k; }
   }
+  if(inp.jr && grounded && !inp.flying && !inp.swimming){   // Jetray on foot: wings/arms hang loose and just sway gently, no pumping
+    const sw=Math.sin(ph)*mv;
+    P.sL.x=.08+sw*.1; P.sR.x=.08-sw*.1; P.sL.z=-.32-.04*Math.abs(sw); P.sR.z=.32+.04*Math.abs(sw); P.eL=.22+.05*Math.abs(sw); P.eR=.22+.05*Math.abs(sw);
+    P.chY+=sw*.05; }
   if(inp.wv && !grounded && !inp.flying && !inp.swimming){ // Wildvine jump: launch = roots snap straight, body stretches, arms trail down; apex = legs tuck, collar flares, arms fan; fall = roots reach down
     const vs=parts.vStretch||(parts.vStretch=[0,0]), rise=_sm(A.vyS/6), fall=_sm(-A.vyS/8), apex=Math.max(0,1-rise-fall), fwdM=inp.moving?1:0;
     P.tLx=.05*rise+.9*apex+.25*fall; P.tRx=-.05*rise+.8*apex+.2*fall; P.kL=.08*rise+1.35*apex+.12*fall; P.kR=.08*rise+1.35*apex+.12*fall; P.fL=.2; P.fR=.2;
@@ -3642,9 +3646,10 @@ function updateEyes(dt){
   if(!player.eyeHeld||player.form.id!=='jetray'||!player.alive||player.energy<=0){ player.eyeHeld=false; eyeOff(); return; }
   player.energy=Math.max(0,player.energy-9*dt);
   const hd=player.model.userData.parts&&player.model.userData.parts.head; if(!hd) return;
-  hd.getWorldPosition(_eyeV); const base=_eyeV.clone(), yawR=player.model.rotation.y;
-  const fw=new THREE.Vector3(-Math.sin(yawR),0,-Math.cos(yawR)), rt=new THREE.Vector3(Math.cos(yawR),0,-Math.sin(yawR));
-  const mid=base.clone().addScaledVector(fw,.35); mid.y+=.04;
+  player.model.updateMatrixWorld(true);
+  const EO=window.__eyeOff||[.08,.17,-.2];
+  const eyeW=[0,1].map(i=>hd.localToWorld(new THREE.Vector3((i?1:-1)*EO[0],EO[1],EO[2])));
+  const mid=eyeW[0].clone().lerp(eyeW[1],.5);
   const dir=aimDirFrom(mid);
   // find the collision point along the aim ray
   let len=60, hit=null, hitEn=null;
@@ -3653,13 +3658,15 @@ function updateEyes(dt){
     const en=enemies.find(e=>e.alive&&e.mesh.position.distanceTo(q)<1.1); if(en){ len=d; hit=q; hitEn=en; break; }
     const pr=props.find(p=>p!==carried&&p!==player.driving&&p.mesh.position.distanceTo(q)<p.s*.9); if(pr){ len=d; hit=q; break; } }
   EYE.len=len;
-  for(let i=0;i<2;i++){ const sd=i?1:-1; EYE.from[i].copy(mid).addScaledVector(rt,sd*.1).addScaledVector(dir,-.6); EYE.to[i].copy(mid).addScaledVector(dir,len+.8); }
+  // offsets are stored relative to the player so the beam stays glued to the eyes even at flying speed (player moves after this runs)
+  for(let i=0;i<2;i++){ EYE.from[i].copy(eyeW[i]).sub(player.pos); EYE.to[i].copy(mid).addScaledVector(dir,len+.8).sub(player.pos); }
   if(!EYE.b){ EYE.b=[];
     for(let i=0;i<2;i++){
-      EYE.b.push(VFX.beam('trace_06',f=>f.copy(EYE.from[i]),t=>t.copy(EYE.to[i]),3.2,{up:true,vr:[.3,.7],dur:.35,tint:0xff2a14,alpha:.95}));
-      EYE.b.push(VFX.beam('trace_06',f=>f.copy(EYE.from[i]),t=>t.copy(EYE.to[i]),1.3,{up:true,vr:[.3,.7],dur:.3,tint:0xfff0e0,alpha:1}));
-      EYE.b.push(VFX.attach('flare_01',f=>f.pos.copy(EYE.from[i]),{size:.55,dur:.4,add:true,tint:0xff6a40})); }
-    EYE.b.push(VFX.attach('flare_01',f=>f.pos.copy(EYE.to[0]).lerp(EYE.to[1],.5),{size:1.1,dur:.4,add:true,tint:0xff5a30})); }
+      const F=f=>f.copy(player.pos).add(EYE.from[i]), T=t=>t.copy(player.pos).add(EYE.to[i]);
+      EYE.b.push(VFX.beam('trace_06',F,T,3.2,{up:true,vr:[.3,.7],dur:.35,tint:0xff2a14,alpha:.95}));
+      EYE.b.push(VFX.beam('trace_06',F,T,1.3,{up:true,vr:[.3,.7],dur:.3,tint:0xfff0e0,alpha:1}));
+      EYE.b.push(VFX.attach('flare_01',f=>f.pos.copy(player.pos).add(EYE.from[i]),{size:.55,dur:.4,add:true,tint:0xff6a40})); }
+    EYE.b.push(VFX.attach('flare_01',f=>f.pos.copy(player.pos).add(EYE.to[0]).lerp(f.pos.copy(player.pos).add(EYE.to[1]),.5),{size:1.1,dur:.4,add:true,tint:0xff5a30})); }
   // damage + impact response at the real collision point
   EYE.t-=dt; if(hit){ EYE.spark-=dt; if(EYE.spark<=0){ EYE.spark=.06; VFX.sparks(hit,3,6,0xff9a60,.22,.3); } }
   if(EYE.t<=0){ EYE.t=.1;
