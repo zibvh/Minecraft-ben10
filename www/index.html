@@ -251,6 +251,26 @@
   #hud .bar-num{font-size:8px;width:20px;color:#e8fff2;opacity:1;}
   #hud .ident{min-width:0;}
 
+  /* ---- compact HUD card: round portrait with Omnitrix-timer ring, red health bar, shorter energy bar in the alien's colour ---- */
+  #hud #alien-card{width:auto;padding:0;background:none;border:none;clip-path:none;box-shadow:none;}
+  #hud #alien-card.warn{box-shadow:none;}
+  #hud #alien-portrait-wrap{position:relative;display:flex;align-items:center;gap:0;}
+  #hud #alien-portrait{position:relative;z-index:2;width:56px;height:56px;margin:5px;padding:0;border:none;border-radius:50%;clip-path:none;background:#04120c;overflow:hidden;flex:none;}
+  #hud #alien-portrait canvas{width:100%;height:100%;clip-path:none;border-radius:50%;background:radial-gradient(circle at 50% 40%,#12402c,#04120c);}
+  #omni-ring{position:absolute;left:0;top:0;width:66px;height:66px;z-index:3;pointer-events:none;filter:drop-shadow(0 0 3px rgba(57,255,138,.7));}
+  #omni-ring circle{fill:none;stroke-width:5;}
+  #omni-ring .rb{stroke:rgba(10,50,30,.85);}
+  #omni-arc{stroke:#39ff8a;stroke-dasharray:194.8;stroke-dashoffset:0;transition:stroke-dashoffset .2s linear;stroke-linecap:butt;}
+  #alien-card.warn #omni-arc{stroke:#ff4a4a;animation:omniwarn .45s infinite alternate;}
+  #alien-card.locked #omni-arc{stroke:#7a5a2a;}
+  #hud .ident{position:relative;z-index:1;margin-left:-14px;padding:3px 22px 4px 20px;background:linear-gradient(90deg,rgba(2,12,8,.9),rgba(2,12,8,.7));clip-path:polygon(0 0,100% 0,calc(100% - 16px) 100%,0 100%);}
+  #hud #alien-name{font-size:11px;letter-spacing:1.5px;line-height:1.1;margin-bottom:3px;}
+  #hud .hpline{width:132px;height:9px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;}
+  #hud .enline{width:84px;height:5px;margin-top:3px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;}
+  #hud #health-fill{background:linear-gradient(90deg,#d41818,#ff4a3a);}
+  #hud #energy-fill{background:var(--theme);}
+  #omni-dial{left:250px;}
+
   #minimap{position:absolute;right:max(12px,env(safe-area-inset-right,12px));top:max(8px,env(safe-area-inset-top,8px));width:80px;height:80px;border-radius:50%;border:2px solid var(--theme);background:#04120c;box-shadow:0 0 10px rgba(0,0,0,.6);pointer-events:none;}
 
   #perf-hud{position:absolute;left:14px;top:132px;font:9px/1.25 monospace;color:#9dffc8;background:rgba(0,10,6,.7);padding:4px 6px;border-radius:3px;pointer-events:none;white-space:pre;display:none;z-index:30;}
@@ -278,7 +298,7 @@
   #hud #lock-btn{left:auto;right:50px;bottom:calc(max(24px,env(safe-area-inset-bottom,24px)) + 204px);width:40px;height:40px;border-color:var(--theme);}
 
   /* --- left: joystick with RUN above it --- */
-    #hud #btn-run{pointer-events:none !important;opacity:.42;transition:opacity .15s,transform .15s,box-shadow .15s;position:absolute;left:calc(max(20px,env(safe-area-inset-left,20px)) + 41px);bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 160px);width:38px;height:38px;border-color:var(--theme);flex-direction:column;gap:0;pointer-events:auto;}
+    #hud #btn-run{pointer-events:none !important;opacity:.42;transition:opacity .15s,transform .15s,box-shadow .15s;position:absolute;left:calc(max(20px,env(safe-area-inset-left,20px)) + 41px);bottom:calc(max(20px,env(safe-area-inset-bottom,20px)) + 190px);width:38px;height:38px;border-color:var(--theme);flex-direction:column;gap:0;pointer-events:auto;}
   #hud #btn-attack b{font-size:9px;letter-spacing:1px;color:#fff;margin-top:1px;text-shadow:0 1px 2px #000;}
   #hud #btn-attack{flex-direction:column;}
   #hud #btn-run svg{width:18px;height:18px;stroke:var(--theme);filter:drop-shadow(0 0 3px var(--theme));}
@@ -383,15 +403,14 @@
   <div id="alien-card">
     <div id="alien-portrait-wrap">
       <div id="alien-portrait"></div>
+      <svg id="omni-ring" viewBox="0 0 70 70"><circle class="rb" cx="35" cy="35" r="31"/><circle id="omni-arc" cx="35" cy="35" r="31" transform="rotate(-90 35 35)"/></svg>
       <div class="ident">
         <div id="alien-name">BEN</div>
-        <div id="alien-tag">HUMAN - OMNITRIX</div>
+        <div class="hpline"><div id="health-fill" class="bar-fill"></div></div>
+        <div class="enline"><div id="energy-fill" class="bar-fill"></div></div>
       </div>
     </div>
-    <div class="bar-row"><span class="bar-label">HP</span><div class="bar-track"><div id="health-fill" class="bar-fill"></div></div><span id="hp-num" class="bar-num"></span></div>
-    <div class="bar-row" id="ben-row" style="display:none"><span class="bar-label">BEN</span><div class="bar-track"><div id="ben-fill" class="bar-fill"></div></div><span id="ben-num" class="bar-num"></span></div>
-    <div class="bar-row"><span class="bar-label">EN</span><div class="bar-track"><div id="energy-fill" class="bar-fill"></div></div></div>
-    <div class="bar-row"><span class="bar-label">OM</span><div class="bar-track"><div id="omni-fill" class="bar-fill"></div></div></div>
+    <div id="hud-legacy" style="display:none"><span id="alien-tag"></span><span id="hp-num"></span><span id="ben-row"><i id="ben-fill"></i><i id="ben-num"></i></span><i id="omni-fill"></i></div>
   </div>
   <div id="perf-hud"></div>
   <canvas id="minimap" width="120" height="120"></canvas>
@@ -2395,6 +2414,7 @@ function updateOmnitrix(dt){
     if(OMNI.hold<=0 && OMNI.charge<100) OMNI.charge=Math.min(100,OMNI.charge+dt*100/OMNI_RECHARGE);
   }
   const f=document.getElementById('omni-fill'); if(f) f.style.width=(OMNI.enabled?OMNI.charge:100)+'%';
+  { const ar=document.getElementById('omni-arc'); if(ar) ar.style.strokeDashoffset=String(194.8*(1-(OMNI.enabled?OMNI.charge:100)/100)); }
   card.classList.toggle('locked', OMNI.enabled && !alien && (OMNI.lock>0||OMNI.charge<OMNI_MIN));
   if(OMNI.open){ OMNI.openT-=dt; OMNI.dialSync-=dt; if(OMNI.openT<=0) closeDial(); else if(OMNI.dialSync<=0){ OMNI.dialSync=.2; syncDial(); } }
 }
@@ -3647,7 +3667,7 @@ function updateEyes(dt){
   player.energy=Math.max(0,player.energy-9*dt);
   const hd=player.model.userData.parts&&player.model.userData.parts.head; if(!hd) return;
   player.model.updateMatrixWorld(true);
-  const EO=window.__eyeOff||[.08,.17,-.2];
+  const EO=window.__eyeOff||[.08,.05,-.2];
   const eyeW=[0,1].map(i=>hd.localToWorld(new THREE.Vector3((i?1:-1)*EO[0],EO[1],EO[2])));
   const mid=eyeW[0].clone().lerp(eyeW[1],.5);
   const dir=aimDirFrom(mid);
@@ -4086,13 +4106,13 @@ if(isTouch) document.body.classList.add('tch');
 const joyZone = document.getElementById('joystick-zone');
 const joyStick = document.getElementById('joystick-stick');
 let joyId=null, joyCenter={x:0,y:0}, joyStart={x:0,y:0}, joyZR=null; const JOY_R=54, JOY_DEAD=.1; const runBtn=document.getElementById('btn-run'); const joyBase=document.getElementById('joystick-base');
-function joyPlace(cx,cy,dx,dy){ joyBase.style.left=(cx-joyZR.left)+'px'; joyBase.style.top=(cy-joyZR.top)+'px'; joyStick.style.left=(cx+dx-joyZR.left)+'px'; joyStick.style.top=(cy+dy-joyZR.top)+'px'; }
+function joyPlace(cx,cy,dx,dy){ joyStick.style.left=(cx+dx-joyZR.left)+'px'; joyStick.style.top=(cy+dy-joyZR.top)+'px'; }
 function resetJoy(){ joyBase.style.left=joyBase.style.top=joyStick.style.left=joyStick.style.top='100px'; joyStick.style.transform=''; }
 joyZone.addEventListener('touchstart', e=>{
   if(joyId!==null){ e.preventDefault(); return; }
   const t=e.changedTouches[0]; joyId=t.identifier; joyZone.classList.add('held');
-  joyZR=joyZone.getBoundingClientRect(); joyCenter={x:t.clientX,y:t.clientY}; joyStart={x:t.clientX,y:t.clientY}; // floating stick: the base appears under the thumb
-  joyPlace(joyCenter.x,joyCenter.y,0,0);
+  joyZR=joyZone.getBoundingClientRect(); { const br=joyBase.getBoundingClientRect(); joyCenter={x:br.left+br.width/2,y:br.top+br.height/2}; } joyStart={x:joyCenter.x,y:joyCenter.y}; // static stick: the base never moves, the stick is measured from its fixed centre
+  { const dx=t.clientX-joyCenter.x, dy=t.clientY-joyCenter.y, d=Math.hypot(dx,dy)||1, k=d>JOY_R?JOY_R/d:1; joyPlace(joyCenter.x,joyCenter.y,dx*k,dy*k); }
   e.preventDefault();
 },{passive:false});
 joyZone.addEventListener('touchmove', e=>{
@@ -4100,7 +4120,7 @@ joyZone.addEventListener('touchmove', e=>{
     if(t.identifier!==joyId) continue;
     let dx=t.clientX-joyCenter.x, dy=t.clientY-joyCenter.y;
     const d=Math.hypot(dx,dy);
-    if(d>JOY_R){ const ex=d-JOY_R; joyCenter.x+=dx/d*ex; joyCenter.y+=dy/d*ex; dx=dx/d*JOY_R; dy=dy/d*JOY_R; } // past the rim the base follows the thumb, so the direction is always where the thumb is relative to the base
+    if(d>JOY_R){ dx=dx/d*JOY_R; dy=dy/d*JOY_R; } // past the rim the base follows the thumb, so the direction is always where the thumb is relative to the base
     joyPlace(joyCenter.x,joyCenter.y,dx,dy);
     const m=Math.min(1,Math.hypot(dx,dy)/JOY_R), dd=Math.hypot(dx,dy)||1;
     const a=m<JOY_DEAD?0:Math.pow((m-JOY_DEAD)/(1-JOY_DEAD),1.15);   // dead zone + gentle analog curve
